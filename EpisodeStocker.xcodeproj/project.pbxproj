@@ -30,11 +30,6 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		12599DF02EE400C00023319D /* EpisodeStocker */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = EpisodeStocker;
-			sourceTree = "<group>";
-		};
 		12599E022EE400C20023319D /* EpisodeStockerTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = EpisodeStockerTests;
@@ -43,6 +38,11 @@
 		12599E0C2EE400C20023319D /* EpisodeStockerUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = EpisodeStockerUITests;
+			sourceTree = "<group>";
+		};
+		12599E602EE410DC0023319D /* ios */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ios;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -75,7 +75,7 @@
 		12599DE52EE400C00023319D = {
 			isa = PBXGroup;
 			children = (
-				12599DF02EE400C00023319D /* EpisodeStocker */,
+				12599E602EE410DC0023319D /* ios */,
 				12599E022EE400C20023319D /* EpisodeStockerTests */,
 				12599E0C2EE400C20023319D /* EpisodeStockerUITests */,
 				12599DEF2EE400C00023319D /* Products */,
@@ -108,7 +108,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				12599DF02EE400C00023319D /* EpisodeStocker */,
+				12599E602EE410DC0023319D /* ios */,
 			);
 			name = EpisodeStocker;
 			packageProductDependencies = (
@@ -388,10 +388,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = EpisodeStocker/EpisodeStocker.entitlements;
+				CODE_SIGN_ENTITLEMENTS = ios/EpisodeStocker.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"EpisodeStocker/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"ios/Preview Content\"";
 				DEVELOPMENT_TEAM = 44WM8Y779W;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -413,6 +415,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.comado-studio.EpisodeStocker";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -427,10 +430,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = EpisodeStocker/EpisodeStocker.entitlements;
+				CODE_SIGN_ENTITLEMENTS = ios/EpisodeStocker.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"EpisodeStocker/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"ios/Preview Content\"";
 				DEVELOPMENT_TEAM = 44WM8Y779W;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -452,6 +457,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.comado-studio.EpisodeStocker";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct StatusBadge: View {
-    let status: EpisodeStatus
+    let isUnlocked: Bool
 
     var body: some View {
         Text(label)
@@ -14,25 +14,19 @@ struct StatusBadge: View {
     }
 
     private var label: String {
-        switch status {
-        case .unpublished: return "未公開"
-        case .published: return "公開済み"
-        }
+        isUnlocked ? "解禁OK" : "解禁前"
     }
 
     private var background: Color {
-        switch status {
-        case .unpublished: return Color.orange.opacity(0.2)
-        case .published: return Color.green.opacity(0.2)
-        }
+        isUnlocked ? Color.green.opacity(0.2) : Color.orange.opacity(0.2)
     }
 }
 
 struct StatusBadge_Previews: PreviewProvider {
     static var previews: some View {
         VStack {
-            StatusBadge(status: .unpublished)
-            StatusBadge(status: .published)
+            StatusBadge(isUnlocked: false)
+            StatusBadge(isUnlocked: true)
         }
         .padding()
     }

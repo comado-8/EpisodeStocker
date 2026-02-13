@@ -1,15 +1,14 @@
 import Foundation
 
 actor StorageService {
-    private let key = "episodestocker:episodes"
-
     func save(_ episodes: [Episode]) async throws {
-        let data = try JSONEncoder().encode(episodes)
-        UserDefaults.standard.set(data, forKey: key)
+        // SwiftData へ移行したため永続化は ModelContext 側で行う。
+        // 互換のために空実装を残す。
+        _ = episodes
     }
 
     func load() async throws -> [Episode]? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
-        return try JSONDecoder().decode([Episode].self, from: data)
+        // SwiftData へ移行したため永続化は ModelContext 側で行う。
+        return nil
     }
 }

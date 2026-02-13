@@ -1,0 +1,42 @@
+name: episode-unit-tests
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  episode-unit-tests:
+    name: episode-unit-tests
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode Version
+        run: xcodebuild -version
+
+      - name: Run EpisodeStockerTests
+        run: |
+          mkdir -p artifacts
+          xcodebuild test \
+            -project EpisodeStocker.xcodeproj \
+            -scheme EpisodeStocker \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -parallel-testing-enabled NO \
+            -maximum-parallel-testing-workers 1 \
+            -only-testing:EpisodeStockerTests \
+            -resultBundlePath artifacts/episode-unit-tests.xcresult
+
+      - name: Upload xcresult
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: episode-unit-tests-xcresult
+          path: artifacts/episode-unit-tests.xcresult
+          if-no-files-found: warn
