@@ -31,8 +31,20 @@ jobs:
         run: |
           set -euo pipefail
           SIM_NAME=""
+          AVAILABLE_DEVICES="$(xcrun simctl list devices available)"
           for candidate in "iPhone 16" "iPhone 15" "iPhone 14"; do
-            if xcrun simctl list devices available | grep -Fq "$candidate"; then
+            if echo "$AVAILABLE_DEVICES" | awk -v wanted="$candidate" '
+              $0 ~ /^[[:space:]]*[^()]+[[:space:]]+\([0-9A-Fa-f-]+\)[[:space:]]+\(.*\)$/ {
+                line = $0
+                sub(/^[[:space:]]*/, "", line)
+                sub(/[[:space:]]+\([0-9A-Fa-f-]+\)[[:space:]]+\(.*\)$/, "", line)
+                if (line == wanted) {
+                  found = 1
+                  exit
+                }
+              }
+              END { exit(found ? 0 : 1) }
+            '; then
               SIM_NAME="$candidate"
               break
             fi
@@ -40,7 +52,7 @@ jobs:
 
           if [ -z "$SIM_NAME" ]; then
             echo "::error::No supported iPhone simulator found on runner."
-            xcrun simctl list devices available
+            echo "$AVAILABLE_DEVICES"
             exit 1
           fi
 
