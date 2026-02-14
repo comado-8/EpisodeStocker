@@ -27,9 +27,57 @@ jobs:
       - name: Show Xcode Version
         run: xcodebuild -version
 
+      - name: Ensure iOS Simulator Exists
+        run: |
+          set -euo pipefail
+          AVAILABLE_DEVICES="$(xcrun simctl list devices available)"
+          if echo "$AVAILABLE_DEVICES" | grep -Eq '^[[:space:]]*iPhone [0-9]'; then
+            echo "iPhone simulator already exists on runner."
+            exit 0
+          fi
+
+          RUNTIME_ID="$(xcrun simctl list runtimes available | grep -o 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]*' | head -n 1 || true)"
+          if [ -z "$RUNTIME_ID" ]; then
+            echo "::error::No available iOS runtime found."
+            xcrun simctl list runtimes available
+            exit 1
+          fi
+
+          DEVICE_NAME=""
+          DEVICE_TYPE_ID=""
+          for candidate in "iPhone 16" "iPhone 15" "iPhone 14"; do
+            type_line="$(xcrun simctl list devicetypes | grep -F "${candidate} (" | head -n 1 || true)"
+            if [ -n "$type_line" ]; then
+              DEVICE_NAME="$candidate"
+              DEVICE_TYPE_ID="$(echo "$type_line" | sed -E 's/.*\((com\.apple\.CoreSimulator\.SimDeviceType\.[^)]+)\).*/\1/')"
+              break
+            fi
+          done
+
+          if [ -z "$DEVICE_TYPE_ID" ]; then
+            echo "::error::No supported iPhone device type found."
+            xcrun simctl list devicetypes
+            exit 1
+          fi
+
+          CREATED_NAME="$DEVICE_NAME"
+          UUID="$(xcrun simctl create "$CREATED_NAME" "$DEVICE_TYPE_ID" "$RUNTIME_ID" 2>/dev/null || true)"
+          if [ -z "$UUID" ]; then
+            CREATED_NAME="CI ${DEVICE_NAME} ${GITHUB_RUN_ID}"
+            UUID="$(xcrun simctl create "$CREATED_NAME" "$DEVICE_TYPE_ID" "$RUNTIME_ID")"
+          fi
+
+          xcrun simctl boot "$UUID" || true
+          echo "CI_SIMULATOR=$CREATED_NAME" >> "$GITHUB_ENV"
+          echo "Created iOS simulator: $CREATED_NAME ($UUID)"
+
       - name: Select iOS Simulator
         run: |
           set -euo pipefail
+          if [ -n "${CI_SIMULATOR:-}" ]; then
+            echo "Using preselected simulator: $CI_SIMULATOR"
+            exit 0
+          fi
           SIM_NAME=""
           AVAILABLE_DEVICES="$(xcrun simctl list devices available)"
           for candidate in "iPhone 16" "iPhone 15" "iPhone 14"; do
