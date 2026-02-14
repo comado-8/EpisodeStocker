@@ -29,6 +29,15 @@ Phase 1導入後の2〜3PRを追跡し、ゲート運用が安定しているこ
   - overall logic: `95.14`（threshold `85.00`）
   - changed-files: `(none)`
 
+## Phase 2 切替時カバレッジ記録（artifact）
+- 取得元: `coverage-summary.md`（GitHub Actions artifact: `episode-unit-tests-artifacts`）
+- 取得日: 2026-02-14 (JST)
+
+| Week | Mode | Overall Logic | Changed Files | Phase 1 Baseline Gate | 判定 |
+|---|---|---:|---:|---|---|
+| Week 2 | `enforce-changed-files` | 95.14 | n/a (`(none)`) | PASS | PASS |
+| Week 3 | `enforce-all` | 95.14 | n/a (`(none)`) | PASS | PASS |
+
 ## 完了条件
 - 2〜3PR連続で以下を満たす。
   - `episode-unit-tests` PASS
