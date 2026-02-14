@@ -33,7 +33,7 @@
 - Phase 1失敗条件:
   - いずれかのゲート指標で `現在値 < baseline`
   - `xccov` 出力から baseline指標を抽出できない
-- Phase 2: 閾値導入（推奨: 全体 >= 70%、変更ファイル >= 80%）
+- Phase 2: 閾値導入（正本はCI変数）。`PHASE2_OVERALL_LOGIC_THRESHOLD=85.00`、`PHASE2_CHANGED_FILES_THRESHOLD=80.00` を基準とする。※「全体 >= 70%」は旧推奨値で、現行は85.00へ更新済み。
 
 ## Phase 2 実装モード（CI）
 - `PHASE2_MODE=report-only`（現行）:

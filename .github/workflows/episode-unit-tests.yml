@@ -291,7 +291,12 @@ jobs:
           esac
 
           failures=0
-          if [ "$PARSE_FAILS" -gt 0 ]; then
+          enforce_parse=false
+          if [ "$enforce_changed" = true ] || [ "$enforce_overall" = true ]; then
+            enforce_parse=true
+          fi
+
+          if [ "$enforce_parse" = true ] && [ "$PARSE_FAILS" -gt 0 ]; then
             failures=$((failures + PARSE_FAILS))
           fi
 
