@@ -11,7 +11,7 @@ Phase 1導入後の2〜3PRを追跡し、ゲート運用が安定しているこ
 | 2026-02-14 | Phase 1導入PRマージ | PASS | 確認済み | なし | 安定化1件目（1/3） |
 
 ## 3/3 実測カバレッジ（artifact記録）
-- 取得元: `/Users/yumiko/Downloads/episode-unit-tests-artifacts (2)/coverage-summary.md`
+- 取得元: `coverage-summary.md`（GitHub Actions artifact: `episode-unit-tests-artifacts`）
 - 取得日: 2026-02-14 (JST)
 
 | Metric | Baseline | Current | Result |
