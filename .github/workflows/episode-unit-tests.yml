@@ -43,19 +43,43 @@ jobs:
             exit 1
           fi
 
-          DEVICE_NAME=""
-          DEVICE_TYPE_ID=""
-          for candidate in "iPhone 16" "iPhone 15" "iPhone 14"; do
-            type_line="$(xcrun simctl list devicetypes | grep -F "${candidate} (" | head -n 1 || true)"
-            if [ -n "$type_line" ]; then
-              DEVICE_NAME="$candidate"
-              DEVICE_TYPE_ID="$(echo "$type_line" | sed -E 's/.*\((com\.apple\.CoreSimulator\.SimDeviceType\.[^)]+)\).*/\1/')"
-              break
-            fi
-          done
+          DEVICE_INFO="$(xcrun simctl list devicetypes | awk '
+            {
+              line=$0
+              sub(/^[[:space:]]*/, "", line)
+              if (line !~ /^iPhone /) next
+              if (tolower(line) ~ /unavailable/) next
+
+              id=line
+              sub(/^.*\((com\.apple\.CoreSimulator\.SimDeviceType\.[^)]+)\).*$/, "\\1", id)
+              if (id !~ /^com\.apple\.CoreSimulator\.SimDeviceType\./) next
+
+              name=line
+              sub(/[[:space:]]+\(com\.apple\.CoreSimulator\.SimDeviceType\.[^)]+\).*$/, "", name)
+
+              gen=0
+              if (match(name, /iPhone[[:space:]]+[0-9]+/)) {
+                token=substr(name, RSTART, RLENGTH)
+                sub(/^iPhone[[:space:]]+/, "", token)
+                gen=token+0
+              }
+
+              if (best_id == "" || gen > best_gen) {
+                best_gen=gen
+                best_name=name
+                best_id=id
+              }
+            }
+            END {
+              if (best_id != "") print best_name "|" best_id
+            }
+          ')"
+
+          DEVICE_NAME="${DEVICE_INFO%%|*}"
+          DEVICE_TYPE_ID="${DEVICE_INFO#*|}"
 
           if [ -z "$DEVICE_TYPE_ID" ]; then
-            echo "::error::No supported iPhone device type found."
+            echo "::error::No iPhone device type found."
             xcrun simctl list devicetypes
             exit 1
           fi
@@ -78,28 +102,37 @@ jobs:
             echo "Using preselected simulator: $CI_SIMULATOR"
             exit 0
           fi
-          SIM_NAME=""
+
           AVAILABLE_DEVICES="$(xcrun simctl list devices available)"
-          for candidate in "iPhone 16" "iPhone 15" "iPhone 14"; do
-            if echo "$AVAILABLE_DEVICES" | awk -v wanted="$candidate" '
-              $0 ~ /^[[:space:]]*[^()]+[[:space:]]+\([0-9A-Fa-f-]+\)[[:space:]]+\(.*\)$/ {
-                line = $0
-                sub(/^[[:space:]]*/, "", line)
-                sub(/[[:space:]]+\([0-9A-Fa-f-]+\)[[:space:]]+\(.*\)$/, "", line)
-                if (line == wanted) {
-                  found = 1
-                  exit
-                }
+          SIM_NAME="$(echo "$AVAILABLE_DEVICES" | awk '
+            {
+              line=$0
+              sub(/^[[:space:]]*/, "", line)
+              if (line !~ /^iPhone /) next
+              if (line !~ /\([0-9A-Fa-f-]+\)[[:space:]]+\(.*\)$/) next
+
+              name=line
+              sub(/[[:space:]]+\([0-9A-Fa-f-]+\)[[:space:]]+\(.*\)$/, "", name)
+
+              gen=0
+              if (match(name, /iPhone[[:space:]]+[0-9]+/)) {
+                token=substr(name, RSTART, RLENGTH)
+                sub(/^iPhone[[:space:]]+/, "", token)
+                gen=token+0
               }
-              END { exit(found ? 0 : 1) }
-            '; then
-              SIM_NAME="$candidate"
-              break
-            fi
-          done
+
+              if (best == "" || gen > best_gen) {
+                best_gen=gen
+                best=name
+              }
+            }
+            END {
+              if (best != "") print best
+            }
+          ')"
 
           if [ -z "$SIM_NAME" ]; then
-            echo "::error::No supported iPhone simulator found on runner."
+            echo "::error::No iPhone simulator found on runner."
             echo "$AVAILABLE_DEVICES"
             exit 1
           fi
