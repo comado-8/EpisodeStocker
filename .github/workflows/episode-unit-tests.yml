@@ -27,13 +27,33 @@ jobs:
       - name: Show Xcode Version
         run: xcodebuild -version
 
+      - name: Select iOS Simulator
+        run: |
+          set -euo pipefail
+          SIM_NAME=""
+          for candidate in "iPhone 16" "iPhone 15" "iPhone 14"; do
+            if xcrun simctl list devices available | grep -Fq "$candidate"; then
+              SIM_NAME="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$SIM_NAME" ]; then
+            echo "::error::No supported iPhone simulator found on runner."
+            xcrun simctl list devices available
+            exit 1
+          fi
+
+          echo "CI_SIMULATOR=$SIM_NAME" >> "$GITHUB_ENV"
+          echo "Using simulator: $SIM_NAME"
+
       - name: Run EpisodeStockerTests
         run: |
           mkdir -p artifacts
           xcodebuild test \
             -project EpisodeStocker.xcodeproj \
             -scheme EpisodeStocker \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -destination "platform=iOS Simulator,name=${CI_SIMULATOR},OS=latest" \
             -parallel-testing-enabled NO \
             -maximum-parallel-testing-workers 1 \
             -only-testing:EpisodeStockerTests \
