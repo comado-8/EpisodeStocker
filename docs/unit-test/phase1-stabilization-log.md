@@ -10,6 +10,22 @@ Phase 1導入後の2〜3PRを追跡し、ゲート運用が安定しているこ
 | 2026-02-14 | docs先行PR完了 | PASS | 確認済み | なし | 安定化2件目（2/3） |
 | 2026-02-14 | Phase 1導入PRマージ | PASS | 確認済み | なし | 安定化1件目（1/3） |
 
+## 3/3 実測カバレッジ（artifact記録）
+- 取得元: `coverage-summary.md`（GitHub Actions artifact: `episode-unit-tests-artifacts`）
+- 取得日: 2026-02-14 (JST)
+
+| Metric | Baseline | Current | Result |
+|---|---:|---:|---|
+| EpisodeStocker.app | 14.45 | 14.55 | INFO |
+| SwiftDataPersistence.swift | 94.04 | 94.04 | PASS |
+| InMemorySuggestionRepository.swift | 100.00 | 100.00 | PASS |
+| SuggestionManagerViewModel.swift | 100.00 | 100.00 | PASS |
+| SeedData.swift | 95.65 | 95.65 | PASS |
+| AppRouter.swift | 100.00 | 100.00 | PASS |
+| Episode.swift | 96.43 | 96.43 | PASS |
+
+- 注記: Phase 2（`enforce-*`）の運用記録は `docs/unit-test/phase2-enforcement-log.md` に分離して管理する。
+
 ## 完了条件
 - 2〜3PR連続で以下を満たす。
   - `episode-unit-tests` PASS

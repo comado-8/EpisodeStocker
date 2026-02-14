@@ -39,11 +39,12 @@
 - `PHASE2_MODE=report-only`:
   - 閾値判定をレポート出力のみ行う（失敗にしない）
   - parse failは記録対象のみ（`report-only` ではブロッキングしない）
-- `PHASE2_MODE=enforce-changed-files`（現行）:
+- `PHASE2_MODE=enforce-changed-files`:
   - 変更対象ロジックファイルの閾値違反を失敗扱い
   - parse failも失敗扱い
-- `PHASE2_MODE=enforce-all`:
+- `PHASE2_MODE=enforce-all`（現行）:
   - 変更対象ロジック + overall logic の両方を失敗扱い
+  - parse failも失敗扱い
 
 ## Phase 2 切替順（運用）
 1. Week 2: `PHASE2_MODE=enforce-changed-files`

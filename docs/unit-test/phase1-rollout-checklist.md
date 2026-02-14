@@ -52,5 +52,5 @@
 ## 8. 次アクション（Phase 2 強制化）
 - [x] Week 2: `PHASE2_MODE=enforce-changed-files` に切替えるPRを作成
 - [ ] Week 2: changed-files閾値違反を意図的に作り、CIがFAILすることを確認
-- [ ] Week 3: `PHASE2_MODE=enforce-all` に切替えるPRを作成
+- [x] Week 3: `PHASE2_MODE=enforce-all` に切替えるPRを作成
 - [ ] Week 3: overall logic閾値違反でCIがFAILすることを確認
