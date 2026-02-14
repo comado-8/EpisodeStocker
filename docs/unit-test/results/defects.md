@@ -1,5 +1,12 @@
 # Defects / Blockers
 
+## 2026-02-14 (CI Coverage Gate / follow-up)
+
+- FAIL: 0
+- BLOCKED: 0
+- 実行元: GitHub Actions `episode-unit-tests`
+- 証跡: `episode-unit-tests-artifacts (1)/coverage-summary.md`
+
 ## 2026-02-14 (CI Coverage Gate)
 
 - FAIL: 0

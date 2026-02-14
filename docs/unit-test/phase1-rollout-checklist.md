@@ -36,12 +36,15 @@
 - [ ] 各PRで以下を確認:
   - `EpisodeStockerTests` がグリーン
   - coverage baseline gate がグリーン
-  - 進捗: `1/3` PR確認済み（Phase 1導入PR）
+  - 進捗: `2/3` PR確認済み（Phase 1導入PR + docs先行PR）
+- [x] 安定化2件目のPRを記録（`phase1-stabilization-log.md`）
+- [ ] 安定化3件目のPRを記録（`phase1-stabilization-log.md`）
+- [ ] 3/3達成後、本セクションを完了に更新
 
 ## 7. 次フェーズ準備
 - [x] Phase 2閾値案のドラフト作成
   - 全体目標
   - 変更ファイル目標
   - 例外ポリシー
-- [ ] docs先行のPhase 2 PRを作成して合意を取る
+- [ ] docs先行のPhase 2 PRを作成して合意を取る（`phase2-docs-pr-template.md` を使用）
 - [ ] 合意後、CIに閾値ゲートを実装する
