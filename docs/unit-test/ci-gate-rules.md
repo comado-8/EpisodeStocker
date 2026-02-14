@@ -36,11 +36,12 @@
 - Phase 2: 閾値導入（正本はCI変数）。`PHASE2_OVERALL_LOGIC_THRESHOLD=85.00`、`PHASE2_CHANGED_FILES_THRESHOLD=80.00` を基準とする。※「全体 >= 70%」は旧推奨値で、現行は85.00へ更新済み。
 
 ## Phase 2 実装モード（CI）
-- `PHASE2_MODE=report-only`（現行）:
+- `PHASE2_MODE=report-only`:
   - 閾値判定をレポート出力のみ行う（失敗にしない）
   - parse failは記録対象のみ（`report-only` ではブロッキングしない）
-- `PHASE2_MODE=enforce-changed-files`:
+- `PHASE2_MODE=enforce-changed-files`（現行）:
   - 変更対象ロジックファイルの閾値違反を失敗扱い
+  - parse failも失敗扱い
 - `PHASE2_MODE=enforce-all`:
   - 変更対象ロジック + overall logic の両方を失敗扱い
 

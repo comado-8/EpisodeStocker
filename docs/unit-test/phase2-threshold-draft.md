@@ -51,8 +51,8 @@
 
 ## 実装状況
 - CIにはPhase 2判定ステップを追加済み。
-- 現在は `PHASE2_MODE=report-only` で運用中。
-- `report-only` では、カバレッジ解析エラー（parse fail）はレポート出力のみでCI失敗にしない。
+- 現在は `PHASE2_MODE=enforce-changed-files` で運用中。
+- `enforce-changed-files` では、変更対象ロジックファイルの閾値違反と解析エラー（parse fail）をCI失敗として扱う。
 
 ## 追加運用ルール（確定）
 - PRサイズが小さい場合の免除: なし（最初は一律適用）
