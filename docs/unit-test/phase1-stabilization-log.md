@@ -13,3 +13,8 @@ Phase 1導入後の2〜3PRを追跡し、ゲート運用が安定しているこ
   - `episode-unit-tests` PASS
   - `coverage-summary.md` artifact生成
   - baseline回帰なし
+
+## 次回追記テンプレート
+| 日付 (JST) | PR / マージ | episode-unit-tests | coverage-summary.md | baseline回帰 | メモ |
+|---|---|---|---|---|---|
+| YYYY-MM-DD | PR #N / merge commit | PASS/FAIL | 確認済み/未確認 | なし/あり | 安定化N件目（N/3） |

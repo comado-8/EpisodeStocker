@@ -7,6 +7,17 @@
 - CI対象は引き続き `EpisodeStockerTests`。
 - 分母はロジック中心のまま（`ios/Views/**` はゲート対象外）。
 
+## ロジック対象パターン（確定）
+- include:
+  - `ios/Services/**/*.swift`
+  - `ios/ViewModels/**/*.swift`
+  - `ios/Models/**/*.swift`
+- exclude:
+  - `ios/Views/**`
+  - `EpisodeStockerTests/**`
+  - `EpisodeStockerUITests/**`
+  - `docs/**`
+
 ## 閾値案
 1. ロジック全体カバレッジ: `>= 85.00%`
 2. 変更ファイル（ロジック）のカバレッジ: `>= 80.00%`
@@ -38,7 +49,8 @@
 2. Week 2: changed-files >= 80.00% を必須化
 3. Week 3: overall logic >= 85.00% を必須化
 
-## 未決事項
-- 「ロジックファイル」の対象パターン確定
-- PRサイズが小さい場合の免除有無
-- 生成コードの除外有無
+## 追加運用ルール（確定）
+- PRサイズが小さい場合の免除: なし（最初は一律適用）
+- 生成コードの除外:
+  - 現時点では生成コードなし（対象外設定は不要）
+  - 将来 `Generated/` 等を導入した場合は除外対象へ追加する
