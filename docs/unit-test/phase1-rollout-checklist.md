@@ -46,5 +46,5 @@
   - 全体目標
   - 変更ファイル目標
   - 例外ポリシー
-- [ ] docs先行のPhase 2 PRを作成して合意を取る（`phase2-docs-pr-template.md` を使用）
-- [ ] 合意後、CIに閾値ゲートを実装する
+- [x] docs先行のPhase 2 PRを作成して合意を取る（`phase2-docs-pr-template.md` を使用）
+- [x] 合意後、CIに閾値ゲートを実装する（まず `report-only` モード）

@@ -13,10 +13,16 @@ jobs:
     name: episode-unit-tests
     runs-on: macos-15
     timeout-minutes: 30
+    env:
+      PHASE2_MODE: report-only
+      PHASE2_OVERALL_LOGIC_THRESHOLD: "85.00"
+      PHASE2_CHANGED_FILES_THRESHOLD: "80.00"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Show Xcode Version
         run: xcodebuild -version
@@ -142,6 +148,172 @@ jobs:
 
           if [ "$failures" -gt 0 ]; then
             echo "::error::Coverage baseline gate failed with $failures issue(s)."
+            exit 1
+          fi
+
+      - name: Coverage Threshold Gate (Phase 2)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          RESULT_BUNDLE="artifacts/episode-unit-tests.xcresult"
+          SUMMARY_FILE="artifacts/coverage-summary.md"
+          FULL_REPORT="$(xcrun xccov view --report "$RESULT_BUNDLE")"
+
+          logic_file_line() {
+            local repo_file="$1"
+            echo "$FULL_REPORT" | grep -F "/$repo_file " | head -n 1 || true
+          }
+
+          coverage_percent_for_file() {
+            local repo_file="$1"
+            local line
+            line="$(logic_file_line "$repo_file")"
+            if [ -z "$line" ]; then
+              echo ""
+              return
+            fi
+            echo "$line" | sed -E 's/.* ([0-9]+(\.[0-9]+)?)% .*/\1/'
+          }
+
+          coverage_counts_for_file() {
+            local repo_file="$1"
+            local line
+            line="$(logic_file_line "$repo_file")"
+            if [ -z "$line" ]; then
+              echo ""
+              return
+            fi
+            echo "$line" | sed -E 's/.*\(([0-9]+)\/([0-9]+)\).*/\1 \2/'
+          }
+
+          logic_changed_files() {
+            if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] && [ -n "${BASE_SHA:-}" ] && [ -n "${HEAD_SHA:-}" ]; then
+              git diff --name-only "${BASE_SHA}...${HEAD_SHA}" || true
+            else
+              git diff --name-only HEAD~1...HEAD || true
+            fi | awk '/^ios\/(Services|ViewModels|Models)\/.*\.swift$/ && $0 !~ /^ios\/Views\//'
+          }
+
+          overall_logic_counts() {
+            echo "$FULL_REPORT" \
+              | awk '/\/ios\/Services\/.*\.swift|\/ios\/ViewModels\/.*\.swift|\/ios\/Models\/.*\.swift/' \
+              | sed -nE 's/.*\(([0-9]+)\/([0-9]+)\).*/\1 \2/p' \
+              | awk '{ covered += $1; total += $2 } END { printf "%d %d\n", covered, total }'
+          }
+
+          OVERALL_COUNTS="$(overall_logic_counts)"
+          OVERALL_COVERED="$(echo "$OVERALL_COUNTS" | awk '{print $1}')"
+          OVERALL_TOTAL="$(echo "$OVERALL_COUNTS" | awk '{print $2}')"
+          if [ "${OVERALL_TOTAL:-0}" -eq 0 ]; then
+            OVERALL_PERCENT=""
+          else
+            OVERALL_PERCENT="$(awk -v c="$OVERALL_COVERED" -v t="$OVERALL_TOTAL" 'BEGIN { printf "%.2f", (100*c)/t }')"
+          fi
+
+          CHANGED_FILES="$(logic_changed_files)"
+          CHANGED_TOTAL=0
+          CHANGED_FAILS=0
+          PARSE_FAILS=0
+
+          {
+            echo ""
+            echo "## Coverage Threshold Check (Phase 2)"
+            echo ""
+            echo "- mode: ${PHASE2_MODE}"
+            echo "- overall logic threshold: ${PHASE2_OVERALL_LOGIC_THRESHOLD}%"
+            echo "- changed-files threshold: ${PHASE2_CHANGED_FILES_THRESHOLD}%"
+            echo ""
+            echo "| Scope | Target | Threshold | Current | Result |"
+            echo "|---|---|---:|---:|---|"
+          } >> "$SUMMARY_FILE"
+
+          if [ -z "$OVERALL_PERCENT" ]; then
+            echo "::error::Unable to compute overall logic coverage."
+            PARSE_FAILS=$((PARSE_FAILS + 1))
+            echo "| overall-logic | ios/{Services,ViewModels,Models} | ${PHASE2_OVERALL_LOGIC_THRESHOLD} | (missing) | FAIL(parse) |" >> "$SUMMARY_FILE"
+          else
+            overall_result="PASS"
+            if awk -v c="$OVERALL_PERCENT" -v t="$PHASE2_OVERALL_LOGIC_THRESHOLD" 'BEGIN { exit (c+0 >= t+0 ? 0 : 1) }'; then
+              overall_result="PASS"
+            else
+              overall_result="WARN(threshold)"
+            fi
+            echo "| overall-logic | ios/{Services,ViewModels,Models} | ${PHASE2_OVERALL_LOGIC_THRESHOLD} | ${OVERALL_PERCENT} | ${overall_result} |" >> "$SUMMARY_FILE"
+          fi
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "| changed-files | (none) | ${PHASE2_CHANGED_FILES_THRESHOLD} | n/a | INFO |" >> "$SUMMARY_FILE"
+          else
+            while IFS= read -r file; do
+              [ -z "$file" ] && continue
+              CHANGED_TOTAL=$((CHANGED_TOTAL + 1))
+              current="$(coverage_percent_for_file "$file")"
+              if [ -z "$current" ]; then
+                PARSE_FAILS=$((PARSE_FAILS + 1))
+                CHANGED_FAILS=$((CHANGED_FAILS + 1))
+                echo "::error::Coverage not found for changed logic file: $file"
+                echo "| changed-file | $file | ${PHASE2_CHANGED_FILES_THRESHOLD} | (missing) | FAIL(parse) |" >> "$SUMMARY_FILE"
+                continue
+              fi
+
+              result="PASS"
+              if awk -v c="$current" -v t="$PHASE2_CHANGED_FILES_THRESHOLD" 'BEGIN { exit (c+0 >= t+0 ? 0 : 1) }'; then
+                result="PASS"
+              else
+                result="WARN(threshold)"
+                CHANGED_FAILS=$((CHANGED_FAILS + 1))
+              fi
+              echo "| changed-file | $file | ${PHASE2_CHANGED_FILES_THRESHOLD} | ${current} | ${result} |" >> "$SUMMARY_FILE"
+            done <<< "$CHANGED_FILES"
+          fi
+
+          cat "$SUMMARY_FILE"
+
+          enforce_changed=false
+          enforce_overall=false
+          case "${PHASE2_MODE}" in
+            report-only)
+              ;;
+            enforce-changed-files)
+              enforce_changed=true
+              ;;
+            enforce-all)
+              enforce_changed=true
+              enforce_overall=true
+              ;;
+            *)
+              echo "::error::Unknown PHASE2_MODE: ${PHASE2_MODE}"
+              exit 1
+              ;;
+          esac
+
+          failures=0
+          enforce_parse=false
+          if [ "$enforce_changed" = true ] || [ "$enforce_overall" = true ]; then
+            enforce_parse=true
+          fi
+
+          if [ "$enforce_parse" = true ] && [ "$PARSE_FAILS" -gt 0 ]; then
+            failures=$((failures + PARSE_FAILS))
+          fi
+
+          if [ "$enforce_changed" = true ] && [ "$CHANGED_TOTAL" -gt 0 ] && [ "$CHANGED_FAILS" -gt 0 ]; then
+            failures=$((failures + CHANGED_FAILS))
+          fi
+
+          if [ "$enforce_overall" = true ]; then
+            if [ -z "$OVERALL_PERCENT" ]; then
+              failures=$((failures + 1))
+            elif ! awk -v c="$OVERALL_PERCENT" -v t="$PHASE2_OVERALL_LOGIC_THRESHOLD" 'BEGIN { exit (c+0 >= t+0 ? 0 : 1) }'; then
+              failures=$((failures + 1))
+            fi
+          fi
+
+          if [ "$failures" -gt 0 ]; then
+            echo "::error::Phase 2 coverage threshold gate failed (${PHASE2_MODE}), failures=${failures}."
             exit 1
           fi
 
