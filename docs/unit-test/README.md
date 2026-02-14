@@ -6,6 +6,7 @@
 - `plan.md`: 単体テスト実施計画（対象範囲、方針、受け入れ基準）
 - `phase1-rollout-checklist.md`: カバレッジPhase 1運用開始チェックリスト
 - `phase1-stabilization-log.md`: Phase 1安定化期間（2〜3PR）の追跡ログ
+- `phase2-enforcement-log.md`: Phase 2（閾値強制）の週次運用ログ
 - `phase2-threshold-draft.md`: Phase 2閾値運用のドラフト
 - `phase2-docs-pr-template.md`: Phase 2 docs先行PRテンプレート
 - `templates/result-template.md`: 実施結果を記録する標準テンプレート
