@@ -35,6 +35,14 @@
   - `xccov` 出力から baseline指標を抽出できない
 - Phase 2: 閾値導入（推奨: 全体 >= 70%、変更ファイル >= 80%）
 
+## Phase 2 実装モード（CI）
+- `PHASE2_MODE=report-only`（現行）:
+  - 閾値判定をレポート出力のみ行う（失敗にしない）
+- `PHASE2_MODE=enforce-changed-files`:
+  - 変更対象ロジックファイルの閾値違反を失敗扱い
+- `PHASE2_MODE=enforce-all`:
+  - 変更対象ロジック + overall logic の両方を失敗扱い
+
 ## 安定化期間
 - 導入後2〜3PRを追跡する。
 - 各PRの必須確認:

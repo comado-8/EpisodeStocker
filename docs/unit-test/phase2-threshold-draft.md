@@ -49,6 +49,10 @@
 2. Week 2: changed-files >= 80.00% を必須化
 3. Week 3: overall logic >= 85.00% を必須化
 
+## 実装状況
+- CIにはPhase 2判定ステップを追加済み。
+- 現在は `PHASE2_MODE=report-only` で運用中。
+
 ## 追加運用ルール（確定）
 - PRサイズが小さい場合の免除: なし（最初は一律適用）
 - 生成コードの除外:
