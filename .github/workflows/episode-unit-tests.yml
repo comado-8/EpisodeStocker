@@ -31,12 +31,124 @@ jobs:
             -parallel-testing-enabled NO \
             -maximum-parallel-testing-workers 1 \
             -only-testing:EpisodeStockerTests \
+            -enableCodeCoverage YES \
             -resultBundlePath artifacts/episode-unit-tests.xcresult
+
+      - name: Coverage Baseline Gate (Phase 1)
+        run: |
+          set -euo pipefail
+
+          BASELINE_DOC="docs/unit-test/coverage-baseline.md"
+          RESULT_BUNDLE="artifacts/episode-unit-tests.xcresult"
+          SUMMARY_FILE="artifacts/coverage-summary.md"
+
+          if [ ! -f "$BASELINE_DOC" ]; then
+            echo "::error::Baseline file not found: $BASELINE_DOC"
+            exit 1
+          fi
+
+          TARGET_REPORT="$(xcrun xccov view --report --only-targets "$RESULT_BUNDLE")"
+          FULL_REPORT="$(xcrun xccov view --report "$RESULT_BUNDLE")"
+
+          baseline_value() {
+            local metric_id="$1"
+            awk -F'|' -v id="$metric_id" '
+              $0 ~ "\\|[[:space:]]*" id "[[:space:]]*\\|" {
+                value=$4
+                gsub(/[[:space:]]/, "", value)
+                print value
+                exit
+              }
+            ' "$BASELINE_DOC"
+          }
+
+          coverage_for_pattern() {
+            local pattern="$1"
+            local line
+            line="$(echo "$FULL_REPORT" | grep -F "$pattern" | head -n 1 || true)"
+            if [ -z "$line" ]; then
+              echo ""
+              return
+            fi
+            echo "$line" | sed -E 's/.* ([0-9]+(\.[0-9]+)?)% .*/\1/'
+          }
+
+          app_current="$(echo "$TARGET_REPORT" | awk '/EpisodeStocker\.app/{gsub("%","",$4); print $4; exit}')"
+          swiftdata_current="$(coverage_for_pattern "ios/Services/SwiftDataPersistence.swift")"
+          repo_current="$(coverage_for_pattern "ios/Services/InMemorySuggestionRepository.swift")"
+          viewmodel_current="$(coverage_for_pattern "ios/ViewModels/SuggestionManagerViewModel.swift")"
+          seed_current="$(coverage_for_pattern "ios/Services/SeedData.swift")"
+          router_current="$(coverage_for_pattern "ios/ViewModels/AppRouter.swift")"
+          episode_current="$(coverage_for_pattern "ios/Models/Episode.swift")"
+
+          {
+            echo "# Coverage Baseline Check (Phase 1)"
+            echo ""
+            echo "| Metric | Baseline | Current | Gate | Result |"
+            echo "|---|---:|---:|---|---|"
+          } > "$SUMMARY_FILE"
+
+          failures=0
+
+          check_metric() {
+            local metric_id="$1"
+            local label="$2"
+            local current="$3"
+            local gate="$4"
+            local baseline
+            local result
+
+            baseline="$(baseline_value "$metric_id")"
+            if [ -z "$baseline" ]; then
+              echo "::error::Baseline not found for metric: $metric_id"
+              result="FAIL (baseline missing)"
+              failures=$((failures + 1))
+              echo "| $label | (missing) | ${current:-n/a} | $gate | $result |" >> "$SUMMARY_FILE"
+              return
+            fi
+
+            if [ -z "$current" ]; then
+              echo "::error::Coverage not found for metric: $label"
+              result="FAIL (current missing)"
+              failures=$((failures + 1))
+              echo "| $label | $baseline | (missing) | $gate | $result |" >> "$SUMMARY_FILE"
+              return
+            fi
+
+            if [ "$gate" = "yes" ]; then
+              if awk -v c="$current" -v b="$baseline" 'BEGIN { exit (c+0 >= b+0 ? 0 : 1) }'; then
+                result="PASS"
+              else
+                echo "::error::Coverage regression: $label current=$current baseline=$baseline"
+                result="FAIL (regression)"
+                failures=$((failures + 1))
+              fi
+            else
+              result="INFO"
+            fi
+
+            echo "| $label | $baseline | $current | $gate | $result |" >> "$SUMMARY_FILE"
+          }
+
+          check_metric "app_overall" "EpisodeStocker.app" "$app_current" "no"
+          check_metric "file_swiftdata_persistence" "SwiftDataPersistence.swift" "$swiftdata_current" "yes"
+          check_metric "file_suggestion_repository" "InMemorySuggestionRepository.swift" "$repo_current" "yes"
+          check_metric "file_suggestion_manager_viewmodel" "SuggestionManagerViewModel.swift" "$viewmodel_current" "yes"
+          check_metric "file_seed_data" "SeedData.swift" "$seed_current" "yes"
+          check_metric "file_app_router" "AppRouter.swift" "$router_current" "yes"
+          check_metric "file_episode_model" "Episode.swift" "$episode_current" "yes"
+
+          cat "$SUMMARY_FILE"
+
+          if [ "$failures" -gt 0 ]; then
+            echo "::error::Coverage baseline gate failed with $failures issue(s)."
+            exit 1
+          fi
 
       - name: Upload xcresult
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: episode-unit-tests-xcresult
-          path: artifacts/episode-unit-tests.xcresult
+          name: episode-unit-tests-artifacts
+          path: artifacts
           if-no-files-found: warn
