@@ -1,46 +1,59 @@
-# Unit Test Operation Rules (CI Gate)
+# 単体テスト運用ルール（CIゲート）
 
-Source of truth: `docs/unit-test/`
+正本: `docs/unit-test/`
 
-## Purpose
-- Keep `EpisodeStockerTests` always green and prevent regressions in persistence/search/router logic.
+## 目的
+- `EpisodeStockerTests` を常時グリーンに保ち、永続化・検索・ルーティングの回帰を防ぐ。
 
-## Local Rule
-1. Before pushing, run:
+## ローカル実行ルール
+1. push前に以下を実行する。
    - `xcodebuild test -project EpisodeStocker.xcodeproj -scheme EpisodeStocker -destination 'id=76667AA1-DC1C-4AC6-8228-0AE06DE290B5' -only-testing:EpisodeStockerTests`
    - `xcodebuild test -project EpisodeStocker.xcodeproj -scheme EpisodeStocker -destination 'id=76667AA1-DC1C-4AC6-8228-0AE06DE290B5' -only-testing:EpisodeStockerTests -enableCodeCoverage YES -resultBundlePath /tmp/episode-unit-tests-coverage.xcresult`
-2. If any test fails, do not merge. Fix code or test data first.
-3. Record the run result in `docs/unit-test/results/*.md`.
+2. テスト失敗時はマージしない。コードまたはテストデータを修正する。
+3. 実行結果を `docs/unit-test/results/*.md` に記録する。
 
-## CI Gate (Required)
-1. CI runs `EpisodeStockerTests` only.
-2. Merge condition:
-   - Test exit code is `0`.
-   - `FAIL = 0`.
-   - No skipped test without ticket (`XCTSkip` requires issue link).
-3. If CI fails, PR is blocked.
+## 手動実行タイミング
+- 手動ローカル実行は次のときだけ行う。
+  - PR作成前
+  - `coverage-baseline.md` 更新時
+  - CI失敗の切り分け時
 
-## Coverage Rule (Phased)
-- Phase 1 (now): establish baseline coverage and do not decrease it.
-- Baseline source of truth (CI): `docs/unit-test/coverage-baseline.md`
-- Denominator rule: logic-focused metrics only (exclude `ios/Views/**` from gate metrics).
-- Phase 1 fail condition:
-  - Any gate metric current coverage `<` baseline coverage.
-  - Baseline metric cannot be extracted from `xccov` output.
-- Phase 2: enforce threshold (recommended: overall >= 70%, changed files >= 80%).
+## CIゲート（必須）
+1. CIは `EpisodeStockerTests` のみ実行する。
+2. マージ条件:
+   - テスト終了コードが `0`
+   - `FAIL = 0`
+   - チケットなしのskip禁止（`XCTSkip` はissueリンク必須）
+3. CI失敗時はPRをブロックする。
 
-## Phase 1 Gate Metrics
+## カバレッジルール（段階導入）
+- Phase 1（現行）: ベースライン確立 + 低下禁止
+- ベースライン正本（CI参照）: `docs/unit-test/coverage-baseline.md`
+- 分母ルール: ロジック中心（`ios/Views/**` はゲート対象外）
+- Phase 1失敗条件:
+  - いずれかのゲート指標で `現在値 < baseline`
+  - `xccov` 出力から baseline指標を抽出できない
+- Phase 2: 閾値導入（推奨: 全体 >= 70%、変更ファイル >= 80%）
+
+## 安定化期間
+- 導入後2〜3PRを追跡する。
+- 各PRの必須確認:
+  - `episode-unit-tests` がPASS
+  - `coverage-summary.md` artifact が生成されている
+  - baseline回帰なし
+
+## Phase 1ゲート指標
 - `SwiftDataPersistence.swift`
 - `InMemorySuggestionRepository.swift`
 - `SuggestionManagerViewModel.swift`
 - `SeedData.swift`
 - `AppRouter.swift`
 - `Episode.swift`
-- `EpisodeStocker.app` (informational only, not a blocking metric in Phase 1)
+- `EpisodeStocker.app`（情報用。Phase 1ではブロッキング対象外）
 
-## Exception Handling
-- Flaky tests are allowed only with:
-  - issue/ticket ID,
-  - expiry date,
-  - owner.
-- Expired exceptions are treated as CI failures.
+## 例外運用
+- flaky testを許容する場合は以下を必須とする。
+  - issue/ticket ID
+  - owner
+  - 失効日
+- 失効後の例外はCI失敗として扱う。

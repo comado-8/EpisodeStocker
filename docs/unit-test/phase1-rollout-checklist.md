@@ -1,44 +1,47 @@
-# Phase 1 Coverage Rollout Checklist
+# Phase 1 カバレッジ運用開始チェックリスト
 
-## Scope
-- Enable and operate Phase 1 coverage gate (baseline non-regression) for `EpisodeStockerTests`.
+## 対象
+- `EpisodeStockerTests` に対して、Phase 1（baseline低下禁止）ゲートを導入し運用する。
 
-## 1. PR bundle (repo-side)
-- [ ] Include these files in one PR:
+## 1. PRバンドル（リポジトリ側）
+- [x] 以下を1PRに含める:
   - `.github/workflows/episode-unit-tests.yml`
   - `EpisodeStockerTests/ViewModels/SuggestionManagerViewModelTests.swift`
   - `docs/unit-test/coverage-baseline.md`
   - `docs/unit-test/ci-gate-rules.md`
   - `docs/unit-test/results/*.md`
 
-## 2. Branch protection check (manual on GitHub)
-- [ ] Open `Settings > Branches > main rule`
-- [ ] Confirm required status checks include `episode-unit-tests`
-- [ ] Confirm merge is blocked when required checks are failing
+## 2. ブランチ保護確認（GitHub手動）
+- [x] `Settings > Branches > main rule` を開く
+- [x] 必須チェックに `episode-unit-tests` が含まれていることを確認
+- [x] 必須チェック失敗時にマージ不可であることを確認
 
-## 3. Dummy PR validation (manual)
-- [ ] Create a no-op PR to `main`
-- [ ] Confirm `episode-unit-tests` runs
-- [ ] Confirm artifacts include:
+## 3. ダミーPR検証（手動）
+- [x] `main` 向けにno-op PRを作成
+- [x] `episode-unit-tests` が実行されることを確認
+- [x] artifactに以下があることを確認:
   - `episode-unit-tests.xcresult`
   - `coverage-summary.md`
 
-## 4. Regression-fail validation
-- [ ] Local simulation completed (forced baseline > current): expected fail reproduced
-- [ ] Optional PR simulation: intentionally reduce one gate file coverage and confirm CI FAIL
+## 4. 回帰FAIL検証
+- [x] ローカル疑似再現（baselineを意図的に上げる）でFAIL確認済み
+- [ ] 任意: 実際に1ファイルのカバレッジを下げる小PRでCI FAILを確認
 
-## 5. Documentation source-of-truth
-- [ ] Use only `EpisodeStocker/docs/unit-test/` as the canonical docs path
-- [ ] Update this path on every test run
+## 5. ドキュメント正本
+- [x] 正本を `EpisodeStocker/docs/unit-test/` に統一
+- [x] 毎回このパスを更新する運用に切替
 
-## 6. Stabilization window
-- [ ] Track first 2-3 PRs after rollout
-- [ ] Confirm each PR passes:
-  - `EpisodeStockerTests` green
-  - coverage baseline gate green
+## 6. 安定化期間
+- [ ] 導入後2〜3PRを追跡
+- [ ] 各PRで以下を確認:
+  - `EpisodeStockerTests` がグリーン
+  - coverage baseline gate がグリーン
+  - 進捗: `1/3` PR確認済み（Phase 1導入PR）
 
-## 7. Next phase prep
-- [ ] Draft Phase 2 thresholds:
-  - overall coverage target
-  - changed-files coverage target
-  - exception policy
+## 7. 次フェーズ準備
+- [x] Phase 2閾値案のドラフト作成
+  - 全体目標
+  - 変更ファイル目標
+  - 例外ポリシー
+- [ ] docs先行のPhase 2 PRを作成して合意を取る
+- [ ] 合意後、CIに閾値ゲートを実装する
