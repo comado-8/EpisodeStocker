@@ -2,7 +2,8 @@
 
 ## 1) 作業ブランチ作成
 ```bash
-cd /Users/yumiko/development/EpisodeStocker/EpisodeStocker
+# リポジトリルートに移動（環境に合わせて調整）
+cd /path/to/EpisodeStocker
 git checkout main
 git pull origin main
 git checkout -b chore/unit-test-ops-update
