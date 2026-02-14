@@ -38,10 +38,15 @@
 ## Phase 2 実装モード（CI）
 - `PHASE2_MODE=report-only`（現行）:
   - 閾値判定をレポート出力のみ行う（失敗にしない）
+  - parse failは記録対象のみ（`report-only` ではブロッキングしない）
 - `PHASE2_MODE=enforce-changed-files`:
   - 変更対象ロジックファイルの閾値違反を失敗扱い
 - `PHASE2_MODE=enforce-all`:
   - 変更対象ロジック + overall logic の両方を失敗扱い
+
+## Phase 2 切替順（運用）
+1. Week 2: `PHASE2_MODE=enforce-changed-files`
+2. Week 3: `PHASE2_MODE=enforce-all`
 
 ## 安定化期間
 - 導入後2〜3PRを追跡する。

@@ -6,6 +6,7 @@ Phase 1導入後の2〜3PRを追跡し、ゲート運用が安定しているこ
 ## 記録
 | 日付 (JST) | PR / マージ | episode-unit-tests | coverage-summary.md | baseline回帰 | メモ |
 |---|---|---|---|---|---|
+| 2026-02-14 | Phase 2 CI report-only PRマージ（#5） | PASS | 確認済み | なし | 安定化3件目（3/3） |
 | 2026-02-14 | docs先行PR完了 | PASS | 確認済み | なし | 安定化2件目（2/3） |
 | 2026-02-14 | Phase 1導入PRマージ | PASS | 確認済み | なし | 安定化1件目（1/3） |
 
@@ -14,10 +15,10 @@ Phase 1導入後の2〜3PRを追跡し、ゲート運用が安定しているこ
   - `episode-unit-tests` PASS
   - `coverage-summary.md` artifact生成
   - baseline回帰なし
+- 達成状況: `3/3` 完了（2026-02-14）
 
 ## 次回追記テンプレート
 
 | 日付 (JST) | PR / マージ | episode-unit-tests | coverage-summary.md | baseline回帰 | メモ |
 |---|---|---|---|---|---|
 | YYYY-MM-DD | PR `#N` / merge commit | PASS/FAIL | 確認済み/未確認 | なし/あり | 安定化N件目（N/3） |
-

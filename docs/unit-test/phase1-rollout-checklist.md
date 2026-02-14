@@ -32,14 +32,14 @@
 - [x] 毎回このパスを更新する運用に切替
 
 ## 6. 安定化期間
-- [ ] 導入後2〜3PRを追跡
-- [ ] 各PRで以下を確認:
+- [x] 導入後2〜3PRを追跡
+- [x] 各PRで以下を確認:
   - `EpisodeStockerTests` がグリーン
   - coverage baseline gate がグリーン
-  - 進捗: `2/3` PR確認済み（Phase 1導入PR + docs先行PR）
+  - 進捗: `3/3` PR確認済み（Phase 1導入PR + docs先行PR + Phase 2 CI report-only PR）
 - [x] 安定化2件目のPRを記録（`phase1-stabilization-log.md`）
-- [ ] 安定化3件目のPRを記録（`phase1-stabilization-log.md`）
-- [ ] 3/3達成後、本セクションを完了に更新
+- [x] 安定化3件目のPRを記録（`phase1-stabilization-log.md`）
+- [x] 3/3達成後、本セクションを完了に更新
 
 ## 7. 次フェーズ準備
 - [x] Phase 2閾値案のドラフト作成
@@ -48,3 +48,9 @@
   - 例外ポリシー
 - [x] docs先行のPhase 2 PRを作成して合意を取る（`phase2-docs-pr-template.md` を使用）
 - [x] 合意後、CIに閾値ゲートを実装する（まず `report-only` モード）
+
+## 8. 次アクション（Phase 2 強制化）
+- [ ] Week 2: `PHASE2_MODE=enforce-changed-files` に切替えるPRを作成
+- [ ] Week 2: changed-files閾値違反を意図的に作り、CIがFAILすることを確認
+- [ ] Week 3: `PHASE2_MODE=enforce-all` に切替えるPRを作成
+- [ ] Week 3: overall logic閾値違反でCIがFAILすることを確認
