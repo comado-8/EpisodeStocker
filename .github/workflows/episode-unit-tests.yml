@@ -36,7 +36,7 @@ jobs:
             exit 0
           fi
 
-          RUNTIME_ID="$(xcrun simctl list runtimes available | grep -o 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]*' | head -n 1 || true)"
+          RUNTIME_ID="$(xcrun simctl list runtimes available | grep -o 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]*' | tail -n 1 || true)"
           if [ -z "$RUNTIME_ID" ]; then
             echo "::error::No available iOS runtime found."
             xcrun simctl list runtimes available
