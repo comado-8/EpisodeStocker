@@ -31,7 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           AVAILABLE_DEVICES="$(xcrun simctl list devices available)"
-          if echo "$AVAILABLE_DEVICES" | grep -Eq '^[[:space:]]*iPhone [0-9]'; then
+          if echo "$AVAILABLE_DEVICES" | grep -Eq '^[[:space:]]*iPhone '; then
             echo "iPhone simulator already exists on runner."
             exit 0
           fi
@@ -104,32 +104,7 @@ jobs:
           fi
 
           AVAILABLE_DEVICES="$(xcrun simctl list devices available)"
-          SIM_NAME="$(echo "$AVAILABLE_DEVICES" | awk '
-            {
-              line=$0
-              sub(/^[[:space:]]*/, "", line)
-              if (line !~ /^iPhone /) next
-              if (line !~ /\([0-9A-Fa-f-]+\)[[:space:]]+\(.*\)$/) next
-
-              name=line
-              sub(/[[:space:]]+\([0-9A-Fa-f-]+\)[[:space:]]+\(.*\)$/, "", name)
-
-              gen=0
-              if (match(name, /iPhone[[:space:]]+[0-9]+/)) {
-                token=substr(name, RSTART, RLENGTH)
-                sub(/^iPhone[[:space:]]+/, "", token)
-                gen=token+0
-              }
-
-              if (best == "" || gen > best_gen) {
-                best_gen=gen
-                best=name
-              }
-            }
-            END {
-              if (best != "") print best
-            }
-          ')"
+          SIM_NAME="$(echo "$AVAILABLE_DEVICES" | sed -nE 's/^[[:space:]]*(iPhone.*)[[:space:]]+\([0-9A-Fa-f-]+\)[[:space:]]+\([^)]*\)$/\1/p' | head -n 1)"
 
           if [ -z "$SIM_NAME" ]; then
             echo "::error::No iPhone simulator found on runner."
