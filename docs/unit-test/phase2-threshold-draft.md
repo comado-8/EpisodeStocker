@@ -52,9 +52,16 @@
 ## 実装状況
 - CIにはPhase 2判定ステップを追加済み。
 - 現在は `PHASE2_MODE=report-only` で運用中。
+- `report-only` では、カバレッジ解析エラー（parse fail）はレポート出力のみでCI失敗にしない。
 
 ## 追加運用ルール（確定）
 - PRサイズが小さい場合の免除: なし（最初は一律適用）
 - 生成コードの除外:
   - 現時点では生成コードなし（対象外設定は不要）
   - 将来 `Generated/` 等を導入した場合は除外対象へ追加する
+
+## 次の実行タスク（確定）
+1. Week 2: `PHASE2_MODE=enforce-changed-files` を有効化
+2. Week 2: changed-files閾値違反のFAIL挙動を検証
+3. Week 3: `PHASE2_MODE=enforce-all` を有効化
+4. Week 3: overall logic閾値違反のFAIL挙動を検証
