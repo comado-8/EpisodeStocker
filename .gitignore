@@ -4,3 +4,29 @@
 
 # macOS
 .DS_Store
+
+# Environment files (local only)
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# Secrets / credentials
+*.pem
+*.key
+*.p8
+*.p12
+*.crt
+*.cer
+*.mobileprovision
+*.jks
+*.keystore
+*.secret
+secrets.*
+*.credentials
+credentials.*
+service-account*.json
+firebase-adminsdk*.json
+GoogleService-Info.plist
+google-services.json
