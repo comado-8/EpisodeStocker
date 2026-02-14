@@ -1,10 +1,12 @@
-# Unit Test Documentation
+# 単体テストドキュメント
 
 このフォルダは EpisodeStocker の単体テスト計画と実施結果を、第三者が追跡できる形で管理するためのドキュメントです。
 
 ## 構成
 - `plan.md`: 単体テスト実施計画（対象範囲、方針、受け入れ基準）
 - `phase1-rollout-checklist.md`: カバレッジPhase 1運用開始チェックリスト
+- `phase1-stabilization-log.md`: Phase 1安定化期間（2〜3PR）の追跡ログ
+- `phase2-threshold-draft.md`: Phase 2閾値運用のドラフト
 - `templates/result-template.md`: 実施結果を記録する標準テンプレート
 - `results/`: 機能単位の実施記録
 
