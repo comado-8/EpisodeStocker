@@ -63,6 +63,54 @@ final class SuggestionManagerViewModelTests: XCTestCase {
         XCTAssertEqual(vm.suggestions.count, 1)
         XCTAssertEqual(vm.suggestions.first?.id, targetId)
     }
+
+    func testTitleReturnsFieldType() {
+        let repo = FakeSuggestionRepository(items: [])
+        let vm = SuggestionManagerViewModel(repository: repo, fieldType: "企画名")
+
+        XCTAssertEqual(vm.title, "企画名")
+    }
+
+    func testRestoreClearsPendingUndoWhenRestoringSameId() {
+        let targetId = UUID()
+        let repo = FakeSuggestionRepository(
+            items: [
+                Suggestion(id: targetId, fieldType: "人物", value: "対象", usageCount: 1, lastUsedAt: Date(), isDeleted: false)
+            ]
+        )
+
+        let vm = SuggestionManagerViewModel(repository: repo, fieldType: "人物")
+        vm.softDelete(targetId)
+        XCTAssertTrue(vm.suggestions.isEmpty)
+
+        vm.restore(targetId)
+        XCTAssertEqual(vm.suggestions.count, 1)
+
+        vm.softDelete(targetId)
+        vm.restore(targetId)
+        vm.undoDelete()
+        XCTAssertEqual(vm.suggestions.count, 1)
+        XCTAssertEqual(vm.suggestions.first?.id, targetId)
+    }
+
+    func testRestoreDifferentIdKeepsPendingUndoTarget() {
+        let firstId = UUID()
+        let secondId = UUID()
+        let repo = FakeSuggestionRepository(
+            items: [
+                Suggestion(id: firstId, fieldType: "人物", value: "A", usageCount: 1, lastUsedAt: Date(), isDeleted: false),
+                Suggestion(id: secondId, fieldType: "人物", value: "B", usageCount: 1, lastUsedAt: Date(), isDeleted: false)
+            ]
+        )
+
+        let vm = SuggestionManagerViewModel(repository: repo, fieldType: "人物")
+        vm.softDelete(firstId)
+        vm.restore(secondId)
+        vm.undoDelete()
+
+        let ids = Set(vm.suggestions.map(\.id))
+        XCTAssertEqual(ids, Set([firstId, secondId]))
+    }
 }
 
 private final class FakeSuggestionRepository: SuggestionRepository {
