@@ -1,5 +1,14 @@
 # Suggestion Feature Results
 
+## CI Coverage Gate（2026-02-14 / follow-up）
+- 実行元: GitHub Actions `episode-unit-tests`
+- 証跡: `episode-unit-tests-artifacts (1)/coverage-summary.md`
+- 判定: PASS（Phase 1 baseline non-regression）
+
+| Metric | Baseline | Current | Gate | Result |
+|---|---:|---:|---|---|
+| InMemorySuggestionRepository.swift | 100.00 | 100.00 | yes | PASS |
+
 ## CI Coverage Gate（2026-02-14）
 - 実行元: GitHub Actions `episode-unit-tests`
 - 証跡: `episode-unit-tests-artifacts/coverage-summary.md`

@@ -1,5 +1,15 @@
 # Persistence Feature Results
 
+## CI Coverage Gate（2026-02-14 / follow-up）
+- 実行元: GitHub Actions `episode-unit-tests`
+- 証跡: `episode-unit-tests-artifacts (1)/coverage-summary.md`
+- 判定: PASS（Phase 1 baseline non-regression）
+
+| Metric | Baseline | Current | Gate | Result |
+|---|---:|---:|---|---|
+| SwiftDataPersistence.swift | 94.04 | 94.04 | yes | PASS |
+| SeedData.swift | 95.65 | 95.65 | yes | PASS |
+
 ## CI Coverage Gate（2026-02-14）
 - 実行元: GitHub Actions `episode-unit-tests`
 - 証跡: `episode-unit-tests-artifacts/coverage-summary.md`
