@@ -129,6 +129,23 @@ final class BackupSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(vm.errorMessage, "バックアップ機能はサブスクリプション登録で利用できます。")
     }
 
+    func testRunManualBackupWhenDisabledSetsBackupDisabledError() async {
+        let service = FakeCloudBackupService(
+            availabilityValue: .available,
+            enabled: false,
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+        )
+        let vm = BackupSettingsViewModel(
+            cloudBackupService: service,
+            subscriptionStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
+        )
+        await vm.load()
+
+        await vm.runManualBackup()
+
+        XCTAssertEqual(vm.errorMessage, "クラウドバックアップを有効にしてください。")
+    }
+
     func testUpdateSubscriptionStatusEnablesTrialAccess() {
         let service = FakeCloudBackupService(
             availabilityValue: .available,

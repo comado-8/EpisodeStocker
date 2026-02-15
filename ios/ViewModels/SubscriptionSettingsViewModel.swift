@@ -37,8 +37,9 @@ final class SubscriptionSettingsViewModel: ObservableObject {
         do {
             async let currentStatus = service.fetchStatus()
             async let currentProducts = service.fetchProducts()
-            status = try await currentStatus
-            products = try await currentProducts
+            let (newStatus, newProducts) = try await (currentStatus, currentProducts)
+            status = newStatus
+            products = newProducts
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

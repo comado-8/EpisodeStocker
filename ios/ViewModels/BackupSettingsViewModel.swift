@@ -83,6 +83,11 @@ final class BackupSettingsViewModel: ObservableObject {
     }
 
     func runManualBackup() async {
+        guard isBackupEnabled else {
+            errorMessage = CloudBackupError.backupDisabled.localizedDescription
+            return
+        }
+
         guard canUseBackup else {
             errorMessage = CloudBackupError.notEntitled.localizedDescription
             return

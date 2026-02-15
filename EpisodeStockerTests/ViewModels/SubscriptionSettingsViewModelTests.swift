@@ -130,6 +130,45 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
         XCTAssertFalse(vm.isLoading)
     }
 
+    func testLoadFailureDoesNotPartiallyUpdateState() async {
+        let initialProducts = [
+            SubscriptionProduct(
+                id: SubscriptionCatalog.monthlyProductID,
+                displayName: "初期",
+                displayPrice: "¥0",
+                plan: .monthly
+            )
+        ]
+        let service = FakeSubscriptionService(
+            status: .init(plan: .yearly, expiryDate: Date(), trialEndDate: nil),
+            products: [
+                SubscriptionProduct(
+                    id: SubscriptionCatalog.yearlyProductID,
+                    displayName: "年額",
+                    displayPrice: "¥3,600",
+                    plan: .yearly
+                )
+            ],
+            purchaseOutcome: .pending,
+            restoredStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            fetchStatusError: nil,
+            fetchProductsError: TestServiceError.failed("products error"),
+            purchaseError: nil,
+            restoreError: nil
+        )
+        let vm = SubscriptionSettingsViewModel(
+            service: service,
+            initialStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            initialProducts: initialProducts
+        )
+
+        await vm.load()
+
+        XCTAssertEqual(vm.status.plan, .free)
+        XCTAssertEqual(vm.products, initialProducts)
+        XCTAssertEqual(vm.errorMessage, "products error")
+    }
+
     func testTrialRemainingDaysAndHasPremiumAccess() {
         let now = Date()
         let service = FakeSubscriptionService(
