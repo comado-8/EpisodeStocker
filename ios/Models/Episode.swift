@@ -271,12 +271,16 @@ enum ReleaseLogOutcome: String, Codable, CaseIterable, Identifiable {
     var label: String { rawValue }
 }
 
-struct SubscriptionStatus: Codable {
+struct SubscriptionStatus: Codable, Equatable {
     var plan: Plan
     var expiryDate: Date?
     var trialEndDate: Date?
 
-    enum Plan: String, Codable, CaseIterable { case free, monthly, yearly }
+    enum Plan: String, Codable, CaseIterable {
+        case free
+        case monthly
+        case yearly
+    }
 }
 
 struct SettingItem: Identifiable, Codable {
