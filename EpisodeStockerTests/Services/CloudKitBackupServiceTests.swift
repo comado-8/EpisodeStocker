@@ -4,6 +4,18 @@ import XCTest
 
 @MainActor
 final class CloudKitBackupServiceTests: XCTestCase {
+    func testAvailabilityMapsAvailableToAvailable() async {
+        let service = CloudKitBackupService(
+            cloudKitClient: FakeCloudKitClient(result: .success(.available)),
+            settingsRepository: InMemorySettingsRepository(),
+            backupJobRunner: FakeBackupJobRunner(result: .success(()))
+        )
+
+        let availability = await service.availability()
+
+        XCTAssertEqual(availability, .available)
+    }
+
     func testAvailabilityMapsNoAccountToUnavailable() async {
         let service = CloudKitBackupService(
             cloudKitClient: FakeCloudKitClient(result: .success(.noAccount)),
@@ -14,6 +26,69 @@ final class CloudKitBackupServiceTests: XCTestCase {
         let availability = await service.availability()
 
         XCTAssertEqual(availability, .unavailable(reason: "iCloudにサインインしてください。"))
+    }
+
+    func testAvailabilityMapsTemporarilyUnavailableToMessage() async {
+        let service = CloudKitBackupService(
+            cloudKitClient: FakeCloudKitClient(result: .success(.temporarilyUnavailable)),
+            settingsRepository: InMemorySettingsRepository(),
+            backupJobRunner: FakeBackupJobRunner(result: .success(()))
+        )
+
+        let availability = await service.availability()
+
+        XCTAssertEqual(availability, .unavailable(reason: "iCloudが一時的に利用できません。"))
+    }
+
+    func testAvailabilityMapsCouldNotDetermineToMessage() async {
+        let service = CloudKitBackupService(
+            cloudKitClient: FakeCloudKitClient(result: .success(.couldNotDetermine)),
+            settingsRepository: InMemorySettingsRepository(),
+            backupJobRunner: FakeBackupJobRunner(result: .success(()))
+        )
+
+        let availability = await service.availability()
+
+        XCTAssertEqual(availability, .unavailable(reason: "iCloudの状態を確認できません。"))
+    }
+
+    func testAvailabilityMapsClientErrorToGenericMessage() async {
+        let service = CloudKitBackupService(
+            cloudKitClient: FakeCloudKitClient(result: .failure(TestError.failed)),
+            settingsRepository: InMemorySettingsRepository(),
+            backupJobRunner: FakeBackupJobRunner(result: .success(()))
+        )
+
+        let availability = await service.availability()
+
+        XCTAssertEqual(availability, .unavailable(reason: "iCloudの状態確認に失敗しました。"))
+    }
+
+    func testSetBackupEnabledPersistsState() throws {
+        let settings = InMemorySettingsRepository()
+        let service = CloudKitBackupService(
+            cloudKitClient: FakeCloudKitClient(result: .success(.available)),
+            settingsRepository: settings,
+            backupJobRunner: FakeBackupJobRunner(result: .success(()))
+        )
+
+        try service.setBackupEnabled(true)
+        XCTAssertTrue(service.isBackupEnabled())
+        try service.setBackupEnabled(false)
+        XCTAssertFalse(service.isBackupEnabled())
+    }
+
+    func testLastBackupAtReturnsStoredDate() {
+        let settings = InMemorySettingsRepository()
+        let expectedDate = Date(timeIntervalSince1970: 80_000)
+        settings.set(expectedDate, for: .cloudBackupLastRunAt)
+        let service = CloudKitBackupService(
+            cloudKitClient: FakeCloudKitClient(result: .success(.available)),
+            settingsRepository: settings,
+            backupJobRunner: FakeBackupJobRunner(result: .success(()))
+        )
+
+        XCTAssertEqual(service.lastBackupAt(), expectedDate)
     }
 
     func testRunManualBackupStoresLastRunDate() async throws {
@@ -65,7 +140,7 @@ final class CloudKitBackupServiceTests: XCTestCase {
             _ = try await service.runManualBackup()
             XCTFail("Expected error")
         } catch let error as CloudBackupError {
-            XCTAssertEqual(error, .failed(reason: "クラウドバックアップがオフです。"))
+            XCTAssertEqual(error, .backupDisabled)
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -85,6 +160,25 @@ final class CloudKitBackupServiceTests: XCTestCase {
             XCTFail("Expected error")
         } catch let error as CloudBackupError {
             XCTAssertEqual(error, .failed(reason: "バックアップの実行に失敗しました。"))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testRunManualBackupPassesThroughCloudBackupErrorFromRunner() async {
+        let settings = InMemorySettingsRepository()
+        settings.set(true, for: .cloudBackupEnabled)
+        let service = CloudKitBackupService(
+            cloudKitClient: FakeCloudKitClient(result: .success(.available)),
+            settingsRepository: settings,
+            backupJobRunner: FakeBackupJobRunner(result: .failure(CloudBackupError.failed(reason: "runner failed")))
+        )
+
+        do {
+            _ = try await service.runManualBackup()
+            XCTFail("Expected error")
+        } catch let error as CloudBackupError {
+            XCTAssertEqual(error, .failed(reason: "runner failed"))
         } catch {
             XCTFail("Unexpected error: \(error)")
         }

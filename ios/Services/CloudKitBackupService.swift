@@ -61,7 +61,7 @@ final class CloudKitBackupService: CloudBackupService {
 
     func runManualBackup() async throws -> Date {
         guard isBackupEnabled() else {
-            throw CloudBackupError.failed(reason: "クラウドバックアップがオフです。")
+            throw CloudBackupError.backupDisabled
         }
 
         let currentAvailability = await availability()
