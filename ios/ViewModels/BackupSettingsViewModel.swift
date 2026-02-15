@@ -47,6 +47,14 @@ final class BackupSettingsViewModel: ObservableObject {
         subscriptionStatus = status
     }
 
+    func refreshSubscriptionStatus(using service: SubscriptionService) async {
+        do {
+            subscriptionStatus = try await service.fetchStatus()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func load() async {
         availability = await cloudBackupService.availability()
         isBackupEnabled = cloudBackupService.isBackupEnabled()

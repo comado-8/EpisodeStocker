@@ -223,10 +223,10 @@ private final class FakeSubscriptionService: SubscriptionService {
         products: [SubscriptionProduct],
         purchaseOutcome: SubscriptionPurchaseOutcome,
         restoredStatus: SubscriptionStatus,
-        fetchStatusError: Error?,
-        fetchProductsError: Error?,
-        purchaseError: Error?,
-        restoreError: Error?
+        fetchStatusError: Error? = nil,
+        fetchProductsError: Error? = nil,
+        purchaseError: Error? = nil,
+        restoreError: Error? = nil
     ) {
         self.status = status
         self.products = products

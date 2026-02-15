@@ -332,7 +332,45 @@ private struct SettingsActionButton: View {
     }
 }
 
+@MainActor
 private struct SubscriptionSettingsView: View {
+    @StateObject private var viewModel: SubscriptionSettingsViewModel
+
+    init(viewModel: SubscriptionSettingsViewModel? = nil) {
+        _viewModel = StateObject(
+            wrappedValue: viewModel ?? SubscriptionSettingsViewModel(service: StoreKitSubscriptionService())
+        )
+    }
+
+    private var planLabel: String {
+        switch viewModel.status.plan {
+        case .free:
+            return "Free"
+        case .monthly:
+            return "月額"
+        case .yearly:
+            return "年額"
+        }
+    }
+
+    private var expiryDateText: String {
+        guard let expiryDate = viewModel.status.expiryDate else {
+            return "-"
+        }
+        return Self.dateFormatter.string(from: expiryDate)
+    }
+
+    private var trialText: String {
+        "\(viewModel.trialRemainingDays)日"
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "yyyy/MM/dd"
+        return formatter
+    }()
+
     var body: some View {
         SettingsDetailContainerView(
             title: "サブスクリプション",
@@ -340,19 +378,40 @@ private struct SubscriptionSettingsView: View {
         ) {
             SettingsSectionCard(title: "現在のプラン", subtitle: "利用中のプランと更新スケジュール") {
                 VStack(spacing: 10) {
-                    SettingsKeyValueRow(title: "プラン", value: "Free")
-                    SettingsKeyValueRow(title: "更新日", value: "2026/02/28")
-                    SettingsKeyValueRow(title: "試用残日数", value: "7日")
+                    SettingsKeyValueRow(title: "プラン", value: planLabel)
+                    SettingsKeyValueRow(title: "更新日", value: expiryDateText)
+                    SettingsKeyValueRow(title: "試用残日数", value: trialText)
                 }
                 .padding(.top, 4)
             }
 
             SettingsSectionCard(title: "プランの管理", subtitle: "アップグレードや解約の操作") {
                 VStack(spacing: 10) {
-                    SettingsActionButton(title: "月額プランに変更", isPrimary: true) {}
-                    SettingsActionButton(title: "年額プランに変更", isPrimary: false) {}
+                    SettingsActionButton(title: "月額プランに変更", isPrimary: true) {
+                        Task { await viewModel.purchase(productID: SubscriptionProductIDs.monthly) }
+                    }
+                    .disabled(viewModel.isLoading)
+                    SettingsActionButton(title: "年額プランに変更", isPrimary: false) {
+                        Task { await viewModel.purchase(productID: SubscriptionProductIDs.yearly) }
+                    }
+                    .disabled(viewModel.isLoading)
+                    SettingsActionButton(title: "購入を復元", isPrimary: false) {
+                        Task { await viewModel.restorePurchases() }
+                    }
+                    .disabled(viewModel.isLoading)
                 }
             }
+
+            if let errorMessage = viewModel.errorMessage {
+                SettingsSectionCard(title: "課金状態", subtitle: "実行結果") {
+                    Text(errorMessage)
+                        .font(SettingsDetailStyle.rowMetaFont)
+                        .foregroundColor(.red)
+                }
+            }
+        }
+        .task {
+            await viewModel.load()
         }
     }
 }
@@ -360,8 +419,13 @@ private struct SubscriptionSettingsView: View {
 @MainActor
 private struct BackupSettingsView: View {
     @StateObject private var viewModel: BackupSettingsViewModel
+    private let subscriptionService: SubscriptionService
 
-    init(viewModel: BackupSettingsViewModel? = nil) {
+    init(
+        viewModel: BackupSettingsViewModel? = nil,
+        subscriptionService: SubscriptionService = StoreKitSubscriptionService()
+    ) {
+        self.subscriptionService = subscriptionService
         _viewModel = StateObject(
             wrappedValue: viewModel ?? BackupSettingsViewModel(cloudBackupService: CloudKitBackupService())
         )
@@ -434,6 +498,7 @@ private struct BackupSettingsView: View {
         }
         .task {
             await viewModel.load()
+            await viewModel.refreshSubscriptionStatus(using: subscriptionService)
         }
     }
 }
