@@ -357,8 +357,36 @@ private struct SubscriptionSettingsView: View {
     }
 }
 
+@MainActor
 private struct BackupSettingsView: View {
-    @State private var cloudBackupEnabled = true
+    @StateObject private var viewModel: BackupSettingsViewModel
+
+    init(viewModel: BackupSettingsViewModel? = nil) {
+        _viewModel = StateObject(
+            wrappedValue: viewModel ?? BackupSettingsViewModel(cloudBackupService: CloudKitBackupService())
+        )
+    }
+
+    private var backupBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.isBackupEnabled },
+            set: { viewModel.setBackupEnabled($0) }
+        )
+    }
+
+    private var lastBackupText: String {
+        guard let lastBackupAt = viewModel.lastBackupAt else {
+            return "未実行"
+        }
+        return Self.backupDateFormatter.string(from: lastBackupAt)
+    }
+
+    private static let backupDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "yyyy/MM/dd HH:mm"
+        return formatter
+    }()
 
     var body: some View {
         SettingsDetailContainerView(
@@ -366,15 +394,18 @@ private struct BackupSettingsView: View {
             subtitle: "クラウドと手動バックアップ"
         ) {
             SettingsSectionCard(title: "クラウドバックアップ", subtitle: "自動バックアップの状態") {
-                Toggle(isOn: $cloudBackupEnabled) {
+                Toggle(isOn: backupBinding) {
                     Text("クラウド同期を有効にする")
                         .font(SettingsDetailStyle.rowTitleFont)
                         .foregroundColor(SettingsDetailStyle.rowTitleText)
                 }
                 .toggleStyle(SwitchToggleStyle(tint: SettingsDetailStyle.toggleTint))
+                .disabled(viewModel.isRunningBackup)
+
+                SettingsKeyValueRow(title: "可用性", value: viewModel.availabilityMessage)
 
                 VStack(spacing: 10) {
-                    SettingsKeyValueRow(title: "最終バックアップ", value: "2026/02/10 22:18")
+                    SettingsKeyValueRow(title: "最終バックアップ", value: lastBackupText)
                     SettingsKeyValueRow(title: "保存容量", value: "18.4 MB")
                 }
                 .padding(.top, 4)
@@ -382,10 +413,27 @@ private struct BackupSettingsView: View {
 
             SettingsSectionCard(title: "手動バックアップ", subtitle: "必要なタイミングで保存") {
                 VStack(spacing: 10) {
-                    SettingsActionButton(title: "今すぐバックアップ", isPrimary: true) {}
+                    SettingsActionButton(
+                        title: viewModel.isRunningBackup ? "バックアップ実行中..." : "今すぐバックアップ",
+                        isPrimary: true
+                    ) {
+                        Task { await viewModel.runManualBackup() }
+                    }
+                    .disabled(viewModel.isRunningBackup)
                     SettingsActionButton(title: "バックアップ履歴を見る", isPrimary: false) {}
                 }
             }
+
+            if let errorMessage = viewModel.errorMessage {
+                SettingsSectionCard(title: "バックアップ状態", subtitle: "実行結果") {
+                    Text(errorMessage)
+                        .font(SettingsDetailStyle.rowMetaFont)
+                        .foregroundColor(.red)
+                }
+            }
+        }
+        .task {
+            await viewModel.load()
         }
     }
 }
