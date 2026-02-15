@@ -3,6 +3,15 @@ import XCTest
 
 @MainActor
 final class SubscriptionServiceContractTests: XCTestCase {
+    func testSubscriptionCatalogMapsProductIDsToPlans() {
+        XCTAssertEqual(SubscriptionCatalog.monthlyProductID, "com.episodestocker.premium.monthly")
+        XCTAssertEqual(SubscriptionCatalog.yearlyProductID, "com.episodestocker.premium.yearly")
+        XCTAssertEqual(SubscriptionCatalog.allProductIDs.count, 2)
+        XCTAssertEqual(SubscriptionCatalog.plan(for: SubscriptionCatalog.monthlyProductID), .monthly)
+        XCTAssertEqual(SubscriptionCatalog.plan(for: SubscriptionCatalog.yearlyProductID), .yearly)
+        XCTAssertNil(SubscriptionCatalog.plan(for: "unknown"))
+    }
+
     func testFetchStatusReturnsConfiguredStatus() async throws {
         let expected = SubscriptionStatus(
             plan: .monthly,

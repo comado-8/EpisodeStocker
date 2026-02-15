@@ -13,6 +13,24 @@ enum SubscriptionPurchaseOutcome: Equatable {
     case pending
 }
 
+enum SubscriptionCatalog {
+    static let monthlyProductID = "com.episodestocker.premium.monthly"
+    static let yearlyProductID = "com.episodestocker.premium.yearly"
+
+    static let allProductIDs = [monthlyProductID, yearlyProductID]
+
+    static func plan(for productID: String) -> SubscriptionStatus.Plan? {
+        switch productID {
+        case monthlyProductID:
+            return .monthly
+        case yearlyProductID:
+            return .yearly
+        default:
+            return nil
+        }
+    }
+}
+
 protocol SubscriptionService {
     func fetchStatus() async throws -> SubscriptionStatus
     func fetchProducts() async throws -> [SubscriptionProduct]

@@ -56,6 +56,24 @@ final class BackupSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(vm.errorMessage, "iCloud未ログイン")
     }
 
+    func testUnavailableCloudKitPreventsEnableToggle() async {
+        let service = FakeCloudBackupService(
+            availabilityValue: .unavailable(reason: "iCloud未ログイン"),
+            enabled: false,
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+        )
+        let vm = BackupSettingsViewModel(
+            cloudBackupService: service,
+            subscriptionStatus: .init(plan: .yearly, expiryDate: nil, trialEndDate: nil)
+        )
+        await vm.load()
+
+        vm.setBackupEnabled(true)
+
+        XCTAssertFalse(vm.isBackupEnabled)
+        XCTAssertEqual(vm.errorMessage, "iCloud未ログイン")
+    }
+
     func testManualBackupSuccessUpdatesLastBackupAt() async {
         let expectedDate = Date(timeIntervalSince1970: 12345)
         let service = FakeCloudBackupService(
@@ -73,6 +91,73 @@ final class BackupSettingsViewModelTests: XCTestCase {
 
         XCTAssertEqual(vm.lastBackupAt, expectedDate)
         XCTAssertNil(vm.errorMessage)
+    }
+
+    func testDisableBackupClearsErrorAndTurnsOffFlag() async {
+        let service = FakeCloudBackupService(
+            availabilityValue: .available,
+            enabled: true,
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+        )
+        let vm = BackupSettingsViewModel(
+            cloudBackupService: service,
+            subscriptionStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
+        )
+        await vm.load()
+        vm.setBackupEnabled(true)
+
+        vm.setBackupEnabled(false)
+
+        XCTAssertFalse(vm.isBackupEnabled)
+        XCTAssertNil(vm.errorMessage)
+    }
+
+    func testRunManualBackupWithFreePlanSetsNotEntitledError() async {
+        let service = FakeCloudBackupService(
+            availabilityValue: .available,
+            enabled: true,
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+        )
+        let vm = BackupSettingsViewModel(
+            cloudBackupService: service,
+            subscriptionStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil)
+        )
+        await vm.load()
+
+        await vm.runManualBackup()
+
+        XCTAssertEqual(vm.errorMessage, "バックアップ機能はサブスクリプション登録で利用できます。")
+    }
+
+    func testUpdateSubscriptionStatusEnablesTrialAccess() {
+        let service = FakeCloudBackupService(
+            availabilityValue: .available,
+            enabled: false,
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+        )
+        let vm = BackupSettingsViewModel(
+            cloudBackupService: service,
+            subscriptionStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil)
+        )
+
+        XCTAssertFalse(vm.canUseBackup)
+        vm.updateSubscriptionStatus(
+            .init(plan: .free, expiryDate: nil, trialEndDate: Date().addingTimeInterval(10_000))
+        )
+        XCTAssertTrue(vm.canUseBackup)
+    }
+
+    func testAvailabilityMessageForAvailableState() async {
+        let service = FakeCloudBackupService(
+            availabilityValue: .available,
+            enabled: false,
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+        )
+        let vm = BackupSettingsViewModel(cloudBackupService: service)
+
+        await vm.load()
+
+        XCTAssertEqual(vm.availabilityMessage, "利用可能")
     }
 }
 

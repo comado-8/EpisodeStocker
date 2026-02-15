@@ -19,7 +19,11 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
                 )
             ],
             purchaseOutcome: .userCancelled,
-            restoredStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
+            restoredStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil),
+            fetchStatusError: nil,
+            fetchProductsError: nil,
+            purchaseError: nil,
+            restoreError: nil
         )
         let vm = SubscriptionSettingsViewModel(service: service)
 
@@ -37,7 +41,11 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
             status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
             products: [],
             purchaseOutcome: .purchased(purchased),
-            restoredStatus: purchased
+            restoredStatus: purchased,
+            fetchStatusError: nil,
+            fetchProductsError: nil,
+            purchaseError: nil,
+            restoreError: nil
         )
         let vm = SubscriptionSettingsViewModel(service: service)
 
@@ -52,7 +60,11 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
             status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
             products: [],
             purchaseOutcome: .userCancelled,
-            restoredStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil)
+            restoredStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            fetchStatusError: nil,
+            fetchProductsError: nil,
+            purchaseError: nil,
+            restoreError: nil
         )
         let vm = SubscriptionSettingsViewModel(service: service)
 
@@ -67,7 +79,11 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
             status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
             products: [],
             purchaseOutcome: .pending,
-            restoredStatus: restored
+            restoredStatus: restored,
+            fetchStatusError: nil,
+            fetchProductsError: nil,
+            purchaseError: nil,
+            restoreError: nil
         )
         let vm = SubscriptionSettingsViewModel(service: service)
 
@@ -76,6 +92,81 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(vm.status.plan, .monthly)
         XCTAssertNil(vm.errorMessage)
     }
+
+    func testPurchasePendingSetsErrorMessage() async {
+        let service = FakeSubscriptionService(
+            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            products: [],
+            purchaseOutcome: .pending,
+            restoredStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            fetchStatusError: nil,
+            fetchProductsError: nil,
+            purchaseError: nil,
+            restoreError: nil
+        )
+        let vm = SubscriptionSettingsViewModel(service: service)
+
+        await vm.purchase(productID: SubscriptionCatalog.monthlyProductID)
+
+        XCTAssertEqual(vm.errorMessage, "購入は保留中です。")
+    }
+
+    func testLoadFailureSetsErrorMessage() async {
+        let service = FakeSubscriptionService(
+            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            products: [],
+            purchaseOutcome: .pending,
+            restoredStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            fetchStatusError: TestServiceError.failed("status error"),
+            fetchProductsError: nil,
+            purchaseError: nil,
+            restoreError: nil
+        )
+        let vm = SubscriptionSettingsViewModel(service: service)
+
+        await vm.load()
+
+        XCTAssertEqual(vm.errorMessage, "status error")
+        XCTAssertFalse(vm.isLoading)
+    }
+
+    func testTrialRemainingDaysAndHasPremiumAccess() {
+        let now = Date()
+        let service = FakeSubscriptionService(
+            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            products: [],
+            purchaseOutcome: .pending,
+            restoredStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            fetchStatusError: nil,
+            fetchProductsError: nil,
+            purchaseError: nil,
+            restoreError: nil
+        )
+        let vm = SubscriptionSettingsViewModel(
+            service: service,
+            initialStatus: .init(plan: .free, expiryDate: nil, trialEndDate: now.addingTimeInterval(26 * 60 * 60))
+        )
+
+        XCTAssertGreaterThanOrEqual(vm.trialRemainingDays, 1)
+        XCTAssertTrue(vm.hasPremiumAccess)
+    }
+
+    func testFreeWithoutTrialHasNoPremiumAccess() {
+        let service = FakeSubscriptionService(
+            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            products: [],
+            purchaseOutcome: .pending,
+            restoredStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            fetchStatusError: nil,
+            fetchProductsError: nil,
+            purchaseError: nil,
+            restoreError: nil
+        )
+        let vm = SubscriptionSettingsViewModel(service: service)
+
+        XCTAssertEqual(vm.trialRemainingDays, 0)
+        XCTAssertFalse(vm.hasPremiumAccess)
+    }
 }
 
 private final class FakeSubscriptionService: SubscriptionService {
@@ -83,33 +174,68 @@ private final class FakeSubscriptionService: SubscriptionService {
     private let products: [SubscriptionProduct]
     private let purchaseOutcome: SubscriptionPurchaseOutcome
     private let restoredStatus: SubscriptionStatus
+    private let fetchStatusError: Error?
+    private let fetchProductsError: Error?
+    private let purchaseError: Error?
+    private let restoreError: Error?
 
     init(
         status: SubscriptionStatus,
         products: [SubscriptionProduct],
         purchaseOutcome: SubscriptionPurchaseOutcome,
-        restoredStatus: SubscriptionStatus
+        restoredStatus: SubscriptionStatus,
+        fetchStatusError: Error?,
+        fetchProductsError: Error?,
+        purchaseError: Error?,
+        restoreError: Error?
     ) {
         self.status = status
         self.products = products
         self.purchaseOutcome = purchaseOutcome
         self.restoredStatus = restoredStatus
+        self.fetchStatusError = fetchStatusError
+        self.fetchProductsError = fetchProductsError
+        self.purchaseError = purchaseError
+        self.restoreError = restoreError
     }
 
     func fetchStatus() async throws -> SubscriptionStatus {
-        status
+        if let fetchStatusError {
+            throw fetchStatusError
+        }
+        return status
     }
 
     func fetchProducts() async throws -> [SubscriptionProduct] {
-        products
+        if let fetchProductsError {
+            throw fetchProductsError
+        }
+        return products
     }
 
     func purchase(productID: String) async throws -> SubscriptionPurchaseOutcome {
+        if let purchaseError {
+            throw purchaseError
+        }
         _ = productID
         return purchaseOutcome
     }
 
     func restorePurchases() async throws -> SubscriptionStatus {
-        restoredStatus
+        if let restoreError {
+            throw restoreError
+        }
+        return restoredStatus
+    }
+}
+
+private enum TestServiceError: LocalizedError {
+    case failed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .failed(let message):
+            return message
+        }
     }
 }
