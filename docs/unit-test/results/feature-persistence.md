@@ -27,7 +27,7 @@
 - コミット: `d0bd63f`（実行時HEAD）
 - Xcode: `26.2 (17C52)`
 - 実行先: iOS Simulator `iPhone 16 (id=76667AA1-DC1C-4AC6-8228-0AE06DE290B5)`
-- 実行コマンド: `xcodebuild test -project EpisodeStocker.xcodeproj -scheme EpisodeStocker -destination 'id=76667AA1-DC1C-4AC6-8228-0AE06DE290B5' -parallel-testing-enabled NO -maximum-parallel-testing-workers 1 -only-testing:EpisodeStockerTests -enableCodeCoverage YES -resultBundlePath /tmp/episode-unit-tests-phase1-final.xcresult`
+- 実行コマンド: `xcodebuild test -project EpisodeStocker.xcodeproj -scheme EpisodeStocker -destination 'id=76667AA1-DC1C-4AC6-8228-0AE06DE290B5' -parallel-testing-enabled NO -maximum-parallel-testing-workers 1 -only-testing:EpisodeStockerTests -enableCodeCoverage YES -resultBundlePath <RESULT_BUNDLE_PATH>`
 
 ## サマリ（最新）
 - PASS: 17
@@ -44,7 +44,7 @@
 
 ## 不具合・課題（最新）
 - なし（既知FAIL-001〜005は解消済み）。
-- xcresult: `/tmp/episode-unit-tests-phase1-final.xcresult`
+- coverage-summary: `coverage-summary.md`（GitHub Actions artifact: `episode-unit-tests-artifacts`）
 
 ## 実施情報（前回）
 - 実施日: 2026-02-13 23:33 JST
@@ -72,4 +72,4 @@
 
 ## 不具合・課題
 - FAIL-001〜FAIL-005 は解消済み（`docs/unit-test/results/defects.md` 参照）。
-- xcresult: `/Users/yumiko/Library/Developer/Xcode/DerivedData/EpisodeStocker-euwbeebtjfvsfycxelxoxfzllkbe/Logs/Test/Test-EpisodeStocker-2026.02.13_23-33-35-+0900.xcresult`
+- coverage-summary: `coverage-summary.md`（GitHub Actions artifact: `episode-unit-tests-artifacts`）

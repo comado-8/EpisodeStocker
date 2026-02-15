@@ -18,7 +18,7 @@
 
 - FAIL: 0
 - BLOCKED: 0
-- xcresult: `/tmp/episode-unit-tests-phase1-final.xcresult`
+- xcresult: `<RESULT_BUNDLE_PATH>`
 
 ## 2026-02-13 (Remediation Run)
 
@@ -31,5 +31,5 @@
 | FAIL-005 | RESOLVED | `TagRelationTests.testSoftDeleteTagUnlinksOnlyActiveEpisodes` | 同上（Tag/Episodeの多対多関係を明示化） |
 
 ## 実行証跡
-- 全件PASS実行: `/Users/yumiko/Library/Developer/Xcode/DerivedData/EpisodeStocker-euwbeebtjfvsfycxelxoxfzllkbe/Logs/Test/Test-EpisodeStocker-2026.02.13_23-33-35-+0900.xcresult`
-- 修正確認実行: `/Users/yumiko/Library/Developer/Xcode/DerivedData/EpisodeStocker-euwbeebtjfvsfycxelxoxfzllkbe/Logs/Test/Test-EpisodeStocker-2026.02.13_23-32-54-+0900.xcresult`
+- 全件PASS実行: `coverage-summary.md`（GitHub Actions artifact: `episode-unit-tests-artifacts`）
+- 修正確認実行: `coverage-summary.md`（GitHub Actions artifact: `episode-unit-tests-artifacts`）

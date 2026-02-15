@@ -2,8 +2,8 @@
 
 ## ベースライン実行
 - 日付: 2026-02-14
-- コマンド: `xcodebuild test -project EpisodeStocker.xcodeproj -scheme EpisodeStocker -destination 'id=76667AA1-DC1C-4AC6-8228-0AE06DE290B5' -parallel-testing-enabled NO -maximum-parallel-testing-workers 1 -only-testing:EpisodeStockerTests -enableCodeCoverage YES -resultBundlePath /tmp/episode-unit-tests-phase1-final.xcresult`
-- 結果バンドル: `/tmp/episode-unit-tests-phase1-final.xcresult`
+- コマンド: `xcodebuild test -project EpisodeStocker.xcodeproj -scheme EpisodeStocker -destination 'id=76667AA1-DC1C-4AC6-8228-0AE06DE290B5' -parallel-testing-enabled NO -maximum-parallel-testing-workers 1 -only-testing:EpisodeStockerTests -enableCodeCoverage YES -resultBundlePath <RESULT_BUNDLE_PATH>`
+- 結果バンドル: `<RESULT_BUNDLE_PATH>`
 
 ## 指標
 | Metric ID | 対象 | Baseline (%) | Gate |
