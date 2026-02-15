@@ -5,6 +5,8 @@ enum SettingsKey: String {
     case cloudBackupLastRunAt
 }
 
+/// Persistence boundary for settings values used by backup and subscription-related flows.
+/// This interface owns read/write responsibility for boolean flags and date timestamps.
 protocol SettingsRepository {
     func bool(for key: SettingsKey) -> Bool
     func set(_ value: Bool, for key: SettingsKey)

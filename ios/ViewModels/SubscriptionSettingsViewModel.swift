@@ -2,6 +2,8 @@ import Foundation
 import SwiftUI
 
 @MainActor
+/// UI state holder for subscription plan, purchasable products, loading, and error messaging.
+/// It coordinates fetch, purchase, and restore actions through `SubscriptionService`.
 final class SubscriptionSettingsViewModel: ObservableObject {
     @Published private(set) var status: SubscriptionStatus
     @Published private(set) var products: [SubscriptionProduct]

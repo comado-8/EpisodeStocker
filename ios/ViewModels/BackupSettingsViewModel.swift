@@ -2,6 +2,8 @@ import Foundation
 import SwiftUI
 
 @MainActor
+/// UI state holder for backup entitlement, availability, toggle state, and manual backup progress.
+/// It enforces subscription constraints before delegating operations to `CloudBackupService`.
 final class BackupSettingsViewModel: ObservableObject {
     @Published private(set) var subscriptionStatus: SubscriptionStatus
     @Published private(set) var availability: CloudBackupAvailability = .unavailable(reason: "確認中")

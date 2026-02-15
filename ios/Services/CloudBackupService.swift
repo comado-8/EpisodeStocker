@@ -25,6 +25,8 @@ enum CloudBackupError: LocalizedError, Equatable {
     }
 }
 
+/// Cloud backup boundary for availability checks, enablement state, and manual execution.
+/// ViewModels call this interface without depending on CloudKit-specific implementation details.
 protocol CloudBackupService {
     func availability() async -> CloudBackupAvailability
     func isBackupEnabled() -> Bool

@@ -31,6 +31,8 @@ enum SubscriptionCatalog {
     }
 }
 
+/// Subscription domain boundary for status, catalog loading, purchase, and restore.
+/// ViewModels use this protocol to keep StoreKit details out of UI state logic.
 protocol SubscriptionService {
     func fetchStatus() async throws -> SubscriptionStatus
     func fetchProducts() async throws -> [SubscriptionProduct]
