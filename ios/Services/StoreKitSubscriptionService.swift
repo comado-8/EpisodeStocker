@@ -1,12 +1,5 @@
 import Foundation
 
-enum SubscriptionProductIDs {
-    static let monthly = "com.episodestocker.premium.monthly"
-    static let yearly = "com.episodestocker.premium.yearly"
-
-    static let all = [monthly, yearly]
-}
-
 final class StoreKitSubscriptionService: SubscriptionService {
     private let client: StoreKitClient
 
@@ -16,13 +9,13 @@ final class StoreKitSubscriptionService: SubscriptionService {
 
     func fetchStatus() async throws -> SubscriptionStatus {
         try await client.fetchActiveSubscriptionStatus(
-            monthlyProductID: SubscriptionProductIDs.monthly,
-            yearlyProductID: SubscriptionProductIDs.yearly
+            monthlyProductID: SubscriptionCatalog.monthlyProductID,
+            yearlyProductID: SubscriptionCatalog.yearlyProductID
         )
     }
 
     func fetchProducts() async throws -> [SubscriptionProduct] {
-        let products = try await client.fetchProducts(ids: SubscriptionProductIDs.all)
+        let products = try await client.fetchProducts(ids: SubscriptionCatalog.allProductIDs)
         let mapped = products.compactMap { productInfo -> SubscriptionProduct? in
             guard let plan = plan(for: productInfo.id) else { return nil }
             return SubscriptionProduct(
@@ -33,7 +26,7 @@ final class StoreKitSubscriptionService: SubscriptionService {
             )
         }
 
-        let order = [SubscriptionProductIDs.monthly, SubscriptionProductIDs.yearly]
+        let order = [SubscriptionCatalog.monthlyProductID, SubscriptionCatalog.yearlyProductID]
         return mapped.sorted { lhs, rhs in
             let left = order.firstIndex(of: lhs.id) ?? Int.max
             let right = order.firstIndex(of: rhs.id) ?? Int.max
@@ -59,13 +52,6 @@ final class StoreKitSubscriptionService: SubscriptionService {
     }
 
     private func plan(for productID: String) -> SubscriptionStatus.Plan? {
-        switch productID {
-        case SubscriptionProductIDs.monthly:
-            return .monthly
-        case SubscriptionProductIDs.yearly:
-            return .yearly
-        default:
-            return nil
-        }
+        SubscriptionCatalog.plan(for: productID)
     }
 }

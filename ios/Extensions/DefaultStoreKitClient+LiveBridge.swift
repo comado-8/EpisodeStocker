@@ -24,21 +24,25 @@ extension DefaultStoreKitClient {
     static func liveFetchEntitlements() async throws -> [StoreKitEntitlementInfo] {
         var entitlements: [StoreKitEntitlementInfo] = []
         for await entitlement in Transaction.currentEntitlements {
-            let transaction = try checkVerified(entitlement)
-            let transactionOfferType: Transaction.OfferType?
-            if #available(iOS 17.2, *) {
-                transactionOfferType = transaction.offer?.type
-            } else {
-                transactionOfferType = transaction.offerType
-            }
-            entitlements.append(
-                StoreKitEntitlementInfo(
-                    productID: transaction.productID,
-                    expirationDate: transaction.expirationDate,
-                    revocationDate: transaction.revocationDate,
-                    offerType: offerType(from: transactionOfferType)
+            do {
+                let transaction = try checkVerified(entitlement)
+                let transactionOfferType: Transaction.OfferType?
+                if #available(iOS 17.2, *) {
+                    transactionOfferType = transaction.offer?.type
+                } else {
+                    transactionOfferType = transaction.offerType
+                }
+                entitlements.append(
+                    StoreKitEntitlementInfo(
+                        productID: transaction.productID,
+                        expirationDate: transaction.expirationDate,
+                        revocationDate: transaction.revocationDate,
+                        offerType: offerType(from: transactionOfferType)
+                    )
                 )
-            )
+            } catch {
+                continue
+            }
         }
         return entitlements
     }

@@ -7,12 +7,12 @@ final class StoreKitSubscriptionServiceTests: XCTestCase {
         let client = FakeStoreKitClient(
             products: [
                 StoreKitProductInfo(
-                    id: SubscriptionProductIDs.yearly,
+                    id: SubscriptionCatalog.yearlyProductID,
                     displayName: "年額プラン",
                     displayPrice: "¥3,600"
                 ),
                 StoreKitProductInfo(
-                    id: SubscriptionProductIDs.monthly,
+                    id: SubscriptionCatalog.monthlyProductID,
                     displayName: "月額プラン",
                     displayPrice: "¥400"
                 )
@@ -24,7 +24,7 @@ final class StoreKitSubscriptionServiceTests: XCTestCase {
 
         let products = try await service.fetchProducts()
 
-        XCTAssertEqual(products.map(\.id), [SubscriptionProductIDs.monthly, SubscriptionProductIDs.yearly])
+        XCTAssertEqual(products.map(\.id), [SubscriptionCatalog.monthlyProductID, SubscriptionCatalog.yearlyProductID])
         XCTAssertEqual(products.map(\.plan), [.monthly, .yearly])
     }
 
@@ -32,15 +32,15 @@ final class StoreKitSubscriptionServiceTests: XCTestCase {
         let expectedStatus = SubscriptionStatus(plan: .yearly, expiryDate: Date(), trialEndDate: nil)
         let client = FakeStoreKitClient(
             products: [],
-            purchaseState: .purchased(productID: SubscriptionProductIDs.yearly),
+            purchaseState: .purchased(productID: SubscriptionCatalog.yearlyProductID),
             status: expectedStatus
         )
         let service = StoreKitSubscriptionService(client: client)
 
-        let outcome = try await service.purchase(productID: SubscriptionProductIDs.yearly)
+        let outcome = try await service.purchase(productID: SubscriptionCatalog.yearlyProductID)
 
         XCTAssertEqual(outcome, .purchased(expectedStatus))
-        XCTAssertEqual(client.lastPurchasedProductID, SubscriptionProductIDs.yearly)
+        XCTAssertEqual(client.lastPurchasedProductID, SubscriptionCatalog.yearlyProductID)
     }
 
     func testPurchaseCancelledReturnsCancelledOutcome() async throws {
@@ -51,7 +51,7 @@ final class StoreKitSubscriptionServiceTests: XCTestCase {
         )
         let service = StoreKitSubscriptionService(client: client)
 
-        let outcome = try await service.purchase(productID: SubscriptionProductIDs.monthly)
+        let outcome = try await service.purchase(productID: SubscriptionCatalog.monthlyProductID)
 
         XCTAssertEqual(outcome, .userCancelled)
     }

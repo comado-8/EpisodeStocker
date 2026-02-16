@@ -388,11 +388,11 @@ private struct SubscriptionSettingsView: View {
             SettingsSectionCard(title: "プランの管理", subtitle: "アップグレードや解約の操作") {
                 VStack(spacing: 10) {
                     SettingsActionButton(title: "月額プランに変更", isPrimary: true) {
-                        Task { await viewModel.purchase(productID: SubscriptionProductIDs.monthly) }
+                        Task { await viewModel.purchase(productID: SubscriptionCatalog.monthlyProductID) }
                     }
                     .disabled(viewModel.isLoading)
                     SettingsActionButton(title: "年額プランに変更", isPrimary: false) {
-                        Task { await viewModel.purchase(productID: SubscriptionProductIDs.yearly) }
+                        Task { await viewModel.purchase(productID: SubscriptionCatalog.yearlyProductID) }
                     }
                     .disabled(viewModel.isLoading)
                     SettingsActionButton(title: "購入を復元", isPrimary: false) {
