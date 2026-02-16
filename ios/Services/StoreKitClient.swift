@@ -27,6 +27,19 @@ enum StoreKitClientError: LocalizedError, Equatable {
     }
 }
 
+struct StoreKitEntitlementInfo: Equatable {
+    let productID: String
+    let expirationDate: Date?
+    let revocationDate: Date?
+    let offerType: StoreKitOfferType?
+}
+
+enum StoreKitOfferType: Equatable {
+    case introductory
+    case promotional
+    case code
+}
+
 protocol StoreKitClient {
     func fetchProducts(ids: [String]) async throws -> [StoreKitProductInfo]
     func purchase(productID: String) async throws -> StoreKitPurchaseState
@@ -36,92 +49,106 @@ protocol StoreKitClient {
 }
 
 struct DefaultStoreKitClient: StoreKitClient {
+    typealias ProductsLoader = ([String]) async throws -> [StoreKitProductInfo]
+    typealias PurchaseHandler = (String) async throws -> StoreKitPurchaseState
+    typealias SyncHandler = () async throws -> Void
+    typealias EntitlementsLoader = () async throws -> [StoreKitEntitlementInfo]
+    typealias DateProvider = () -> Date
+
+    private let productsLoader: ProductsLoader
+    private let purchaseHandler: PurchaseHandler
+    private let syncHandler: SyncHandler
+    private let entitlementsLoader: EntitlementsLoader
+    private let dateProvider: DateProvider
+
+    init(
+        productsLoader: @escaping ProductsLoader = Self.liveFetchProducts,
+        purchaseHandler: @escaping PurchaseHandler = Self.livePurchase,
+        syncHandler: @escaping SyncHandler = Self.liveSyncPurchases,
+        entitlementsLoader: @escaping EntitlementsLoader = Self.liveFetchEntitlements,
+        dateProvider: @escaping DateProvider = Date.init
+    ) {
+        self.productsLoader = productsLoader
+        self.purchaseHandler = purchaseHandler
+        self.syncHandler = syncHandler
+        self.entitlementsLoader = entitlementsLoader
+        self.dateProvider = dateProvider
+    }
+
     func fetchProducts(ids: [String]) async throws -> [StoreKitProductInfo] {
-        let products = try await Product.products(for: ids)
-        return products.map {
-            StoreKitProductInfo(id: $0.id, displayName: $0.displayName, displayPrice: $0.displayPrice)
-        }
+        try await productsLoader(ids)
     }
 
     func purchase(productID: String) async throws -> StoreKitPurchaseState {
-        let products = try await Product.products(for: [productID])
-        guard let product = products.first(where: { $0.id == productID }) else {
-            throw StoreKitClientError.productNotFound(productID: productID)
-        }
-
-        let result = try await product.purchase()
-        switch result {
-        case .success(let verification):
-            let transaction = try checkVerified(verification)
-            await transaction.finish()
-            return .purchased(productID: transaction.productID)
-        case .userCancelled:
-            return .userCancelled
-        case .pending:
-            return .pending
-        @unknown default:
-            return .pending
-        }
+        try await purchaseHandler(productID)
     }
 
     func syncPurchases() async throws {
-        try await AppStore.sync()
+        try await syncHandler()
     }
 
     func fetchActiveSubscriptionStatus(monthlyProductID: String, yearlyProductID: String) async throws
         -> SubscriptionStatus
     {
-        let now = Date()
-        var latestTransaction: Transaction?
+        let latestEntitlement = try await latestActiveEntitlement(
+            monthlyProductID: monthlyProductID,
+            yearlyProductID: yearlyProductID
+        )
 
-        for await entitlement in Transaction.currentEntitlements {
-            let transaction = try checkVerified(entitlement)
-            guard transaction.productID == monthlyProductID || transaction.productID == yearlyProductID else {
-                continue
-            }
-            if let revocationDate = transaction.revocationDate, revocationDate <= now {
-                continue
-            }
-            if let expirationDate = transaction.expirationDate, expirationDate <= now {
-                continue
-            }
-
-            guard let current = latestTransaction else {
-                latestTransaction = transaction
-                continue
-            }
-
-            let currentExpiration = current.expirationDate ?? .distantFuture
-            let candidateExpiration = transaction.expirationDate ?? .distantFuture
-            if candidateExpiration > currentExpiration {
-                latestTransaction = transaction
-            }
-        }
-
-        guard let latestTransaction else {
+        guard let latestEntitlement else {
             return SubscriptionStatus(plan: .free, expiryDate: nil, trialEndDate: nil)
         }
 
-        let plan: SubscriptionStatus.Plan = latestTransaction.productID == yearlyProductID ? .yearly : .monthly
-        let trialEndDate: Date?
-        if latestTransaction.offerType == .introductory {
-            trialEndDate = latestTransaction.expirationDate
-        } else {
-            trialEndDate = nil
-        }
+        let plan: SubscriptionStatus.Plan = latestEntitlement.productID == yearlyProductID ? .yearly : .monthly
+        let trialEndDate = latestEntitlement.offerType == .introductory ? latestEntitlement.expirationDate : nil
         return SubscriptionStatus(
             plan: plan,
-            expiryDate: latestTransaction.expirationDate,
+            expiryDate: latestEntitlement.expirationDate,
             trialEndDate: trialEndDate
         )
     }
 
-    private func checkVerified<T>(_ verificationResult: VerificationResult<T>) throws -> T {
-        switch verificationResult {
-        case .verified(let safe):
-            return safe
-        case .unverified:
-            throw StoreKitClientError.verificationFailed
+    func latestActiveEntitlement(monthlyProductID: String, yearlyProductID: String) async throws
+        -> StoreKitEntitlementInfo?
+    {
+        let entitlements = try await entitlementsLoader()
+        return Self.selectLatestActiveEntitlement(
+            from: entitlements,
+            monthlyProductID: monthlyProductID,
+            yearlyProductID: yearlyProductID,
+            now: dateProvider()
+        )
+    }
+
+    static func selectLatestActiveEntitlement(
+        from entitlements: [StoreKitEntitlementInfo],
+        monthlyProductID: String,
+        yearlyProductID: String,
+        now: Date
+    ) -> StoreKitEntitlementInfo? {
+        var latestEntitlement: StoreKitEntitlementInfo?
+        for entitlement in entitlements {
+            guard entitlement.productID == monthlyProductID || entitlement.productID == yearlyProductID else {
+                continue
+            }
+            if let revocationDate = entitlement.revocationDate, revocationDate <= now {
+                continue
+            }
+            if let expirationDate = entitlement.expirationDate, expirationDate <= now {
+                continue
+            }
+
+            guard let current = latestEntitlement else {
+                latestEntitlement = entitlement
+                continue
+            }
+
+            let currentExpiration = current.expirationDate ?? .distantFuture
+            let candidateExpiration = entitlement.expirationDate ?? .distantFuture
+            if candidateExpiration > currentExpiration {
+                latestEntitlement = entitlement
+            }
         }
+        return latestEntitlement
     }
 }
