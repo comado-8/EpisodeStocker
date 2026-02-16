@@ -73,6 +73,28 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(vm.errorMessage, "購入はキャンセルされました。")
     }
 
+    func testPurchaseStatusUnavailableSetsInformativeMessage() async {
+        let service = FakeSubscriptionService(
+            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            products: [],
+            purchaseOutcome: .purchasedStatusUnavailable(productID: SubscriptionCatalog.monthlyProductID),
+            restoredStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            fetchStatusError: nil,
+            fetchProductsError: nil,
+            purchaseError: nil,
+            restoreError: nil
+        )
+        let vm = SubscriptionSettingsViewModel(service: service)
+
+        await vm.purchase(productID: SubscriptionCatalog.monthlyProductID)
+
+        XCTAssertEqual(vm.status.plan, .free)
+        XCTAssertEqual(
+            vm.errorMessage,
+            "購入は完了しましたが、最新状態の取得に失敗しました。(商品ID: \(SubscriptionCatalog.monthlyProductID))"
+        )
+    }
+
     func testRestorePurchasesUpdatesStatus() async {
         let restored = SubscriptionStatus(plan: .monthly, expiryDate: Date(), trialEndDate: nil)
         let service = FakeSubscriptionService(

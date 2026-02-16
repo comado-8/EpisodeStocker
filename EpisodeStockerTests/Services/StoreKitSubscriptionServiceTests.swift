@@ -18,7 +18,8 @@ final class StoreKitSubscriptionServiceTests: XCTestCase {
                 )
             ],
             purchaseState: .userCancelled,
-            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil)
+            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            statusError: nil
         )
         let service = StoreKitSubscriptionService(client: client)
 
@@ -33,7 +34,8 @@ final class StoreKitSubscriptionServiceTests: XCTestCase {
         let client = FakeStoreKitClient(
             products: [],
             purchaseState: .purchased(productID: SubscriptionCatalog.yearlyProductID),
-            status: expectedStatus
+            status: expectedStatus,
+            statusError: nil
         )
         let service = StoreKitSubscriptionService(client: client)
 
@@ -47,7 +49,8 @@ final class StoreKitSubscriptionServiceTests: XCTestCase {
         let client = FakeStoreKitClient(
             products: [],
             purchaseState: .userCancelled,
-            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil)
+            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            statusError: nil
         )
         let service = StoreKitSubscriptionService(client: client)
 
@@ -61,7 +64,8 @@ final class StoreKitSubscriptionServiceTests: XCTestCase {
         let client = FakeStoreKitClient(
             products: [],
             purchaseState: .pending,
-            status: expectedStatus
+            status: expectedStatus,
+            statusError: nil
         )
         let service = StoreKitSubscriptionService(client: client)
 
@@ -70,19 +74,40 @@ final class StoreKitSubscriptionServiceTests: XCTestCase {
         XCTAssertEqual(restored, expectedStatus)
         XCTAssertTrue(client.didCallSync)
     }
+
+    func testPurchasePurchasedReturnsFallbackWhenStatusFetchFails() async throws {
+        let client = FakeStoreKitClient(
+            products: [],
+            purchaseState: .purchased(productID: SubscriptionCatalog.monthlyProductID),
+            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            statusError: TestError.fetchFailed
+        )
+        let service = StoreKitSubscriptionService(client: client)
+
+        let outcome = try await service.purchase(productID: SubscriptionCatalog.monthlyProductID)
+
+        XCTAssertEqual(outcome, .purchasedStatusUnavailable(productID: SubscriptionCatalog.monthlyProductID))
+    }
 }
 
 private final class FakeStoreKitClient: StoreKitClient {
     private let products: [StoreKitProductInfo]
     private let purchaseState: StoreKitPurchaseState
     private let status: SubscriptionStatus
+    private let statusError: Error?
     private(set) var lastPurchasedProductID: String?
     private(set) var didCallSync = false
 
-    init(products: [StoreKitProductInfo], purchaseState: StoreKitPurchaseState, status: SubscriptionStatus) {
+    init(
+        products: [StoreKitProductInfo],
+        purchaseState: StoreKitPurchaseState,
+        status: SubscriptionStatus,
+        statusError: Error?
+    ) {
         self.products = products
         self.purchaseState = purchaseState
         self.status = status
+        self.statusError = statusError
     }
 
     func fetchProducts(ids: [String]) async throws -> [StoreKitProductInfo] {
@@ -103,6 +128,13 @@ private final class FakeStoreKitClient: StoreKitClient {
     {
         _ = monthlyProductID
         _ = yearlyProductID
+        if let statusError {
+            throw statusError
+        }
         return status
     }
+}
+
+private enum TestError: Error {
+    case fetchFailed
 }

@@ -9,6 +9,7 @@ struct SubscriptionProduct: Equatable, Identifiable {
 
 enum SubscriptionPurchaseOutcome: Equatable {
     case purchased(SubscriptionStatus)
+    case purchasedStatusUnavailable(productID: String)
     case userCancelled
     case pending
 }

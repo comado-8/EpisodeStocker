@@ -360,8 +360,11 @@ private struct SubscriptionSettingsView: View {
         return Self.dateFormatter.string(from: expiryDate)
     }
 
-    private var trialText: String {
-        "\(viewModel.trialRemainingDays)日"
+    private var trialText: String? {
+        guard viewModel.trialRemainingDays > 0 else {
+            return nil
+        }
+        return "\(viewModel.trialRemainingDays)日"
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -380,7 +383,9 @@ private struct SubscriptionSettingsView: View {
                 VStack(spacing: 10) {
                     SettingsKeyValueRow(title: "プラン", value: planLabel)
                     SettingsKeyValueRow(title: "更新日", value: expiryDateText)
-                    SettingsKeyValueRow(title: "試用残日数", value: trialText)
+                    if let trialText {
+                        SettingsKeyValueRow(title: "試用残日数", value: trialText)
+                    }
                 }
                 .padding(.top, 4)
             }

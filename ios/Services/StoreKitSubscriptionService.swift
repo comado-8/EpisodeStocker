@@ -37,8 +37,12 @@ final class StoreKitSubscriptionService: SubscriptionService {
     func purchase(productID: String) async throws -> SubscriptionPurchaseOutcome {
         let state = try await client.purchase(productID: productID)
         switch state {
-        case .purchased:
-            return .purchased(try await fetchStatus())
+        case .purchased(let purchasedProductID):
+            do {
+                return .purchased(try await fetchStatus())
+            } catch {
+                return .purchasedStatusUnavailable(productID: purchasedProductID)
+            }
         case .userCancelled:
             return .userCancelled
         case .pending:
