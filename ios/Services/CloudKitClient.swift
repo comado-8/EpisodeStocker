@@ -10,7 +10,14 @@ struct DefaultCloudKitClient: CloudKitClient {
 
     init(
         fetchAccountStatus: @escaping (@escaping (CKAccountStatus, Error?) -> Void) -> Void = { completion in
-            CKContainer.default().accountStatus(completionHandler: completion)
+            Task {
+                do {
+                    let status = try await CKContainer.default().accountStatus()
+                    completion(status, nil)
+                } catch {
+                    completion(.couldNotDetermine, error)
+                }
+            }
         }
     ) {
         self.fetchAccountStatus = fetchAccountStatus
