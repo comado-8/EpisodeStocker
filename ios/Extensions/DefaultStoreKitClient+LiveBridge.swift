@@ -25,12 +25,18 @@ extension DefaultStoreKitClient {
         var entitlements: [StoreKitEntitlementInfo] = []
         for await entitlement in Transaction.currentEntitlements {
             let transaction = try checkVerified(entitlement)
+            let transactionOfferType: Transaction.OfferType?
+            if #available(iOS 17.2, *) {
+                transactionOfferType = transaction.offer?.type
+            } else {
+                transactionOfferType = transaction.offerType
+            }
             entitlements.append(
                 StoreKitEntitlementInfo(
                     productID: transaction.productID,
                     expirationDate: transaction.expirationDate,
                     revocationDate: transaction.revocationDate,
-                    offerType: offerType(from: transaction.offerType)
+                    offerType: offerType(from: transactionOfferType)
                 )
             )
         }
