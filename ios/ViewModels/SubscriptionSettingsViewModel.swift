@@ -57,6 +57,8 @@ final class SubscriptionSettingsViewModel: ObservableObject {
             case .purchased(let newStatus):
                 status = newStatus
                 errorMessage = nil
+            case .purchasedStatusUnavailable(let productID):
+                errorMessage = "購入は完了しましたが、最新状態の取得に失敗しました。(商品ID: \(productID))"
             case .userCancelled:
                 errorMessage = "購入はキャンセルされました。"
             case .pending:
