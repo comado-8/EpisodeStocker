@@ -25,12 +25,8 @@ struct DefaultCloudKitClient: CloudKitClient {
     init(
         fetchAccountStatus: @escaping (@escaping (CKAccountStatus, Error?) -> Void) -> Void = { completion in
             Task {
-                do {
-                    let status = try await CKContainer.default().accountStatus()
-                    completion(status, nil)
-                } catch {
-                    completion(.couldNotDetermine, error)
-                }
+                do { completion(try await CKContainer.default().accountStatus(), nil) }
+                catch { completion(.couldNotDetermine, error) }
             }
         },
         timeoutNanoseconds: UInt64 = DefaultCloudKitClient.defaultTimeoutNanoseconds
