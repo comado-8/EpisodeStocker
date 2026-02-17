@@ -4,7 +4,10 @@ import SwiftData
 @MainActor
 enum TestModelContainerFactory {
     static func makeInMemoryContainer() -> ModelContainer {
-        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let configuration = ModelConfiguration(
+            isStoredInMemoryOnly: true,
+            cloudKitDatabase: .none
+        )
         do {
             return try ModelContainer(
                 for: Episode.self,
