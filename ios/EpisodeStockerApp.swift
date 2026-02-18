@@ -6,13 +6,29 @@ struct EpisodeStockerApp: App {
     @StateObject private var store = EpisodeStore()
     @StateObject private var router = AppRouter()
     private let modelContainer: ModelContainer
+    private let seedProfile: SeedData.Profile
 
     init() {
-        let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        let environment = ProcessInfo.processInfo.environment
+        let isRunningTests = environment["XCTestConfigurationFilePath"] != nil
         let configuration = ModelConfiguration(
             isStoredInMemoryOnly: isRunningTests,
             cloudKitDatabase: .none
         )
+        #if DEBUG
+        #if targetEnvironment(simulator)
+        if isRunningTests {
+            seedProfile = .minimal
+        } else {
+            seedProfile = .simulatorComprehensive
+        }
+        #else
+        seedProfile = .minimal
+        #endif
+        #else
+        seedProfile = .minimal
+        #endif
+
         do {
             modelContainer = try ModelContainer(
                 for: Episode.self,
@@ -31,7 +47,7 @@ struct EpisodeStockerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootTabContainer()
+            RootTabContainer(seedProfile: seedProfile)
                 .environmentObject(store)
                 .environmentObject(router)
                 .modelContainer(modelContainer)
@@ -41,9 +57,10 @@ struct EpisodeStockerApp: App {
 
 private struct RootTabContainer: View {
     @Environment(\.modelContext) private var modelContext
+    let seedProfile: SeedData.Profile
 
     var body: some View {
         RootTabView()
-            .task { SeedData.seedIfNeeded(context: modelContext) }
+            .task { SeedData.seedIfNeeded(context: modelContext, profile: seedProfile) }
     }
 }
