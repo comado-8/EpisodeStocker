@@ -5,7 +5,7 @@ struct SettingsView: View {
         .init(title: "サブスクリプション", detail: "プラン/更新日/試用残日数", systemImage: "creditcard", destination: .subscription),
         .init(title: "バックアップ", detail: "クラウド/手動バックアップ", systemImage: "icloud", destination: .backup),
         .init(title: "セキュリティ", detail: "パスコード/生体認証", systemImage: "lock", destination: .security),
-        .init(title: "表示", detail: "テーマ・フォントサイズ・リスト/カード表示", systemImage: "textformat.size", destination: .display),
+        .init(title: "表示", detail: "テーマ・フォントサイズ・一覧表示", systemImage: "textformat.size", destination: .display),
         .init(title: "法務", detail: "利用規約・プライバシー", systemImage: "doc.text", destination: .legal)
     ]
 
@@ -546,11 +546,9 @@ private struct SecuritySettingsView: View {
 private struct DisplaySettingsView: View {
     @State private var themeIndex = 0
     @State private var fontScaleIndex = 1
-    @State private var listModeIndex = 0
 
     private let themeOptions = ["ライト", "ダーク", "自動"]
     private let fontScaleOptions = ["小", "標準", "大"]
-    private let listOptions = ["リスト", "カード"]
 
     var body: some View {
         SettingsDetailContainerView(
@@ -565,8 +563,8 @@ private struct DisplaySettingsView: View {
                 SettingsSegmentedControl(options: fontScaleOptions, selection: $fontScaleIndex)
             }
 
-            SettingsSectionCard(title: "一覧の表示", subtitle: "Home画面の表示切替") {
-                SettingsSegmentedControl(options: listOptions, selection: $listModeIndex)
+            SettingsSectionCard(title: "一覧の表示", subtitle: "Home画面の表示形式") {
+                SettingsKeyValueRow(title: "ホーム一覧", value: "リスト表示（固定）")
             }
         }
     }

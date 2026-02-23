@@ -11,7 +11,6 @@ struct HomeView: View {
     private var episodes: [Episode]
     @State private var query = ""
     @State private var statusFilter: HomeStatusFilter = .ok
-    @State private var layoutMode: HomeLayoutMode = .list
     @State private var isSearchCommitted = false
     @State private var isSelectionMode = false
     @State private var selectedEpisodeIDs: Set<UUID> = []
@@ -42,20 +41,15 @@ struct HomeView: View {
     var body: some View {
         GeometryReader { proxy in
             let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
-            let segmentedWidth = min(HomeStyle.segmentedControlWidth, contentWidth - HomeStyle.filterButtonsWidth - 8)
+            let segmentedWidth = contentWidth
             let bottomInset = baseSafeAreaBottom()
             let topPadding = max(0, HomeStyle.figmaTopInset - proxy.safeAreaInsets.top)
             let fabBottomPadding = HomeStyle.tabBarHeight + HomeStyle.fabBottomOffset
-            let gridCardWidth = min(HomeStyle.gridCardWidth, (contentWidth - HomeStyle.gridCardSpacing) / 2)
             let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
             let isSearchEmpty = !trimmedQuery.isEmpty && filteredEpisodes.isEmpty && isSearchCommitted
             let showsSearchBack = isSearchCommitted && !trimmedQuery.isEmpty && !isSearchFocused
             let isShowingSearchResults = isSearchCommitted && !trimmedQuery.isEmpty
             let visibleEpisodes = filteredEpisodes
-            let gridColumns = [
-                GridItem(.fixed(gridCardWidth), spacing: HomeStyle.gridCardSpacing),
-                GridItem(.fixed(gridCardWidth), spacing: HomeStyle.gridCardSpacing)
-            ]
 
             ZStack(alignment: .bottomTrailing) {
                 HomeStyle.background.ignoresSafeArea()
@@ -95,19 +89,16 @@ struct HomeView: View {
                                 .fill(HomeStyle.outline)
                                 .frame(width: contentWidth, height: HomeStyle.dividerHeight)
 
-                            HStack(spacing: 8) {
-                                HomeStatusSegmentedControl(selection: $statusFilter, width: segmentedWidth)
-                                HomeFilterButtons(selection: $layoutMode)
-                            }
-                            .frame(width: contentWidth, height: HomeStyle.statusRowHeight)
-
                             if isSelectionMode {
-                                HomeSelectionBar(
+                                HomeSelectionStatusRow(
                                     count: selectedEpisodeIDs.count,
                                     onCancel: { endSelection() },
                                     onDelete: { showsDeleteAlert = selectedEpisodeIDs.isEmpty == false }
                                 )
-                                .padding(.top, 4)
+                                .frame(width: contentWidth, height: HomeStyle.selectionStatusRowHeight)
+                            } else {
+                                HomeStatusSegmentedControl(selection: $statusFilter, width: segmentedWidth)
+                                    .frame(width: contentWidth, height: HomeStyle.statusRowHeight)
                             }
 
                             if isShowingSearchResults {
@@ -136,19 +127,13 @@ struct HomeView: View {
 
                             if isSearchEmpty {
                                 HomeSearchEmptyView(contentWidth: contentWidth)
-                            } else if layoutMode == .list {
+                            } else {
                                 LazyVStack(spacing: HomeStyle.listSpacing) {
                                     ForEach(visibleEpisodes, id: \.id) { episode in
                                         episodeListRow(episode: episode, width: contentWidth)
                                     }
                                 }
-                            } else {
-                                LazyVGrid(columns: gridColumns, spacing: HomeStyle.gridCardSpacing) {
-                                    ForEach(visibleEpisodes, id: \.id) { episode in
-                                        episodeGridCard(episode: episode, width: gridCardWidth)
-                                    }
-                                }
-                                .frame(width: contentWidth)
+                                .padding(.top, HomeStyle.listSpacing - HomeStyle.sectionSpacing)
                             }
                         }
                         .onTapGesture {
@@ -196,18 +181,6 @@ private extension HomeView {
         episode.isUnlocked ? HomeStyle.cardBorder : HomeStyle.lockedCardBorder
     }
 
-    func tagLabel(for episode: Episode) -> String {
-        let tagName = episode.tags.first?.name ?? episode.type
-
-        guard let tagName, !tagName.isEmpty else {
-            return "#Tag"
-        }
-        if tagName.hasPrefix("#") {
-            return tagName
-        }
-        return "#\(tagName)"
-    }
-
     func baseSafeAreaBottom() -> CGFloat {
         #if canImport(UIKit)
         let windowScene = UIApplication.shared.connectedScenes
@@ -226,8 +199,10 @@ private extension HomeView {
         let rowView = EpisodeCardRow(
             title: episode.title,
             subtitle: episode.body ?? "Subhead",
+            date: episode.date,
+            isUnlocked: episode.isUnlocked,
             width: width,
-            borderColor: isSelected ? HomeStyle.selectionIndicatorFill : borderColor(for: episode),
+            borderColor: borderColor(for: episode),
             showsSelection: isSelectionMode,
             isSelected: isSelected
         )
@@ -238,40 +213,7 @@ private extension HomeView {
                 .onTapGesture { toggleSelection(episode.id) }
         } else {
             rowView
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if suppressNextNavigation {
-                        suppressNextNavigation = false
-                        return
-                    }
-                    router.push(.episodeDetail(episode.id))
-            }
-            .onLongPressGesture(minimumDuration: 0.3) {
-                beginSelection(with: episode.id)
-            }
-        }
-    }
-
-    @ViewBuilder
-    func episodeGridCard(episode: Episode, width: CGFloat) -> some View {
-        let isSelected = selectedEpisodeIDs.contains(episode.id)
-        let cardView = EpisodeCardGrid(
-            title: episode.title,
-            tag: tagLabel(for: episode),
-            bodyText: episode.body ?? "Body text.",
-            width: width,
-            borderColor: isSelected ? HomeStyle.selectionIndicatorFill : borderColor(for: episode),
-            showsSelection: isSelectionMode,
-            isSelected: isSelected
-        )
-
-        if isSelectionMode {
-            cardView
-                .contentShape(Rectangle())
-                .onTapGesture { toggleSelection(episode.id) }
-        } else {
-            cardView
-                .contentShape(Rectangle())
+                .contentShape(RoundedRectangle(cornerRadius: HomeStyle.cardCornerRadius, style: .continuous))
                 .onTapGesture {
                     if suppressNextNavigation {
                         suppressNextNavigation = false
@@ -337,23 +279,23 @@ struct HomeView_Previews: PreviewProvider {
     }
 }
 
-private struct HomeSelectionBar: View {
+private struct HomeSelectionStatusRow: View {
     let count: Int
     let onCancel: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Button("キャンセル") {
                 onCancel()
             }
-            .font(HomeFont.bodyLarge())
+            .font(.system(size: 15, weight: .semibold))
             .foregroundColor(HomeStyle.selectionCancelText)
 
             Spacer(minLength: 0)
 
             Text("\(count)件選択")
-                .font(HomeFont.titleMedium())
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(HomeStyle.selectionCountText)
 
             Spacer(minLength: 0)
@@ -362,30 +304,28 @@ private struct HomeSelectionBar: View {
                 onDelete()
             } label: {
                 Text("削除")
-                    .font(HomeFont.bodyLarge())
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(HomeStyle.selectionDeleteText)
-                    .padding(.horizontal, 18)
-                    .frame(height: 38)
+                    .padding(.horizontal, 16)
+                    .frame(height: 34)
                     .background(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(HomeStyle.selectionDeleteFill)
                     )
             }
             .disabled(count == 0)
             .opacity(count == 0 ? 0.5 : 1)
         }
-        .padding(.horizontal, 18)
-        .frame(height: HomeStyle.selectionBarHeight)
+        .padding(.horizontal, HomeStyle.selectionStatusRowHorizontalPadding)
+        .frame(height: HomeStyle.selectionStatusRowHeight)
         .background(
-            RoundedRectangle(cornerRadius: HomeStyle.selectionBarCornerRadius, style: .continuous)
-                .fill(HomeStyle.selectionBarFill)
+            Capsule()
+                .fill(HomeStyle.selectionStatusRowFill)
                 .overlay(
-                    RoundedRectangle(cornerRadius: HomeStyle.selectionBarCornerRadius, style: .continuous)
-                        .stroke(HomeStyle.selectionBarBorder, lineWidth: 1)
+                    Capsule()
+                        .stroke(HomeStyle.selectionStatusRowBorder, lineWidth: 1)
                 )
         )
-        .shadow(color: HomeStyle.selectionBarShadow, radius: 10, x: 0, y: 4)
-        .padding(.horizontal, HomeStyle.horizontalPadding)
     }
 }
 

@@ -9,11 +9,12 @@ enum HomeStyle {
     }
     static let figmaTopInset: CGFloat = 61
     static let sectionSpacing: CGFloat = 8
-    static let listSpacing: CGFloat = 16
+    static let listSpacing: CGFloat = 10
+    static let listCardBorderWidth: CGFloat = 1.5
     static let selectionIndicatorSize: CGFloat = 22
     static let selectionIndicatorSpacing: CGFloat = 12
-    static let selectionBarHeight: CGFloat = 60
-    static let selectionBarCornerRadius: CGFloat = 16
+    static let selectionStatusRowHeight: CGFloat = statusRowHeight
+    static let selectionStatusRowHorizontalPadding: CGFloat = 16
 
     static let searchHeight: CGFloat = 48
     static let dividerHeight: CGFloat = 1
@@ -28,15 +29,8 @@ enum HomeStyle {
 
     static let cardHeight: CGFloat = 80
     static let cardCornerRadius: CGFloat = 14
-    static let cardAccentWidth: CGFloat = 72
-    static let gridCardWidth: CGFloat = 172
-    static let gridCardHeight: CGFloat = 213
-    static let gridCardCornerRadius: CGFloat = 8
-    static let gridCardPadding: CGFloat = 8
-    static let gridCardSpacing: CGFloat = 16
-    static let gridCardBodySpacing: CGFloat = 16
-    static let gridCardTextSpacing: CGFloat = 8
-    static let gridCardImageHeight: CGFloat = 100
+    static let cardContentSpacing: CGFloat = 12
+    static let dateBadgeSize: CGFloat = 54
 
     static let emptyStateCircleSize: CGFloat = 206
     static let emptyStateIconSize: CGFloat = 150
@@ -61,20 +55,18 @@ enum HomeStyle {
     static let segmentText = Color(hex: "4C4444")
     static let lockedAccent = Color(hex: "D5D5FE")
     static let lockedSegmentText = Color(hex: "2A2525")
+    static let dateTextUnlocked = Color(hex: "5A1E2B")
+    static let dateTextLocked = Color(hex: "25205A")
     static let lockedCardBorder = Color(hex: "AAA9FD")
 
     static let cardBorder = Color(hex: "FA9695")
-    static let cardAccent = Color(hex: "ECE6F0")
-    static let cardImagePlaceholder = Color(hex: "E3E3E3")
-    static let cardTitle = Color(hex: "131010")
-    static let cardBody = Color(hex: "2A2525")
     static let destructiveRed = Color(hex: "DC2626")
     static let selectionIndicatorBorder = Color(hex: "CAC4D0")
     static let selectionIndicatorFill = Color(hex: "3C7DFA")
     static let selectionIndicatorCheck = Color(hex: "FFFFFF")
-    static let selectionBarFill = Color(hex: "FFFFFF")
-    static let selectionBarBorder = Color(hex: "E3E3E3")
-    static let selectionBarShadow = Color.black.opacity(0.08)
+    static let selectionCardBackground = Color(hex: "F6F7F8")
+    static let selectionStatusRowFill = Color(hex: "FFFFFF")
+    static let selectionStatusRowBorder = Color(hex: "E3E3E3")
     static let selectionDeleteFill = HomeStyle.destructiveRed
     static let selectionDeleteText = Color(hex: "FFFFFF")
     static let selectionCancelText = Color(hex: "2A2525")

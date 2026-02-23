@@ -11,10 +11,6 @@ struct EpisodeStockerApp: App {
     init() {
         let environment = ProcessInfo.processInfo.environment
         let isRunningTests = environment["XCTestConfigurationFilePath"] != nil
-        let configuration = ModelConfiguration(
-            isStoredInMemoryOnly: isRunningTests,
-            cloudKitDatabase: .none
-        )
         #if DEBUG
         #if targetEnvironment(simulator)
         if isRunningTests {
@@ -30,19 +26,42 @@ struct EpisodeStockerApp: App {
         #endif
 
         do {
-            modelContainer = try ModelContainer(
-                for: Episode.self,
-                UnlockLog.self,
-                Tag.self,
-                Person.self,
-                Project.self,
-                Emotion.self,
-                Place.self,
-                configurations: configuration
-            )
+            modelContainer = try Self.makeContainer(isStoredInMemoryOnly: isRunningTests)
         } catch {
+            #if DEBUG
+            #if targetEnvironment(simulator)
+            if !isRunningTests {
+                NSLog(
+                    "Persistent ModelContainer load failed on simulator. Falling back to in-memory: \(String(describing: error))"
+                )
+                do {
+                    modelContainer = try Self.makeContainer(isStoredInMemoryOnly: true)
+                    return
+                } catch {
+                    fatalError("Failed to create fallback in-memory ModelContainer: \(error)")
+                }
+            }
+            #endif
+            #endif
             fatalError("Failed to create ModelContainer: \(error)")
         }
+    }
+
+    private static func makeContainer(isStoredInMemoryOnly: Bool) throws -> ModelContainer {
+        let configuration = ModelConfiguration(
+            isStoredInMemoryOnly: isStoredInMemoryOnly,
+            cloudKitDatabase: .none
+        )
+        return try ModelContainer(
+            for: Episode.self,
+            UnlockLog.self,
+            Tag.self,
+            Person.self,
+            Project.self,
+            Emotion.self,
+            Place.self,
+            configurations: configuration
+        )
     }
 
     var body: some Scene {
