@@ -61,8 +61,8 @@ struct HomeSearchSuggestionPanel_Previews: PreviewProvider {
         HomeSearchSuggestionPanel(
             width: 360,
             items: [
-                HomeSearchSuggestionItem(kind: .selectField(.tag)),
-                HomeSearchSuggestionItem(kind: .value(field: .tag, value: "仕事"))
+                HomeSearchSuggestionItem(kind: .value(field: .tag, value: "仕事")),
+                HomeSearchSuggestionItem(kind: .value(field: .person, value: "佐藤さん"))
             ],
             onSelect: { _ in }
         )

@@ -21,7 +21,7 @@ final class HomeSearchQueryEngineTests: XCTestCase {
 
     func testFreeTextMatchesTitleAndBody() {
         let titleHit = makeEpisode(title: "Gmail風検索", body: "本文")
-        _ = makeEpisode(title: "別タイトル", body: "body hit keyword")
+        let bodyHit = makeEpisode(title: "別タイトル", body: "body hit keyword")
 
         var search = HomeSearchQueryState()
         search.freeText = "gmail"
@@ -32,14 +32,14 @@ final class HomeSearchQueryEngineTests: XCTestCase {
 
         search.freeText = "keyword"
         let bodyResult = filter(search: search, statusFilter: .all)
-        XCTAssertEqual(bodyResult.count, 1)
+        XCTAssertEqual(bodyResult.map(\.id), [bodyHit.id])
     }
 
     func testTagSearchNormalizesLeadingHash() {
         let tagged = makeEpisode(title: "Tag target", body: "", tags: ["#仕事"])
         _ = makeEpisode(title: "Other", body: "", tags: ["#雑談"])
 
-        let token = HomeSearchFilterToken(field: .tag, value: "#仕事")!
+        let token = HomeSearchFilterToken(field: .tag, value: "仕事")!
         let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
         let result = filter(search: search, statusFilter: .all)
 
@@ -206,18 +206,13 @@ final class HomeSearchQueryEngineTests: XCTestCase {
             XCTAssertFalse(field.symbolName.isEmpty)
         }
 
-        let selectItem = HomeSearchSuggestionItem(kind: .selectField(.emotion))
-        XCTAssertEqual(selectItem.title, "感情で絞り込む")
-        XCTAssertEqual(selectItem.subtitle, "次の入力を感情として扱います")
-        XCTAssertEqual(selectItem.symbolName, HomeSearchField.emotion.symbolName)
-
         let valueItem = HomeSearchSuggestionItem(kind: .value(field: .project, value: "朝番組"))
         XCTAssertEqual(valueItem.title, "企画名: 朝番組")
         XCTAssertEqual(valueItem.subtitle, "候補から追加")
         XCTAssertEqual(valueItem.symbolName, HomeSearchField.project.symbolName)
     }
 
-    func testSuggestionsRespectFieldOrderAndMaxValuesPerField() {
+    func testSuggestionsRespectFieldOrderAndMaxValuesPerField() throws {
         _ = makeEpisode(title: "1", body: "", persons: ["Alice"])
         _ = makeEpisode(title: "2", body: "", persons: ["Ami"])
         _ = makeEpisode(title: "3", body: "", persons: ["Aoi"])
@@ -225,14 +220,12 @@ final class HomeSearchQueryEngineTests: XCTestCase {
         _ = makeEpisode(title: "5", body: "", tags: ["#alpha"])
 
         var search = HomeSearchQueryState()
-        search.freeText = "tag"
+        search.freeText = "a"
 
         let items = HomeSearchQueryEngine.suggestions(for: search, episodes: fetchEpisodes())
-        guard let first = items.first else {
-            return XCTFail("No suggestions were returned")
-        }
+        let first = try XCTUnwrap(items.first)
 
-        XCTAssertEqual(first.kind, .selectField(.tag))
+        XCTAssertEqual(first.kind, .value(field: .tag, value: "alpha"))
 
         search = HomeSearchQueryState(freeText: "a", tokens: [], activeField: .person)
         let personItems = HomeSearchQueryEngine.suggestions(for: search, episodes: fetchEpisodes())
@@ -243,7 +236,7 @@ final class HomeSearchQueryEngineTests: XCTestCase {
             return false
         }
 
-        XCTAssertLessThanOrEqual(personValueItems.count, 3)
+        XCTAssertEqual(personValueItems.count, 3)
     }
 
     func testSuggestionsAreEmptyWhenNoFieldValueMatches() {
@@ -273,6 +266,59 @@ final class HomeSearchQueryEngineTests: XCTestCase {
         }
 
         XCTAssertFalse(hasFieldSelector)
+    }
+
+    func testSuggestionsDoNotOfferFieldSelectorItems() {
+        _ = makeEpisode(title: "1", body: "", tags: ["#Tag"])
+
+        let search = HomeSearchQueryState(freeText: "a", tokens: [], activeField: nil)
+        let items = HomeSearchQueryEngine.suggestions(for: search, episodes: fetchEpisodes())
+
+        let hasFieldSelector = items.contains {
+            if case .selectField = $0.kind {
+                return true
+            }
+            return false
+        }
+
+        XCTAssertFalse(hasFieldSelector)
+    }
+
+    func testSuggestionsMergeCountsAcrossCaseVariants() throws {
+        let alphaUpper = Episode(
+            date: Date(),
+            title: "A",
+            body: "",
+            tags: [Tag(name: "Alpha", nameNormalized: "alpha")]
+        )
+        let alphaLower = Episode(
+            date: Date(),
+            title: "B",
+            body: "",
+            tags: [Tag(name: "alpha", nameNormalized: "alpha")]
+        )
+        let aardvark = Episode(
+            date: Date(),
+            title: "C",
+            body: "",
+            tags: [Tag(name: "Aardvark", nameNormalized: "aardvark")]
+        )
+        let search = HomeSearchQueryState(freeText: "a", tokens: [], activeField: .tag)
+        let items = HomeSearchQueryEngine.suggestions(
+            for: search,
+            episodes: [alphaUpper, alphaLower, aardvark],
+            maxValuesPerField: 2
+        )
+        let values = items.compactMap { item -> String? in
+            if case let .value(field: .tag, value: value) = item.kind {
+                return value
+            }
+            return nil
+        }
+
+        XCTAssertEqual(values.count, 2)
+        let firstValue = try XCTUnwrap(values.first)
+        XCTAssertEqual(firstValue.lowercased(), "alpha")
     }
 }
 

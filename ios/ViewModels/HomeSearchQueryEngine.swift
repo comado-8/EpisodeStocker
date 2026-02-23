@@ -213,9 +213,6 @@ enum HomeSearchQueryEngine {
         guard !trimmed.isEmpty else { return [] }
 
         var items: [HomeSearchSuggestionItem] = []
-        let matchingFields = HomeSearchField.allCases.filter { $0.matchesAlias(trimmed) }
-        items.append(contentsOf: matchingFields.map { HomeSearchSuggestionItem(kind: .selectField($0)) })
-
         for field in HomeSearchField.allCases {
             let values = rankedValues(
                 for: field,
@@ -325,13 +322,24 @@ enum HomeSearchQueryEngine {
         field: HomeSearchField,
         extractor: (Episode) -> [(name: String, isSoftDeleted: Bool)]
     ) -> [String: Int] {
-        var counts: [String: Int] = [:]
+        var countsByCanonical: [String: Int] = [:]
+        var displayByCanonical: [String: String] = [:]
         for episode in episodes {
             for value in extractor(episode) where !value.isSoftDeleted {
                 let normalized = normalizeTokenValue(value.name, field: field)
                 guard !normalized.isEmpty else { continue }
-                counts[normalized, default: 0] += 1
+                let canonical = normalized.lowercased()
+                countsByCanonical[canonical, default: 0] += 1
+                if displayByCanonical[canonical] == nil {
+                    displayByCanonical[canonical] = normalized
+                }
             }
+        }
+
+        var counts: [String: Int] = [:]
+        for (canonical, count) in countsByCanonical {
+            let displayValue = displayByCanonical[canonical] ?? canonical
+            counts[displayValue] = count
         }
         return counts
     }
