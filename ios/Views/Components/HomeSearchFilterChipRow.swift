@@ -20,11 +20,12 @@ struct HomeSearchFilterChipRow: View {
                                     .font(.system(size: 10, weight: .semibold))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("\(token.displayText)を削除")
                         }
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(HomeStyle.searchChipText)
                         .padding(.horizontal, 10)
-                        .frame(height: 28)
+                        .frame(height: HomeStyle.searchChipHeight)
                         .background(HomeStyle.searchChipFill)
                         .overlay(
                             Capsule()

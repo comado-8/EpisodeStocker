@@ -45,7 +45,7 @@ struct HomeSearchSuggestionPanel: View {
                 }
             }
             .frame(width: width, alignment: .leading)
-            .background(Color.white)
+            .background(HomeStyle.background)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -62,8 +62,7 @@ struct HomeSearchSuggestionPanel_Previews: PreviewProvider {
             width: 360,
             items: [
                 HomeSearchSuggestionItem(kind: .selectField(.tag)),
-                HomeSearchSuggestionItem(kind: .value(field: .tag, value: "仕事")),
-                HomeSearchSuggestionItem(kind: .freeInput(field: .person, value: "田中"))
+                HomeSearchSuggestionItem(kind: .value(field: .tag, value: "仕事"))
             ],
             onSelect: { _ in }
         )

@@ -112,7 +112,15 @@ struct HomeSearchQueryState {
 enum HomeSearchSuggestionKind: Hashable {
     case selectField(HomeSearchField)
     case value(field: HomeSearchField, value: String)
-    case freeInput(field: HomeSearchField, value: String)
+
+    var field: HomeSearchField {
+        switch self {
+        case .selectField(let field):
+            return field
+        case .value(let field, _):
+            return field
+        }
+    }
 }
 
 struct HomeSearchSuggestionItem: Identifiable, Hashable {
@@ -124,8 +132,6 @@ struct HomeSearchSuggestionItem: Identifiable, Hashable {
             return "select:\(field.rawValue)"
         case .value(let field, let value):
             return "value:\(field.rawValue):\(value.lowercased())"
-        case .freeInput(let field, let value):
-            return "free:\(field.rawValue):\(value.lowercased())"
         }
     }
 
@@ -134,8 +140,6 @@ struct HomeSearchSuggestionItem: Identifiable, Hashable {
         case .selectField(let field):
             return "\(field.label)で絞り込む"
         case .value(let field, let value):
-            return "\(field.label): \(value)"
-        case .freeInput(let field, let value):
             return "\(field.label): \(value)"
         }
     }
@@ -146,20 +150,11 @@ struct HomeSearchSuggestionItem: Identifiable, Hashable {
             return "次の入力を\(field.label)として扱います"
         case .value:
             return "候補から追加"
-        case .freeInput:
-            return "条件として追加"
         }
     }
 
     var symbolName: String {
-        switch kind {
-        case .selectField(let field):
-            return field.symbolName
-        case .value(let field, _):
-            return field.symbolName
-        case .freeInput(let field, _):
-            return field.symbolName
-        }
+        kind.field.symbolName
     }
 }
 
@@ -241,6 +236,8 @@ enum HomeSearchQueryEngine {
         if field == .tag, trimmed.hasPrefix("#") {
             trimmed.removeFirst()
             trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if field == .person {
+            trimmed = stripPersonHonorific(trimmed)
         }
         return trimmed
     }
@@ -304,41 +301,38 @@ enum HomeSearchQueryEngine {
     }
 
     private static func buildValueCounts(episodes: [Episode]) -> [HomeSearchField: [String: Int]] {
-        var counts: [HomeSearchField: [String: Int]] = [:]
-        counts[.tag] = [:]
-        counts[.person] = [:]
-        counts[.project] = [:]
-        counts[.emotion] = [:]
-        counts[.place] = [:]
+        [
+            .tag: countValues(in: episodes, field: .tag) { episode in
+                episode.tags.map { (name: $0.name, isSoftDeleted: $0.isSoftDeleted) }
+            },
+            .person: countValues(in: episodes, field: .person) { episode in
+                episode.persons.map { (name: $0.name, isSoftDeleted: $0.isSoftDeleted) }
+            },
+            .project: countValues(in: episodes, field: .project) { episode in
+                episode.projects.map { (name: $0.name, isSoftDeleted: $0.isSoftDeleted) }
+            },
+            .emotion: countValues(in: episodes, field: .emotion) { episode in
+                episode.emotions.map { (name: $0.name, isSoftDeleted: $0.isSoftDeleted) }
+            },
+            .place: countValues(in: episodes, field: .place) { episode in
+                episode.places.map { (name: $0.name, isSoftDeleted: $0.isSoftDeleted) }
+            }
+        ]
+    }
 
+    private static func countValues(
+        in episodes: [Episode],
+        field: HomeSearchField,
+        extractor: (Episode) -> [(name: String, isSoftDeleted: Bool)]
+    ) -> [String: Int] {
+        var counts: [String: Int] = [:]
         for episode in episodes {
-            for tag in episode.tags where !tag.isSoftDeleted {
-                let normalized = normalizeTokenValue(tag.name, field: .tag)
+            for value in extractor(episode) where !value.isSoftDeleted {
+                let normalized = normalizeTokenValue(value.name, field: field)
                 guard !normalized.isEmpty else { continue }
-                counts[.tag]?[normalized, default: 0] += 1
-            }
-            for person in episode.persons where !person.isSoftDeleted {
-                let normalized = normalizeTokenValue(person.name, field: .person)
-                guard !normalized.isEmpty else { continue }
-                counts[.person]?[normalized, default: 0] += 1
-            }
-            for project in episode.projects where !project.isSoftDeleted {
-                let normalized = normalizeTokenValue(project.name, field: .project)
-                guard !normalized.isEmpty else { continue }
-                counts[.project]?[normalized, default: 0] += 1
-            }
-            for emotion in episode.emotions where !emotion.isSoftDeleted {
-                let normalized = normalizeTokenValue(emotion.name, field: .emotion)
-                guard !normalized.isEmpty else { continue }
-                counts[.emotion]?[normalized, default: 0] += 1
-            }
-            for place in episode.places where !place.isSoftDeleted {
-                let normalized = normalizeTokenValue(place.name, field: .place)
-                guard !normalized.isEmpty else { continue }
-                counts[.place]?[normalized, default: 0] += 1
+                counts[normalized, default: 0] += 1
             }
         }
-
         return counts
     }
 

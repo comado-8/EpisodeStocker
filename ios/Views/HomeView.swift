@@ -35,12 +35,41 @@ struct HomeView: View {
         return HomeSearchQueryState()
     }
 
+    private var filteringSearchState: HomeSearchQueryState {
+        if isSearchCommitted {
+            return currentSearchState
+        }
+
+        // While typing free text (not field-input mode), apply incremental filtering.
+        if isSearchFocused,
+           activeSearchField == nil,
+           !currentSearchState.trimmedFreeText.isEmpty
+        {
+            return HomeSearchQueryState(
+                freeText: query,
+                tokens: searchTokens,
+                activeField: nil
+            )
+        }
+
+        // Keep token filtering active even before explicit submit.
+        if !searchTokens.isEmpty {
+            return HomeSearchQueryState(
+                freeText: "",
+                tokens: searchTokens,
+                activeField: nil
+            )
+        }
+
+        return HomeSearchQueryState()
+    }
+
     private var filteredEpisodes: [Episode] {
         episodes.filter { episode in
             HomeSearchQueryEngine.matches(
                 episode: episode,
                 statusFilter: statusFilter,
-                search: committedSearchState
+                search: filteringSearchState
             )
         }
     }
@@ -61,10 +90,13 @@ struct HomeView: View {
             let showsSearchBack = isSearchCommitted && committedHasConditions && !isSearchFocused
             let isShowingSearchResults = isSearchCommitted && committedHasConditions
             let visibleEpisodes = filteredEpisodes
-            let suggestionItems = HomeSearchQueryEngine.suggestions(
-                for: currentSearchState,
-                episodes: episodes
-            )
+            let suggestionItems: [HomeSearchSuggestionItem] = {
+                guard isSearchFocused else { return [] }
+                return HomeSearchQueryEngine.suggestions(
+                    for: currentSearchState,
+                    episodes: episodes
+                )
+            }()
 
             ZStack(alignment: .bottomTrailing) {
                 HomeStyle.background.ignoresSafeArea()
@@ -168,15 +200,12 @@ struct HomeView: View {
                                         .background(HomeStyle.segmentSelectedFill)
                                         .clipShape(Capsule())
 
-                                    if !committedSearchState.trimmedFreeText.isEmpty {
-                                        Text("“\(committedSearchState.trimmedFreeText)”")
+                                    let searchSummaryText = buildSearchSummaryText()
+                                    if !searchSummaryText.isEmpty {
+                                        Text(searchSummaryText)
                                             .font(HomeFont.bodyMedium())
                                             .foregroundColor(HomeStyle.subtitle)
                                             .lineLimit(1)
-                                    } else {
-                                        Text("条件\(committedSearchState.tokens.count)件")
-                                            .font(HomeFont.bodyMedium())
-                                            .foregroundColor(HomeStyle.subtitle)
                                     }
 
                                     Spacer(minLength: 0)
@@ -284,13 +313,21 @@ private extension HomeView {
             query = ""
             activeSearchField = nil
             isSearchCommitted = true
-        case .freeInput(let field, let value):
-            appendSearchToken(field: field, value: value)
-            query = ""
-            activeSearchField = nil
-            isSearchCommitted = true
         }
         isSearchFocused = true
+    }
+
+    func buildSearchSummaryText() -> String {
+        let freeText = committedSearchState.trimmedFreeText
+        let tokenCount = committedSearchState.tokens.count
+
+        if freeText.isEmpty {
+            return tokenCount > 0 ? "条件\(tokenCount)件" : ""
+        }
+        if tokenCount > 0 {
+            return "“\(freeText)” + 条件\(tokenCount)件"
+        }
+        return "“\(freeText)”"
     }
 
     @ViewBuilder

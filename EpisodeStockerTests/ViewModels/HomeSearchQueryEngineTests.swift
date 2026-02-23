@@ -172,30 +172,18 @@ final class HomeSearchQueryEngineTests: XCTestCase {
         XCTAssertLessThanOrEqual(personValueItems.count, 3)
     }
 
-    func testSuggestionsDoNotShowFreeInputWhenNoFieldValueMatches() {
+    func testSuggestionsAreEmptyWhenNoFieldValueMatches() {
         _ = makeEpisode(title: "1", body: "", persons: ["Alice"])
 
         var search = HomeSearchQueryState()
         search.freeText = "nohitvalue"
 
         let items = HomeSearchQueryEngine.suggestions(for: search, episodes: fetchEpisodes())
-        let hasFreeInput = items.contains {
-            if case .freeInput(field: _, value: _) = $0.kind {
-                return true
-            }
-            return false
-        }
-        XCTAssertFalse(hasFreeInput)
+        XCTAssertTrue(items.isEmpty)
 
         search = HomeSearchQueryState(freeText: "nohitvalue", tokens: [], activeField: .tag)
         let activeFieldItems = HomeSearchQueryEngine.suggestions(for: search, episodes: fetchEpisodes())
-        let activeHasFreeInput = activeFieldItems.contains {
-            if case .freeInput(field: _, value: _) = $0.kind {
-                return true
-            }
-            return false
-        }
-        XCTAssertFalse(activeHasFreeInput)
+        XCTAssertTrue(activeFieldItems.isEmpty)
     }
 
     func testActiveFieldSuggestionsDoNotIncludeRedundantFieldSelector() {
