@@ -143,6 +143,80 @@ final class HomeSearchQueryEngineTests: XCTestCase {
         XCTAssertEqual(okResult.map(\.id), [unlocked.id])
     }
 
+    func testLockedStatusFilterStillApplies() {
+        _ = makeEpisode(
+            title: "Unlocked",
+            body: "",
+            unlockDate: Date().addingTimeInterval(-60),
+            tags: ["#仕事"]
+        )
+        let locked = makeEpisode(
+            title: "Locked",
+            body: "",
+            unlockDate: Date().addingTimeInterval(60 * 60),
+            tags: ["#仕事"]
+        )
+
+        let token = HomeSearchFilterToken(field: .tag, value: "仕事")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+
+        let lockedResult = filter(search: search, statusFilter: .locked)
+
+        XCTAssertEqual(lockedResult.map(\.id), [locked.id])
+    }
+
+    func testStructuredSearchMatchesProjectEmotionAndPlace() {
+        let match = Episode(
+            date: Date(),
+            title: "構造化一致",
+            body: "",
+            projects: [Project(name: "朝番組企画", nameNormalized: "朝番組企画")],
+            emotions: [Emotion(name: "ワクワク", nameNormalized: "ワクワク")],
+            places: [Place(name: "渋谷スタジオ", nameNormalized: "渋谷スタジオ")]
+        )
+        let partial = Episode(
+            date: Date(),
+            title: "企画のみ",
+            body: "",
+            projects: [Project(name: "朝番組企画", nameNormalized: "朝番組企画")],
+            emotions: [Emotion(name: "落ち着き", nameNormalized: "落ち着き")],
+            places: [Place(name: "赤坂", nameNormalized: "赤坂")]
+        )
+
+        let tokens = [
+            HomeSearchFilterToken(field: .project, value: "朝番組")!,
+            HomeSearchFilterToken(field: .emotion, value: "ワク")!,
+            HomeSearchFilterToken(field: .place, value: "渋谷")!
+        ]
+        let search = HomeSearchQueryState(freeText: "", tokens: tokens, activeField: nil)
+
+        let result = [match, partial].filter { episode in
+            HomeSearchQueryEngine.matches(
+                episode: episode,
+                statusFilter: .all,
+                search: search
+            )
+        }
+
+        XCTAssertEqual(result.map(\.id), [match.id])
+    }
+
+    func testFieldAndSuggestionPresentationProperties() {
+        for field in HomeSearchField.allCases {
+            XCTAssertFalse(field.symbolName.isEmpty)
+        }
+
+        let selectItem = HomeSearchSuggestionItem(kind: .selectField(.emotion))
+        XCTAssertEqual(selectItem.title, "感情で絞り込む")
+        XCTAssertEqual(selectItem.subtitle, "次の入力を感情として扱います")
+        XCTAssertEqual(selectItem.symbolName, HomeSearchField.emotion.symbolName)
+
+        let valueItem = HomeSearchSuggestionItem(kind: .value(field: .project, value: "朝番組"))
+        XCTAssertEqual(valueItem.title, "企画名: 朝番組")
+        XCTAssertEqual(valueItem.subtitle, "候補から追加")
+        XCTAssertEqual(valueItem.symbolName, HomeSearchField.project.symbolName)
+    }
+
     func testSuggestionsRespectFieldOrderAndMaxValuesPerField() {
         _ = makeEpisode(title: "1", body: "", persons: ["Alice"])
         _ = makeEpisode(title: "2", body: "", persons: ["Ami"])
