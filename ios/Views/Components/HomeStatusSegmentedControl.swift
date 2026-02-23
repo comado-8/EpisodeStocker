@@ -16,10 +16,14 @@ struct HomeStatusSegmentedControl: View {
                 Button {
                     selection = item
                 } label: {
-                    Text(item.rawValue)
-                        .font(HomeFont.labelLarge())
-                        .tracking(0.1)
-                        .foregroundColor(selection == item ? selectedText(for: item) : HomeStyle.segmentText)
+                    HStack(spacing: 4) {
+                        Image(systemName: iconName(for: item))
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(item.rawValue)
+                            .font(.system(size: 14, weight: .medium))
+                            .tracking(0.1)
+                    }
+                    .foregroundColor(selection == item ? selectedText(for: item) : HomeStyle.segmentText)
                         .frame(maxWidth: .infinity)
                         .frame(height: HomeStyle.segmentedItemHeight)
                         .background(selection == item ? selectedFill(for: item) : Color.white)
@@ -38,11 +42,24 @@ struct HomeStatusSegmentedControl: View {
 }
 
 private extension HomeStatusSegmentedControl {
+    func iconName(for item: HomeStatusFilter) -> String {
+        switch item {
+        case .ok:
+            return "circle"
+        case .locked:
+            return "xmark"
+        case .all:
+            return "line.3.horizontal"
+        }
+    }
+
     func selectedFill(for item: HomeStatusFilter) -> Color {
         switch item {
+        case .all:
+            return HomeStyle.searchFill
         case .locked:
             return HomeStyle.lockedAccent
-        default:
+        case .ok:
             return HomeStyle.segmentSelectedFill
         }
     }

@@ -1087,8 +1087,9 @@ private enum DetailStyle {
   static let modalButtonCornerRadius: CGFloat = 22
   static let releaseLogButtonHeight: CGFloat = 48
   static let releaseLogSpacing: CGFloat = 16
-  static let releaseLogCardSpacing: CGFloat = 12
+  static let releaseLogCardSpacing: CGFloat = 8
   static let releaseLogCardInnerSpacing: CGFloat = 8
+  static let releaseLogCardBorderWidth: CGFloat = 1.2
   static let releaseLogSheetSpacing: CGFloat = 16
   static let releaseLogSheetFieldSpacing: CGFloat = 12
   static let releaseLogOutcomeHeight: CGFloat = 36
@@ -1294,7 +1295,7 @@ private struct ReleaseLogCard: View {
     .padding(12)
     .background(
       RoundedRectangle(cornerRadius: DetailStyle.inputCornerRadius)
-        .stroke(DetailStyle.inputBorder, lineWidth: DetailStyle.inputBorderWidth)
+        .stroke(DetailStyle.inputBorder, lineWidth: DetailStyle.releaseLogCardBorderWidth)
         .background(
           RoundedRectangle(cornerRadius: DetailStyle.inputCornerRadius)
             .fill(Color.white)

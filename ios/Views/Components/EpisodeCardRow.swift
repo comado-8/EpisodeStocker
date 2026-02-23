@@ -1,9 +1,10 @@
 import SwiftUI
-import UIKit
 
 struct EpisodeCardRow: View {
     let title: String
     let subtitle: String
+    let date: Date
+    let isUnlocked: Bool
     let width: CGFloat
     let borderColor: Color
     let showsSelection: Bool
@@ -19,56 +20,75 @@ struct EpisodeCardRow: View {
                 EpisodeSelectionIndicator(isSelected: isSelected)
             }
 
-            HStack(spacing: 0) {
+            HStack(spacing: HomeStyle.cardContentSpacing) {
+                VStack(spacing: 0) {
+                    Text(Self.yearFormatter.string(from: date))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(dateTextColor)
+
+                    Text(Self.monthDayFormatter.string(from: date))
+                        .font(.system(size: 18, weight: .medium))
+                        .tracking(0.3)
+                        .foregroundColor(dateTextColor)
+                }
+                .frame(width: HomeStyle.dateBadgeSize, height: HomeStyle.dateBadgeSize)
+                .background(dateBadgeFill)
+                .clipShape(Circle())
+
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
-                        .font(HomeFont.titleMedium())
+                        .font(.system(size: 16, weight: .medium))
                         .tracking(0.15)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color(hex: "1F1F1F"))
+                        .lineLimit(1)
+
                     Text(subtitle)
                         .font(HomeFont.bodyMedium())
                         .tracking(0.25)
                         .foregroundColor(HomeStyle.subtitle)
+                        .lineLimit(1)
                 }
-                .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-
-                ZStack {
-                    HomeStyle.cardAccent
-                    EpisodeThumbnailView()
-                        .padding(10)
-                }
-                .frame(width: HomeStyle.cardAccentWidth)
             }
+            .padding(.horizontal, 16)
             .frame(width: cardWidth, height: HomeStyle.cardHeight)
-            .background(Color.white)
+            .background(cardBackgroundColor)
             .overlay(
                 RoundedRectangle(cornerRadius: HomeStyle.cardCornerRadius)
-                    .stroke(borderColor, lineWidth: 1)
+                    .stroke(borderColor, lineWidth: HomeStyle.listCardBorderWidth)
             )
             .clipShape(RoundedRectangle(cornerRadius: HomeStyle.cardCornerRadius))
         }
         .frame(width: width, height: HomeStyle.cardHeight, alignment: .leading)
     }
-}
 
-private struct EpisodeThumbnailView: View {
-    var body: some View {
-        if let image = UIImage.namedFromBundle("home_card_thumbnail", ext: "png") {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .opacity(0.75)
-        } else {
-            VStack(spacing: 8) {
-                Image(systemName: "heart.fill")
-                Image(systemName: "star.fill")
-                Image(systemName: "square.fill")
-            }
-            .font(.system(size: 12))
-            .foregroundColor(.white.opacity(0.75))
-        }
+    private var dateBadgeFill: Color {
+        isUnlocked ? HomeStyle.segmentSelectedFill : HomeStyle.lockedAccent
     }
+
+    private var cardBackgroundColor: Color {
+        (showsSelection && isSelected) ? HomeStyle.selectionCardBackground : .white
+    }
+
+    private var dateTextColor: Color {
+        isUnlocked ? HomeStyle.dateTextUnlocked : HomeStyle.dateTextLocked
+    }
+
+    private static let yearFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "yyyy"
+        return formatter
+    }()
+
+    private static let monthDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "M/d"
+        return formatter
+    }()
 }
 
 struct EpisodeCardRow_Previews: PreviewProvider {
@@ -76,6 +96,8 @@ struct EpisodeCardRow_Previews: PreviewProvider {
         EpisodeCardRow(
             title: "Header",
             subtitle: "Subhead",
+            date: Date(),
+            isUnlocked: true,
             width: 360,
             borderColor: HomeStyle.cardBorder,
             showsSelection: true,
