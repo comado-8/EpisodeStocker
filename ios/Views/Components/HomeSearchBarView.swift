@@ -8,6 +8,7 @@ struct HomeSearchBarView: View {
     var showsBack: Bool = false
     var onSubmit: (() -> Void)? = nil
     var onCancel: (() -> Void)? = nil
+    var onClearText: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -42,8 +43,23 @@ struct HomeSearchBarView: View {
                     .focused(isFocused)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(HomeStyle.segmentText)
+            if !text.isEmpty {
+                Button {
+                    if let onClearText {
+                        onClearText()
+                    } else {
+                        text = ""
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(HomeStyle.segmentText.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("入力をクリア")
+            } else {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(HomeStyle.segmentText)
+            }
         }
         .padding(.horizontal, 16)
         .frame(width: width, height: HomeStyle.searchHeight)
