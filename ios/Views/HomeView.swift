@@ -10,6 +10,8 @@ struct HomeView: View {
     )
     private var episodes: [Episode]
     @State private var query = ""
+    @State private var searchTokens: [HomeSearchFilterToken] = []
+    @State private var activeSearchField: HomeSearchField?
     @State private var statusFilter: HomeStatusFilter = .ok
     @State private var isSearchCommitted = false
     @State private var isSelectionMode = false
@@ -18,19 +20,28 @@ struct HomeView: View {
     @State private var suppressNextNavigation = false
     @FocusState private var isSearchFocused: Bool
 
+    private var currentSearchState: HomeSearchQueryState {
+        HomeSearchQueryState(
+            freeText: query,
+            tokens: searchTokens,
+            activeField: activeSearchField
+        )
+    }
+
+    private var committedSearchState: HomeSearchQueryState {
+        if isSearchCommitted {
+            return currentSearchState
+        }
+        return HomeSearchQueryState()
+    }
+
     private var filteredEpisodes: [Episode] {
         episodes.filter { episode in
-            let matchesQuery = query.isEmpty || episode.title.localizedCaseInsensitiveContains(query) || (episode.body ?? "").localizedCaseInsensitiveContains(query)
-            let matchesStatus: Bool
-            switch statusFilter {
-            case .ok:
-                matchesStatus = episode.isUnlocked
-            case .locked:
-                matchesStatus = !episode.isUnlocked
-            case .all:
-                matchesStatus = true
-            }
-            return matchesQuery && matchesStatus
+            HomeSearchQueryEngine.matches(
+                episode: episode,
+                statusFilter: statusFilter,
+                search: committedSearchState
+            )
         }
     }
 
@@ -45,43 +56,89 @@ struct HomeView: View {
             let bottomInset = baseSafeAreaBottom()
             let topPadding = max(0, HomeStyle.figmaTopInset - proxy.safeAreaInsets.top)
             let fabBottomPadding = HomeStyle.tabBarHeight + HomeStyle.fabBottomOffset
-            let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            let isSearchEmpty = !trimmedQuery.isEmpty && filteredEpisodes.isEmpty && isSearchCommitted
-            let showsSearchBack = isSearchCommitted && !trimmedQuery.isEmpty && !isSearchFocused
-            let isShowingSearchResults = isSearchCommitted && !trimmedQuery.isEmpty
+            let committedHasConditions = committedSearchState.hasAnyCondition
+            let isSearchEmpty = committedHasConditions && filteredEpisodes.isEmpty && isSearchCommitted
+            let showsSearchBack = isSearchCommitted && committedHasConditions && !isSearchFocused
+            let isShowingSearchResults = isSearchCommitted && committedHasConditions
             let visibleEpisodes = filteredEpisodes
+            let suggestionItems = HomeSearchQueryEngine.suggestions(
+                for: currentSearchState,
+                episodes: episodes
+            )
 
             ZStack(alignment: .bottomTrailing) {
                 HomeStyle.background.ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: HomeStyle.sectionSpacing) {
-                        HomeSearchBarView(text: $query, width: contentWidth, isFocused: $isSearchFocused, showsBack: showsSearchBack) {
+                        HomeSearchBarView(
+                            text: $query,
+                            width: contentWidth,
+                            isFocused: $isSearchFocused,
+                            showsBack: showsSearchBack
+                        ) {
                             let committedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if let activeSearchField,
+                               !committedQuery.isEmpty
+                            {
+                                appendSearchToken(field: activeSearchField, value: committedQuery)
+                                query = ""
+                                self.activeSearchField = nil
+                            }
                             isSearchFocused = false
-                            isSearchCommitted = !committedQuery.isEmpty
+                            isSearchCommitted = hasAnySearchCondition()
                             hideKeyboard()
                         } onCancel: {
-                            query = ""
+                            clearSearchConditions()
                             isSearchFocused = false
                             isSearchCommitted = false
                             hideKeyboard()
+                        } onClearText: {
+                            query = ""
+                            if !isSearchFocused {
+                                isSearchCommitted = hasAnySearchCondition()
+                            }
                         }
-                        .onChange(of: query) { _, newValue in
-                            let currentQuery = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if currentQuery.isEmpty {
-                                isSearchCommitted = false
-                            } else if isSearchFocused {
+                        .onChange(of: query) { _, _ in
+                            if isSearchFocused {
+                                // Keep structured search active while user is typing the next token.
+                                isSearchCommitted = !searchTokens.isEmpty
+                            } else if !hasAnySearchCondition() {
                                 isSearchCommitted = false
                             }
                         }
                         .onChange(of: isSearchFocused) { _, focused in
                             if focused {
-                                isSearchCommitted = false
+                                // Keep token-based filtering active while user edits the next query.
+                                isSearchCommitted = !searchTokens.isEmpty
                             } else {
-                                let currentQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-                                isSearchCommitted = !currentQuery.isEmpty
+                                // Reset one-shot field mode when editing ends.
+                                activeSearchField = nil
+                                isSearchCommitted = hasAnySearchCondition()
                             }
+                        }
+                        .onChange(of: searchTokens) { _, _ in
+                            if isSearchFocused {
+                                isSearchCommitted = !searchTokens.isEmpty
+                            } else {
+                                isSearchCommitted = hasAnySearchCondition()
+                            }
+                        }
+
+                        HomeSearchFilterChipRow(
+                            width: contentWidth,
+                            tokens: searchTokens,
+                            onRemoveToken: { token in
+                                searchTokens.removeAll { $0 == token }
+                            }
+                        )
+
+                        if isSearchFocused && !suggestionItems.isEmpty {
+                            HomeSearchSuggestionPanel(
+                                width: contentWidth,
+                                items: suggestionItems,
+                                onSelect: applySuggestion
+                            )
                         }
 
                         VStack(spacing: HomeStyle.sectionSpacing) {
@@ -111,10 +168,16 @@ struct HomeView: View {
                                         .background(HomeStyle.segmentSelectedFill)
                                         .clipShape(Capsule())
 
-                                    Text("“\(trimmedQuery)”")
-                                        .font(HomeFont.bodyMedium())
-                                        .foregroundColor(HomeStyle.subtitle)
-                                        .lineLimit(1)
+                                    if !committedSearchState.trimmedFreeText.isEmpty {
+                                        Text("“\(committedSearchState.trimmedFreeText)”")
+                                            .font(HomeFont.bodyMedium())
+                                            .foregroundColor(HomeStyle.subtitle)
+                                            .lineLimit(1)
+                                    } else {
+                                        Text("条件\(committedSearchState.tokens.count)件")
+                                            .font(HomeFont.bodyMedium())
+                                            .foregroundColor(HomeStyle.subtitle)
+                                    }
 
                                     Spacer(minLength: 0)
 
@@ -193,6 +256,43 @@ private extension HomeView {
         return 0
     }
 
+    func hasAnySearchCondition() -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty || !searchTokens.isEmpty
+    }
+
+    func clearSearchConditions() {
+        query = ""
+        searchTokens.removeAll()
+        activeSearchField = nil
+    }
+
+    func appendSearchToken(field: HomeSearchField, value: String) {
+        guard let token = HomeSearchFilterToken(field: field, value: value) else { return }
+        if !searchTokens.contains(token) {
+            searchTokens.append(token)
+        }
+    }
+
+    func applySuggestion(_ item: HomeSearchSuggestionItem) {
+        switch item.kind {
+        case .selectField(let field):
+            activeSearchField = field
+            isSearchCommitted = !searchTokens.isEmpty
+        case .value(let field, let value):
+            appendSearchToken(field: field, value: value)
+            query = ""
+            activeSearchField = nil
+            isSearchCommitted = true
+        case .freeInput(let field, let value):
+            appendSearchToken(field: field, value: value)
+            query = ""
+            activeSearchField = nil
+            isSearchCommitted = true
+        }
+        isSearchFocused = true
+    }
+
     @ViewBuilder
     func episodeListRow(episode: Episode, width: CGFloat) -> some View {
         let isSelected = selectedEpisodeIDs.contains(episode.id)
@@ -220,10 +320,10 @@ private extension HomeView {
                         return
                     }
                     router.push(.episodeDetail(episode.id))
-            }
-            .onLongPressGesture(minimumDuration: 0.3) {
-                beginSelection(with: episode.id)
-            }
+                }
+                .onLongPressGesture(minimumDuration: 0.3) {
+                    beginSelection(with: episode.id)
+                }
         }
     }
 

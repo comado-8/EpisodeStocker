@@ -17,6 +17,8 @@ enum HomeStyle {
     static let selectionStatusRowHorizontalPadding: CGFloat = 16
 
     static let searchHeight: CGFloat = 48
+    static let searchChipHeight: CGFloat = 28
+    static let searchSuggestionRowHeight: CGFloat = 54
     static let dividerHeight: CGFloat = 1
 
     static let statusRowHeight: CGFloat = 48
@@ -49,6 +51,17 @@ enum HomeStyle {
     static let outline = Color(hex: "CAC4D0")
     static let searchFill = Color(hex: "ECE6F0")
     static let searchActiveFill = Color(hex: "F2F2F2")
+    static let searchChipFill = Color(hex: "F3F4F6")
+    static let searchChipBorder = Color(hex: "D1D5DC")
+    static let searchChipText = Color(hex: "364153")
+    static let searchModeFill = Color(hex: "FDECEC")
+    static let searchModeBorder = Color(hex: "F3B4B4")
+    static let searchModeText = Color(hex: "8D110E")
+    static let searchSuggestionBorder = Color(hex: "E5E7EB")
+    static let searchSuggestionDivider = Color(hex: "EEF0F2")
+    static let searchSuggestionTitle = Color(hex: "101828")
+    static let searchSuggestionSubtitle = Color(hex: "667085")
+    static let searchSuggestionIcon = Color(hex: "364153")
 
     static let segmentSelectedFill = Color(hex: "FCCECE")
     static let segmentSelectedText = Color(hex: "2A2525")
