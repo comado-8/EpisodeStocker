@@ -17,6 +17,7 @@ struct TagListView: View {
   @State private var undoTask: Task<Void, Never>?
   @State private var editorContext: TagEditorContext?
   @State private var editorSheetHeight: CGFloat = 320
+  @State private var navigationPath: [TagRoute] = []
 
   private var filteredTags: [Tag] {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -36,7 +37,7 @@ struct TagListView: View {
   }
 
   var body: some View {
-    NavigationStack {
+    NavigationStack(path: $navigationPath) {
       GeometryReader { proxy in
         let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
         let bottomInset = baseSafeAreaBottom()
@@ -74,6 +75,11 @@ struct TagListView: View {
                 totalCount: tags.count,
                 isSearching: isSearching,
                 episodeCounts: episodeCountByTagId,
+                onSelect: { tag in
+                  navigationPath.append(
+                    TagRoute(tagID: tag.id, tagName: displayTagName(tag))
+                  )
+                },
                 onDelete: { tag in
                   deleteTag(tag)
                 }
@@ -102,6 +108,9 @@ struct TagListView: View {
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(for: TagRoute.self) { route in
+          TagDetailView(tagID: route.tagID, tagName: route.tagName)
+        }
       }
     }
     .overlay(alignment: .bottom) {
@@ -141,12 +150,18 @@ private struct TagHeaderView: View {
   }
 }
 
+private struct TagRoute: Hashable {
+  let tagID: UUID
+  let tagName: String
+}
+
 private struct TagListCardView: View {
   let tags: [Tag]
   let width: CGFloat
   let totalCount: Int
   let isSearching: Bool
   let episodeCounts: [UUID: Int]
+  let onSelect: (Tag) -> Void
   let onDelete: (Tag) -> Void
 
   var body: some View {
@@ -160,9 +175,10 @@ private struct TagListCardView: View {
           ForEach(Array(tags.enumerated()), id: \.element.id) { index, tag in
             let count = episodeCounts[tag.id, default: 0]
             TagRowView(
-              tag: tag,
+              displayName: displayTagName(tag),
               count: count,
               showsDivider: index < tags.count - 1,
+              onTap: { onSelect(tag) },
               onDelete: { onDelete(tag) }
             )
             .listRowInsets(.init(top: 0, leading: 0, bottom: 0, trailing: 0))
@@ -228,9 +244,10 @@ private struct TagCardHeaderView: View {
 }
 
 private struct TagRowView: View {
-  let tag: Tag
+  let displayName: String
   let count: Int
   let showsDivider: Bool
+  let onTap: () -> Void
   let onDelete: () -> Void
 
   var body: some View {
@@ -245,7 +262,7 @@ private struct TagRowView: View {
       }
 
       VStack(alignment: .leading, spacing: 4) {
-        Text(displayName(for: tag))
+        Text(displayName)
           .font(TagStyle.rowTitleFont)
           .foregroundColor(TagStyle.rowTitleText)
 
@@ -255,9 +272,18 @@ private struct TagRowView: View {
       }
 
       Spacer(minLength: 0)
+
+      Image(systemName: "chevron.right")
+        .font(.system(size: 14, weight: .semibold))
+        .foregroundColor(TagStyle.rowMetaText)
+        .accessibilityHidden(true)
     }
     .padding(.horizontal, TagStyle.rowHorizontalPadding)
     .frame(height: TagStyle.rowHeight)
+    .contentShape(Rectangle())
+    .onTapGesture {
+      onTap()
+    }
     .overlay(alignment: .bottom) {
       if showsDivider {
         Rectangle()
@@ -274,13 +300,6 @@ private struct TagRowView: View {
       }
       .tint(TagStyle.swipeActionTint)
     }
-  }
-
-  private func displayName(for tag: Tag) -> String {
-    if tag.name.hasPrefix("#") {
-      return tag.name
-    }
-    return "#\(tag.name)"
   }
 }
 
@@ -505,6 +524,13 @@ private struct TagUndoToastView: View {
     .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
     .padding(.horizontal, 16)
   }
+}
+
+private func displayTagName(_ tag: Tag) -> String {
+  if tag.name.hasPrefix("#") {
+    return tag.name
+  }
+  return "#\(tag.name)"
 }
 
 private enum TagStyle {
