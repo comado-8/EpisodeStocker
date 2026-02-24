@@ -230,9 +230,8 @@ enum HomeSearchQueryEngine {
     static func normalizeTokenValue(_ raw: String, field: HomeSearchField) -> String {
         var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
-        if field == .tag, trimmed.hasPrefix("#") {
-            trimmed.removeFirst()
-            trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        if field == .tag {
+            trimmed = EpisodePersistence.normalizeTagName(trimmed)?.name ?? ""
         } else if field == .person {
             trimmed = stripPersonHonorific(trimmed)
         }
@@ -385,15 +384,11 @@ enum HomeSearchQueryEngine {
     }
 
     private static func normalizeSuggestionQuery(_ raw: String, for field: HomeSearchField) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard field == .person else { return trimmed }
-        return stripPersonHonorific(trimmed)
+        normalizeTokenValue(raw, field: field).lowercased()
     }
 
     private static func normalizeSuggestionValue(_ raw: String, for field: HomeSearchField) -> String {
-        let lowered = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard field == .person else { return lowered }
-        return stripPersonHonorific(lowered)
+        normalizeTokenValue(raw, field: field).lowercased()
     }
 
     private static func stripPersonHonorific(_ value: String) -> String {

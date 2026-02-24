@@ -2,14 +2,41 @@ import SwiftUI
 
 struct AnalyticsView: View {
     var body: some View {
-        VStack(spacing: 12) {
-            Text("分析 (サブスク)").font(.title3).bold()
-            Text("タグ/カテゴリ別の利用数や未公開率のグラフをここに表示する予定です。").multilineTextAlignment(.center)
-            Spacer()
+        GeometryReader { proxy in
+            let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
+            let topPadding = max(0, AnalyticsStyle.figmaTopInset - proxy.safeAreaInsets.top)
+
+            ZStack {
+                HomeStyle.background.ignoresSafeArea()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("分析")
+                        .font(AnalyticsStyle.headerFont)
+                        .foregroundColor(AnalyticsStyle.headerText)
+
+                    Text("タグ/カテゴリ別の利用数や未公開率のグラフをここに表示する予定です。")
+                        .font(AnalyticsStyle.bodyFont)
+                        .foregroundColor(AnalyticsStyle.bodyText)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 0)
+                }
+                .frame(width: contentWidth, alignment: .leading)
+                .padding(.top, topPadding)
+                .padding(.bottom, HomeStyle.tabBarHeight + 16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
         }
-        .padding()
-        .navigationTitle("分析")
+        .toolbar(.hidden, for: .navigationBar)
     }
+}
+
+private enum AnalyticsStyle {
+    static let figmaTopInset: CGFloat = 59
+    static let headerFont = Font.system(size: 24, weight: .semibold)
+    static let bodyFont = Font.custom("Roboto", size: 13)
+    static let headerText = Color(hex: "2A2525")
+    static let bodyText = Color(hex: "6B7280")
 }
 
 struct AnalyticsView_Previews: PreviewProvider {

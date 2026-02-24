@@ -40,17 +40,20 @@ struct TagListView: View {
     NavigationStack(path: $navigationPath) {
       GeometryReader { proxy in
         let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
-        let bottomInset = baseSafeAreaBottom()
         let topPadding = max(0, TagStyle.figmaTopInset - proxy.safeAreaInsets.top)
-        let fabBottomPadding = HomeStyle.tabBarHeight + TagStyle.fabBottomOffset
+        let fabBottomPadding =
+          HomeStyle.tabBarHeight + TagStyle.fabBottomOffset
+          + (showsUndoToast ? TagStyle.toastHeight + TagStyle.toastBottomPadding : 0)
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let isSearching = !trimmedQuery.isEmpty
 
         ZStack(alignment: .bottomTrailing) {
           HomeStyle.background.ignoresSafeArea()
 
-          ScrollView {
-            VStack(spacing: TagStyle.sectionSpacing) {
+          VStack(spacing: TagStyle.sectionSpacing) {
+            VStack(alignment: .leading, spacing: TagStyle.sectionSpacing) {
+              TagHeaderView()
+
               HomeSearchBarView(
                 text: $query,
                 width: contentWidth,
@@ -58,53 +61,62 @@ struct TagListView: View {
                 placeholder: "タグを検索"
               )
 
-              VStack(alignment: .leading, spacing: TagStyle.sectionSpacing) {
-                Rectangle()
-                  .fill(HomeStyle.outline)
-                  .frame(width: contentWidth, height: HomeStyle.dividerHeight)
+              Rectangle()
+                .fill(HomeStyle.outline)
+                .frame(width: contentWidth, height: HomeStyle.dividerHeight)
 
-              TagHeaderView()
+              TagCaptionView()
 
               if isSearching {
                 TagSearchSummaryView(query: trimmedQuery, count: filteredTags.count)
               }
-
-              TagListCardView(
-                tags: filteredTags,
-                width: contentWidth,
-                totalCount: tags.count,
-                isSearching: isSearching,
-                episodeCounts: episodeCountByTagId,
-                onSelect: { tag in
-                  navigationPath.append(
-                    TagRoute(tagID: tag.id, tagName: displayTagName(tag))
-                  )
-                },
-                onDelete: { tag in
-                  deleteTag(tag)
-                }
-              )
-              }
-              .frame(width: contentWidth, alignment: .leading)
-              .simultaneousGesture(
-                TapGesture().onEnded {
-                  if isSearchFocused {
-                    isSearchFocused = false
-                    hideKeyboard()
-                  }
-                }
-              )
             }
-            .padding(.top, topPadding)
-            .padding(.bottom, HomeStyle.tabBarHeight + 16 + bottomInset)
-            .frame(maxWidth: .infinity)
+            .frame(width: contentWidth, alignment: .leading)
+
+            TagListCardView(
+              tags: filteredTags,
+              width: contentWidth,
+              totalCount: tags.count,
+              isSearching: isSearching,
+              episodeCounts: episodeCountByTagId,
+              onSelect: { tag in
+                navigationPath.append(
+                  TagRoute(tagID: tag.id, tagName: displayTagName(tag))
+                )
+              },
+              onDelete: { tag in
+                deleteTag(tag)
+              }
+            )
+            .frame(maxHeight: .infinity, alignment: .top)
           }
+          .simultaneousGesture(
+            TapGesture().onEnded {
+              if isSearchFocused {
+                isSearchFocused = false
+                hideKeyboard()
+              }
+            }
+          )
+          .padding(.top, topPadding)
+          .padding(.bottom, HomeStyle.tabBarHeight + TagStyle.listBottomPadding)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
           HomeFloatingButton {
             editorContext = TagEditorContext(mode: .add)
           }
           .padding(.trailing, max(HomeStyle.fabTrailing, HomeStyle.horizontalPadding))
           .padding(.bottom, fabBottomPadding)
+
+          if showsUndoToast {
+            TagUndoToastView {
+              undoDelete()
+            }
+            .frame(width: contentWidth)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.bottom, HomeStyle.tabBarHeight + TagStyle.toastBottomPadding)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+          }
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .toolbar(.hidden, for: .navigationBar)
@@ -113,25 +125,37 @@ struct TagListView: View {
         }
       }
     }
-    .overlay(alignment: .bottom) {
-      if showsUndoToast {
-        TagUndoToastView {
-          undoDelete()
-        }
-        .padding(.bottom, HomeStyle.tabBarHeight + 12)
-      }
-    }
     .sheet(item: $editorContext) { context in
-      TagEditorSheet(context: context, measuredHeight: $editorSheetHeight) { name in
-        guard let normalized = normalizedTagName(name) else { return }
-        switch context.mode {
-        case .add:
-          _ = modelContext.upsertTag(name: normalized)
-          try? modelContext.save()
+      NavigationStack {
+        let existingTagNames = Set(tags.compactMap { EpisodePersistence.normalizeTagName($0.name)?.name })
+        TagEditorSheet(
+          context: context,
+          measuredHeight: $editorSheetHeight,
+          existingNormalizedTagNames: existingTagNames
+        ) { name in
+          guard let normalized = EpisodePersistence.validateTagNameInput(name).normalizedName else {
+            return
+          }
+          guard !existingTagNames.contains(normalized) else { return }
+          switch context.mode {
+          case .add:
+            _ = modelContext.upsertTag(name: normalized)
+            try? modelContext.save()
+          }
+        }
+        .navigationTitle(context.title)
+        .toolbar {
+          ToolbarItem(placement: .topBarTrailing) {
+            Button("閉じる") {
+              editorContext = nil
+            }
+            .font(TagStyle.sheetCloseFont)
+          }
         }
       }
       .presentationDetents([.height(editorSheetHeight)])
       .presentationDragIndicator(.visible)
+      .presentationBackground(Color.white)
     }
   }
 }
@@ -142,10 +166,28 @@ private struct TagHeaderView: View {
       Text("タグ管理")
         .font(TagStyle.headerFont)
         .foregroundColor(TagStyle.headerText)
-      Text("登録されているタグの一覧です。スワイプで削除できます。")
+    }
+  }
+}
+
+private struct TagCaptionView: View {
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("左スワイプで削除できます。")
         .font(TagStyle.subheaderFont)
         .foregroundColor(TagStyle.subheaderText)
         .fixedSize(horizontal: false, vertical: true)
+
+      HStack(alignment: .top, spacing: 6) {
+        Image(systemName: "info.circle")
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundColor(TagStyle.noticeIconText)
+          .padding(.top, 1)
+        Text("タグを削除すると、紐づくエピソードからもタグが外れます。")
+          .font(TagStyle.noticeFont)
+          .foregroundColor(TagStyle.noticeText)
+          .fixedSize(horizontal: false, vertical: true)
+      }
     }
   }
 }
@@ -170,7 +212,6 @@ private struct TagListCardView: View {
       if tags.isEmpty {
         TagEmptyStateView(isSearching: isSearching)
       } else {
-        let listHeight = TagStyle.rowHeight * CGFloat(tags.count)
         List {
           ForEach(Array(tags.enumerated()), id: \.element.id) { index, tag in
             let count = episodeCounts[tag.id, default: 0]
@@ -188,11 +229,11 @@ private struct TagListCardView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .frame(height: listHeight)
-        .modifier(TagListScrollDisable())
+        .frame(maxHeight: .infinity)
       }
     }
     .frame(width: width)
+    .frame(maxHeight: .infinity, alignment: .top)
     .background(Color.white)
     .clipShape(RoundedRectangle(cornerRadius: TagStyle.cardCornerRadius, style: .continuous))
     .overlay(
@@ -206,16 +247,6 @@ private struct TagListCardView: View {
     .shadow(
       color: TagStyle.cardShadowSecondary, radius: TagStyle.cardShadowSecondaryRadius, x: 0,
       y: TagStyle.cardShadowSecondaryY)
-  }
-}
-
-private struct TagListScrollDisable: ViewModifier {
-  func body(content: Content) -> some View {
-    if #available(iOS 16.0, *) {
-      content.scrollDisabled(true)
-    } else {
-      content
-    }
   }
 }
 
@@ -291,14 +322,13 @@ private struct TagRowView: View {
           .frame(height: TagStyle.rowDividerHeight)
       }
     }
-    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-      Button {
+    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+      Button(role: .destructive) {
         onDelete()
       } label: {
-        Text("削除")
+        Label("削除", systemImage: "trash.fill")
           .font(TagStyle.swipeActionFont)
       }
-      .tint(TagStyle.swipeActionTint)
     }
   }
 }
@@ -388,29 +418,37 @@ private struct TagEditorContext: Identifiable {
 private struct TagEditorSheet: View {
   let context: TagEditorContext
   @Binding var measuredHeight: CGFloat
+  let existingNormalizedTagNames: Set<String>
   let onSave: (String) -> Void
 
   @Environment(\.dismiss) private var dismiss
   @State private var name: String
 
   init(
-    context: TagEditorContext, measuredHeight: Binding<CGFloat>, onSave: @escaping (String) -> Void
+    context: TagEditorContext,
+    measuredHeight: Binding<CGFloat>,
+    existingNormalizedTagNames: Set<String>,
+    onSave: @escaping (String) -> Void
   ) {
     self.context = context
     self._measuredHeight = measuredHeight
+    self.existingNormalizedTagNames = existingNormalizedTagNames
     self.onSave = onSave
     _name = State(initialValue: context.initialName)
   }
 
   var body: some View {
-    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    let canSave = !trimmed.isEmpty
+    let validationResult = EpisodePersistence.validateTagNameInput(name)
+    let normalizedName = validationResult.normalizedName
+    let duplicateName = normalizedName.flatMap { candidate in
+      existingNormalizedTagNames.contains(candidate) ? candidate : nil
+    }
+    let canSave = normalizedName != nil && duplicateName == nil
+    let errorMessage =
+      duplicateName.map { "既に「#\($0)」が登録されています" }
+      ?? tagValidationErrorMessage(for: validationResult)
 
     VStack(alignment: .leading, spacing: 16) {
-      Text(context.title)
-        .font(TagStyle.editorTitleFont)
-        .foregroundColor(TagStyle.headerText)
-
       VStack(alignment: .leading, spacing: 8) {
         Text("タグ名")
           .font(TagStyle.editorLabelFont)
@@ -427,6 +465,12 @@ private struct TagEditorSheet: View {
           )
           .font(TagStyle.editorInputFont)
           .foregroundColor(TagStyle.editorInputText)
+          .onChange(of: name) { _, newValue in
+            let normalized = EpisodePersistence.normalizeTagInputWhileEditing(newValue)
+            if normalized != newValue {
+              name = normalized
+            }
+          }
         }
         .padding(.horizontal, 12)
         .frame(height: TagStyle.editorInputHeight)
@@ -434,6 +478,18 @@ private struct TagEditorSheet: View {
           RoundedRectangle(cornerRadius: TagStyle.editorInputCornerRadius)
             .stroke(TagStyle.editorInputBorder, lineWidth: TagStyle.editorInputBorderWidth)
         )
+
+        if let errorMessage {
+          Text(errorMessage)
+            .font(TagStyle.editorValidationFont)
+            .foregroundColor(TagStyle.validationText)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        Text(tagInputGuideText)
+          .font(TagStyle.editorGuideFont)
+          .foregroundColor(TagStyle.guideText)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       HStack(spacing: 12) {
@@ -445,7 +501,7 @@ private struct TagEditorSheet: View {
         .frame(maxWidth: .infinity)
         .frame(height: TagStyle.editorButtonHeight)
         .background(
-          RoundedRectangle(cornerRadius: TagStyle.editorButtonCornerRadius)
+          Capsule()
             .stroke(TagStyle.editorCancelBorder, lineWidth: 1)
         )
 
@@ -458,7 +514,7 @@ private struct TagEditorSheet: View {
         .frame(maxWidth: .infinity)
         .frame(height: TagStyle.editorButtonHeight)
         .background(
-          RoundedRectangle(cornerRadius: TagStyle.editorButtonCornerRadius)
+          Capsule()
             .fill(TagStyle.editorPrimaryFill)
         )
         .disabled(!canSave)
@@ -500,38 +556,52 @@ private struct TagUndoToastView: View {
   let onUndo: () -> Void
 
   var body: some View {
-    HStack(spacing: 12) {
-      Text("削除しました")
+    HStack(spacing: 14) {
+      Text("タグを削除しました")
         .font(TagStyle.toastFont)
         .foregroundColor(TagStyle.toastText)
       Spacer(minLength: 0)
-      Button("元に戻す") {
+      Button {
         onUndo()
       }
-      .font(TagStyle.toastButtonFont)
-      .foregroundColor(TagStyle.toastButtonText)
+      label: {
+        HStack(spacing: 6) {
+          Image(systemName: "arrow.uturn.backward")
+            .font(.system(size: 13, weight: .semibold))
+          Text("元に戻す")
+            .font(TagStyle.toastButtonFont)
+        }
+        .foregroundColor(TagStyle.toastButtonText)
+        .padding(.horizontal, 14)
+        .frame(height: TagStyle.toastButtonHeight)
+        .background(
+          Capsule()
+            .fill(TagStyle.toastButtonFill)
+        )
+      }
     }
-    .padding(.horizontal, 16)
-    .frame(height: 44)
+    .padding(.horizontal, TagStyle.toastHorizontalPadding)
+    .frame(height: TagStyle.toastHeight)
     .background(
-      RoundedRectangle(cornerRadius: 12)
+      RoundedRectangle(cornerRadius: TagStyle.toastCornerRadius)
         .fill(TagStyle.toastFill)
         .overlay(
-          RoundedRectangle(cornerRadius: 12)
-            .stroke(TagStyle.toastBorder, lineWidth: 1)
+          RoundedRectangle(cornerRadius: TagStyle.toastCornerRadius)
+            .stroke(TagStyle.toastBorder, lineWidth: TagStyle.toastBorderWidth)
         )
     )
-    .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
-    .padding(.horizontal, 16)
+    .shadow(color: Color.black.opacity(0.14), radius: 16, x: 0, y: 8)
   }
 }
 
 private func displayTagName(_ tag: Tag) -> String {
-  if tag.name.hasPrefix("#") {
-    return tag.name
-  }
-  return "#\(tag.name)"
+  let normalized = EpisodePersistence.normalizeTagName(tag.name)?.name
+    ?? EpisodePersistence.stripLeadingTagPrefix(tag.name).lowercased()
+  guard !normalized.isEmpty else { return "#" }
+  return "#\(normalized)"
 }
+
+private let tagInputGuideText = "使用可能: 漢字・ひらがな・カナ・英数字（小文字）"
 
 private enum TagStyle {
   static let figmaTopInset: CGFloat = 59
@@ -555,21 +625,25 @@ private enum TagStyle {
   static let tagIconGlyphSize: CGFloat = 18
 
   static let fabBottomOffset: CGFloat = 8
+  static let listBottomPadding: CGFloat = 0
 
-  static let headerFont = Font.custom("Roboto-Bold", size: 20)
+  static let headerFont = Font.system(size: 24, weight: .semibold)
   static let cardHeaderFont = Font.custom("Roboto-Medium", size: 16)
   static let subheaderFont = Font.custom("Roboto", size: 13)
-  static let rowTitleFont = Font.custom("Roboto-Bold", size: 15)
+  static let rowTitleFont = Font.system(size: 18, weight: .semibold)
   static let rowMetaFont = Font.custom("Roboto", size: 12)
-  static let toastFont = Font.custom("Roboto-Medium", size: 13)
-  static let toastButtonFont = Font.custom("Roboto-Medium", size: 13)
+  static let toastFont = Font.custom("Roboto-Bold", size: 15)
+  static let toastButtonFont = Font.system(size: 15, weight: .heavy)
   static let swipeActionFont = Font.custom("Roboto-Medium", size: 12)
-  static let editorTitleFont = Font.custom("Roboto-Bold", size: 18)
+  static let noticeFont = Font.custom("Roboto", size: 12)
   static let editorLabelFont = Font.custom("Roboto-Medium", size: 13)
   static let editorInputFont = Font.custom("Roboto", size: 16)
   static let editorButtonFont = Font.custom("Roboto-Bold", size: 15)
   static let editorPrimaryButtonFont = Font.system(size: 16, weight: .bold)
+  static let sheetCloseFont = Font.system(size: 15, weight: .semibold)
   static let editorPrefixFont = Font.custom("Roboto-Medium", size: 16)
+  static let editorValidationFont = Font.custom("Roboto", size: 12)
+  static let editorGuideFont = Font.custom("Roboto", size: 12)
   static let searchLabelFont = Font.custom("Roboto-Medium", size: 12)
   static let searchQueryFont = Font.custom("Roboto", size: 14)
   static let searchCountFont = Font.custom("Roboto", size: 13)
@@ -588,7 +662,6 @@ private enum TagStyle {
   static let editIconTint = HomeStyle.fabRed
   static let editButtonFill = HomeStyle.fabRed.opacity(0.12)
   static let editButtonBorder = HomeStyle.fabRed.opacity(0.45)
-  static let swipeActionTint = HomeStyle.destructiveRed
   static let editorPlaceholderText = Color.black.opacity(0.5)
   static let editorInputText = Color(hex: "0A0A0A")
   static let editorInputBorder = Color(hex: "D1D5DC")
@@ -597,17 +670,22 @@ private enum TagStyle {
   static let searchLabelFill = HomeStyle.fabRed.opacity(0.08)
   static let searchQueryText = Color(hex: "4A5565")
   static let searchCountText = Color(hex: "4A5565")
+  static let noticeText = Color(hex: "4A5565")
+  static let noticeIconText = Color(hex: "4A5565")
   static let emptyTitleText = rowTitleText
   static let emptyBodyText = rowMetaText
   static let editorPrimaryFill = HomeStyle.fabRed
   static let editorPrimaryText = Color.white
   static let editorCancelBorder = Color(hex: "CAC4D0")
   static let editorCancelText = Color(hex: "49454F")
+  static let validationText = HomeStyle.destructiveRed
+  static let guideText = Color(hex: "6B7280")
 
-  static let toastFill = Color(hex: "FFFFFF")
-  static let toastBorder = Color(hex: "E5E7EB")
+  static let toastFill = Color(hex: "FFF4F4")
+  static let toastBorder = HomeStyle.fabRed.opacity(0.32)
   static let toastText = Color(hex: "2A2525")
-  static let toastButtonText = HomeStyle.fabRed
+  static let toastButtonText = Color.white
+  static let toastButtonFill = HomeStyle.fabRed
 
   static let cardShadowPrimary = Color.black.opacity(0.12)
   static let cardShadowPrimaryRadius: CGFloat = 2
@@ -619,23 +697,16 @@ private enum TagStyle {
   static let editorInputHeight: CGFloat = 44
   static let editorInputCornerRadius: CGFloat = 10
   static let editorInputBorderWidth: CGFloat = 0.66
-  static let editorButtonHeight: CGFloat = 44
-  static let editorButtonCornerRadius: CGFloat = 12
+  static let editorButtonHeight: CGFloat = 48
+  static let toastHeight: CGFloat = 60
+  static let toastCornerRadius: CGFloat = 14
+  static let toastHorizontalPadding: CGFloat = 18
+  static let toastButtonHeight: CGFloat = 36
+  static let toastBorderWidth: CGFloat = 1.2
+  static let toastBottomPadding: CGFloat = 10
 }
 
 extension TagListView {
-  fileprivate func baseSafeAreaBottom() -> CGFloat {
-    #if canImport(UIKit)
-      let windowScene = UIApplication.shared.connectedScenes
-        .compactMap { $0 as? UIWindowScene }
-        .first
-      if let window = windowScene?.windows.first(where: { $0.isKeyWindow }) {
-        return window.safeAreaInsets.bottom
-      }
-    #endif
-    return 0
-  }
-
   fileprivate func deleteTag(_ tag: Tag) {
     let episodeIds = modelContext.softDeleteTag(tag)
     pendingUndo = PendingTagDelete(tag: tag, episodeIds: episodeIds)
@@ -660,23 +731,21 @@ extension TagListView {
     undoTask?.cancel()
   }
 
-  fileprivate func normalizedTagName(_ value: String) -> String? {
-    var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.hasPrefix("#") {
-      trimmed.removeFirst()
-      trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    guard !trimmed.isEmpty else { return nil }
-    return trimmed
-  }
-
   fileprivate func normalizedQuery(_ value: String) -> String {
-    var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.hasPrefix("#") {
-      trimmed.removeFirst()
-      trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    return trimmed
+    EpisodePersistence.stripLeadingTagPrefix(value)
+  }
+}
+
+private func tagValidationErrorMessage(for result: TagValidationResult) -> String? {
+  switch result {
+  case .valid:
+    return nil
+  case .empty:
+    return nil
+  case .tooLong:
+    return "20文字以内で入力してください"
+  case .containsDisallowedCharacters:
+    return "使用できるのは日本語・英数字のみです（記号・絵文字・空白は使えません）"
   }
 }
 

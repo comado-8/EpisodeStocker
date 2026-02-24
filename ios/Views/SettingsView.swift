@@ -174,7 +174,7 @@ private enum SettingsStyle {
     static let iconGlyphSize: CGFloat = 18
     static let chevronSize: CGFloat = 12
 
-    static let headerFont = Font.custom("Roboto-Bold", size: 20)
+    static let headerFont = Font.system(size: 24, weight: .semibold)
     static let subheaderFont = Font.custom("Roboto", size: 13)
     static let rowTitleFont = Font.custom("Roboto-Bold", size: 15)
     static let rowBodyFont = Font.custom("Roboto", size: 12)

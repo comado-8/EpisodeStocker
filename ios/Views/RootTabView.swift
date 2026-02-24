@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootTabView: View {
     @State private var selection: RootTab = .home
+    @EnvironmentObject private var router: AppRouter
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -22,6 +23,19 @@ struct RootTabView: View {
             HomeTabBarView(selection: $selection)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .onChange(of: selection) { oldValue, newValue in
+            guard oldValue == .home, newValue != .home else { return }
+            guard router.hasUnsavedEpisodeDetailChanges else { return }
+            selection = oldValue
+            router.requestRootTabSwitch(newValue)
+        }
+        .onChange(of: router.committedRootTabSwitch) { _, destination in
+            guard let destination else { return }
+            router.hasUnsavedEpisodeDetailChanges = false
+            router.path.removeAll()
+            selection = destination
+            router.consumeCommittedRootTabSwitch()
+        }
     }
 }
 

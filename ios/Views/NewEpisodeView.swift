@@ -5,10 +5,11 @@ struct NewEpisodeView: View {
   @EnvironmentObject var store: EpisodeStore
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Query(filter: #Predicate<Tag> { $0.isSoftDeleted == false })
+  private var allTags: [Tag]
 
-  @State private var selectedDate: Date?
+  @State private var selectedDate: Date? = Date()
   @State private var selectedReleaseDate: Date?
-  @State private var selectedCategory: String?
   @State private var title = ""
   @State private var bodyText = ""
   @State private var personText = ""
@@ -17,17 +18,16 @@ struct NewEpisodeView: View {
   @State private var selectedTags: [String] = []
   @State private var projectText = ""
   @State private var selectedProjects: [String] = []
-  @State private var emotionText = ""
   @State private var selectedEmotions: [String] = []
   @State private var placeText = ""
   @State private var selectedPlaceChip: String?
   @State private var showsDetails = true
+  @State private var showsTagSelectionSheet = false
   @State private var isKeyboardVisible = false
 
   // focus states to control inline suggestion visibility
   @State private var personFieldFocused = false
   @State private var projectFieldFocused = false
-  @State private var emotionFieldFocused = false
   @State private var placeFieldFocused = false
 
   // sheet presented via item to avoid presentation race
@@ -40,12 +40,57 @@ struct NewEpisodeView: View {
   private let maxPersons = 10
   private let maxTags = 10
   private let maxEmotions = 3
-  private let maxProjects = 10
-  private let categoryOptions = ["会話ネタ", "アイデア", "学び", "トラブル"]
+  private let maxProjects = 3
 
   private var isSaveEnabled: Bool {
     !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      && !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && !isBodyOverLimit
+      && !isPersonNameOverLimit
+      && !isProjectNameOverLimit
+      && !isPlaceNameOverLimit
+  }
+
+  private var bodyCharacterCountText: String {
+    "\(bodyText.count) / \(EpisodePersistence.bodyCharacterLimit)"
+  }
+
+  private var isBodyOverLimit: Bool {
+    bodyText.count > EpisodePersistence.bodyCharacterLimit
+  }
+
+  private var bodyLengthValidationMessage: String? {
+    guard isBodyOverLimit else { return nil }
+    return "本文は\(EpisodePersistence.bodyCharacterLimit)文字以内で入力してください"
+  }
+
+  private var isPersonNameOverLimit: Bool {
+    personText.trimmingCharacters(in: .whitespacesAndNewlines).count
+      > EpisodePersistence.personNameCharacterLimit
+  }
+
+  private var isProjectNameOverLimit: Bool {
+    projectText.trimmingCharacters(in: .whitespacesAndNewlines).count
+      > EpisodePersistence.projectNameCharacterLimit
+  }
+
+  private var isPlaceNameOverLimit: Bool {
+    placeText.trimmingCharacters(in: .whitespacesAndNewlines).count
+      > EpisodePersistence.placeNameCharacterLimit
+  }
+
+  private var personValidationErrorMessage: String? {
+    guard isPersonNameOverLimit else { return nil }
+    return "人物は\(EpisodePersistence.personNameCharacterLimit)文字以内で入力してください"
+  }
+
+  private var projectValidationErrorMessage: String? {
+    guard isProjectNameOverLimit else { return nil }
+    return "企画名は\(EpisodePersistence.projectNameCharacterLimit)文字以内で入力してください"
+  }
+
+  private var placeValidationErrorMessage: String? {
+    guard isPlaceNameOverLimit else { return nil }
+    return "場所は\(EpisodePersistence.placeNameCharacterLimit)文字以内で入力してください"
   }
 
   var body: some View {
@@ -65,7 +110,7 @@ struct NewEpisodeView: View {
           formView
         }
         .padding(.top, topPadding)
-        .padding(.bottom, actionBarHeight + tabBarOffset)
+        .padding(.bottom, actionBarHeight + tabBarOffset + 8)
         .padding(.horizontal, horizontalPadding)
         .frame(maxWidth: .infinity, alignment: .topLeading)
       }
@@ -83,9 +128,28 @@ struct NewEpisodeView: View {
     }
     .toolbar(.hidden, for: .navigationBar)
     .sheet(item: $suggestionManagerField) { field in
-      SuggestionManagerView(repository: store.suggestionRepository, fieldType: field.field)
+      SuggestionManagerView(
+        repository: store.suggestionRepository,
+        fieldType: field.field,
+        onSelect: { value in
+          applySuggestionSelection(fieldType: field.field, value: value)
+        }
+      )
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .presentationBackground(Color.white)
+    }
+    .sheet(isPresented: $showsTagSelectionSheet) {
+      NewEpisodeRegisteredTagSelectionSheet(
+        tags: registeredTagSuggestions,
+        selectedTags: selectedTags,
+        onSelect: { value in
+          addTag(value)
+        }
+      )
+      .presentationDetents([.medium, .large])
+      .presentationDragIndicator(.visible)
+      .presentationBackground(Color.white)
     }
     #if canImport(UIKit)
       .onReceive(
@@ -97,6 +161,12 @@ struct NewEpisodeView: View {
         NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
       ) { _ in
         isKeyboardVisible = false
+      }
+      .onChange(of: tagText) { _, newValue in
+        let normalized = EpisodePersistence.normalizeTagInputWhileEditing(newValue)
+        if normalized != newValue {
+          tagText = normalized
+        }
       }
     #endif
   }
@@ -126,24 +196,46 @@ struct NewEpisodeView: View {
 
   private var formView: some View {
     VStack(alignment: .leading, spacing: NewEpisodeStyle.sectionSpacing) {
-      labeledDateField(title: "日付", required: true, placeholder: "日付を選択", date: $selectedDate)
+      labeledDateField(
+        title: "日付",
+        required: true,
+        placeholder: "日付を選択",
+        date: $selectedDate
+      )
 
       labeledField(title: "タイトル", required: true, placeholder: "タイトルを入力", text: $title)
 
       VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
-        FieldLabel(title: "本文", required: true)
-        EpisodeTextArea(placeholder: "思いついたエピソードを自由に入力してください", text: $bodyText)
+        FieldLabel(title: "本文")
+        HStack {
+          Spacer(minLength: 0)
+          Text(bodyCharacterCountText)
+            .font(NewEpisodeStyle.counterFont)
+            .foregroundColor(NewEpisodeStyle.limitText)
+        }
+        EpisodeTextArea(
+          placeholder: "思いついたエピソードを自由に入力してください",
+          text: $bodyText
+        )
+        if let bodyLengthValidationMessage {
+          Text(bodyLengthValidationMessage)
+            .font(NewEpisodeStyle.validationFont)
+            .foregroundColor(NewEpisodeStyle.validationText)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
 
-      labeledDateField(title: "解禁可能日", placeholder: "日付を選択", date: $selectedReleaseDate)
-
       VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
-        FieldLabel(title: "種別")
-        EpisodeDropdownField(
-          placeholder: "種別を選択",
-          selection: $selectedCategory,
-          options: categoryOptions
+        labeledDateField(
+          title: "解禁可能日",
+          placeholder: "日付を選択",
+          date: $selectedReleaseDate,
+          allowsClearing: true
         )
+        Text("未設定の場合は「解禁前」に表示されます。")
+          .font(NewEpisodeStyle.tagGuideFont)
+          .foregroundColor(NewEpisodeStyle.tagGuideText)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       detailToggleButton
@@ -204,10 +296,79 @@ struct NewEpisodeView: View {
             suggestionManagerField = SuggestionField(field: field)
           }
         }
+        if let projectValidationErrorMessage {
+          Text(projectValidationErrorMessage)
+            .font(NewEpisodeStyle.validationFont)
+            .foregroundColor(NewEpisodeStyle.validationText)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
 
       VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
-        FieldLabel(title: "人物（Who）", limitText: "最大\(maxPersons)")
+        FieldLabel(title: "タグ", limitText: "最大\(maxTags)")
+        EpisodeMultiChipInputField(
+          placeholder: "タグを入力してEnter",
+          text: $tagText,
+          selections: $selectedTags,
+          maxSelections: maxTags,
+          onCommit: { addTag(tagText) },
+          onRemove: removeTag
+        )
+        if let tagValidationErrorMessage {
+          Text(tagValidationErrorMessage)
+            .font(NewEpisodeStyle.validationFont)
+            .foregroundColor(NewEpisodeStyle.validationText)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        Text(tagInputGuideText)
+          .font(NewEpisodeStyle.tagGuideFont)
+          .foregroundColor(NewEpisodeStyle.tagGuideText)
+          .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 8) {
+          Button {
+            showsTagSelectionSheet = true
+          } label: {
+            HStack(spacing: 4) {
+              Image(systemName: "tag")
+                .font(.system(size: 12, weight: .semibold))
+              Text("登録タグ選択")
+            }
+            .font(NewEpisodeStyle.tagGuideFont)
+            .foregroundColor(HomeStyle.fabRed)
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(HomeStyle.fabRed.opacity(0.08))
+            .overlay(
+              Capsule()
+                .stroke(HomeStyle.fabRed.opacity(0.4), lineWidth: 1)
+            )
+            .clipShape(Capsule())
+          }
+          .buttonStyle(.plain)
+
+          ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: NewEpisodeStyle.chipSpacing) {
+              ForEach(filteredTagSuggestions(query: tagText), id: \.self) { tag in
+                Button {
+                  addTag(tag)
+                } label: {
+                  EpisodeChip(title: tag, height: NewEpisodeStyle.chipHeightSmall)
+                }
+                .buttonStyle(.plain)
+              }
+            }
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        }
+      }
+
+      VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
+        FieldLabel(title: "感情", limitText: "最大\(maxEmotions)")
+        emotionPresetSelector
+      }
+
+      VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
+        FieldLabel(title: "人物", limitText: "最大\(maxPersons)")
         EpisodeMultiChipInputField(
           placeholder: "人物名を入力してEnter",
           text: $personText,
@@ -230,44 +391,12 @@ struct NewEpisodeView: View {
             suggestionManagerField = SuggestionField(field: field)
           }
         }
-      }
-
-      VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
-        FieldLabel(title: "感情", limitText: "最大\(maxEmotions)")
-        EpisodeMultiChipInputField(
-          placeholder: "感情を選択または入力",
-          text: $emotionText,
-          selections: $selectedEmotions,
-          maxSelections: maxEmotions,
-          onCommit: { addEmotion(emotionText) },
-          onRemove: removeEmotion,
-          isFocused: $emotionFieldFocused
-        )
-        InlineSuggestionList(
-          fieldType: "感情", query: $emotionText, maxItems: 3, isActive: emotionFieldFocused,
-          onSelect: { option in
-            addEmotion(option)
-            store.suggestionRepository.upsert(fieldType: "感情", value: option)
-          }
-        )
-        .environmentObject(store)
-        .onReceive(NotificationCenter.default.publisher(for: .openSuggestionManagerSheet)) { note in
-          if let field = note.object as? String, field == "感情" {
-            suggestionManagerField = SuggestionField(field: field)
-          }
+        if let personValidationErrorMessage {
+          Text(personValidationErrorMessage)
+            .font(NewEpisodeStyle.validationFont)
+            .foregroundColor(NewEpisodeStyle.validationText)
+            .fixedSize(horizontal: false, vertical: true)
         }
-      }
-
-      VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
-        FieldLabel(title: "タグ", limitText: "最大\(maxTags)")
-        EpisodeMultiChipInputField(
-          placeholder: "タグを入力してEnter",
-          text: $tagText,
-          selections: $selectedTags,
-          maxSelections: maxTags,
-          onCommit: { addTag(tagText) },
-          onRemove: removeTag
-        )
       }
 
       VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
@@ -276,14 +405,13 @@ struct NewEpisodeView: View {
           placeholder: "場所を入力",
           text: $placeText,
           selection: $selectedPlaceChip,
-          isFocused: $placeFieldFocused
+          isFocused: $placeFieldFocused,
+          onSubmit: { commitPlace(placeText) }
         )
         InlineSuggestionList(
           fieldType: "場所", query: $placeText, maxItems: 3, isActive: placeFieldFocused,
           onSelect: { option in
-            selectedPlaceChip = option
-            placeText = option
-            store.suggestionRepository.upsert(fieldType: "場所", value: option)
+            commitPlace(option)
           }
         )
         .environmentObject(store)
@@ -292,8 +420,32 @@ struct NewEpisodeView: View {
             suggestionManagerField = SuggestionField(field: field)
           }
         }
+        if let placeValidationErrorMessage {
+          Text(placeValidationErrorMessage)
+            .font(NewEpisodeStyle.validationFont)
+            .foregroundColor(NewEpisodeStyle.validationText)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
     }
+  }
+
+  private var emotionPresetSelector: some View {
+    FlowLayout(spacing: NewEpisodeStyle.chipSpacing) {
+      ForEach(emotionChipOptions, id: \.self) { option in
+        let selected = selectedEmotions.contains(option)
+        let disabled = !selected && selectedEmotions.count >= maxEmotions
+        Button {
+          toggleEmotion(option)
+        } label: {
+          EmotionPresetChip(title: option, isSelected: selected)
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.55 : 1)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   @ViewBuilder
@@ -308,17 +460,25 @@ struct NewEpisodeView: View {
 
   @ViewBuilder
   private func labeledDateField(
-    title: String, required: Bool = false, placeholder: String, date: Binding<Date?>
+    title: String,
+    required: Bool = false,
+    placeholder: String,
+    date: Binding<Date?>,
+    allowsClearing: Bool = false
   ) -> some View {
     VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
       FieldLabel(title: title, required: required)
-      EpisodeDateField(title: title, placeholder: placeholder, date: date)
+      EpisodeDateField(
+        title: title,
+        placeholder: placeholder,
+        date: date,
+        allowsClearing: allowsClearing
+      )
     }
   }
 
   private func addPerson(_ name: String) {
-    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return }
+    guard let trimmed = normalizedPersonName(name) else { return }
     guard selectedPersons.count < maxPersons else {
       personText = ""
       return
@@ -335,9 +495,7 @@ struct NewEpisodeView: View {
   }
 
   private func addTag(_ value: String) {
-    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    let normalized = normalizedTag(trimmed)
-    guard let normalized else { return }
+    guard let normalized = normalizedTag(value) else { return }
     guard selectedTags.count < maxTags else {
       tagText = ""
       return
@@ -353,14 +511,61 @@ struct NewEpisodeView: View {
   }
 
   private func normalizedTag(_ value: String) -> String? {
-    guard !value.isEmpty else { return nil }
-    if value.hasPrefix("#") { return value }
-    return "#\(value)"
+    guard let normalized = EpisodePersistence.validateTagNameInput(value).normalizedName else {
+      return nil
+    }
+    return "#\(normalized)"
+  }
+
+  private var registeredTagSuggestions: [String] {
+    allTags
+      .sorted { $0.updatedAt > $1.updatedAt }
+      .map(displayTagName)
+  }
+
+  private func displayTagName(_ tag: Tag) -> String {
+    guard let normalized = EpisodePersistence.normalizeTagName(tag.name)?.name else {
+      return "#"
+    }
+    return "#\(normalized)"
+  }
+
+  private func filteredTagSuggestions(query: String) -> [String] {
+    let normalizedQuery = EpisodePersistence.stripLeadingTagPrefix(
+      EpisodePersistence.normalizeTagInputWhileEditing(query.trimmingCharacters(in: .whitespacesAndNewlines))
+    )
+    var seen = Set<String>()
+    return registeredTagSuggestions.filter { suggestion in
+      guard !selectedTags.contains(suggestion) else { return false }
+      let candidate = EpisodePersistence.stripLeadingTagPrefix(
+        EpisodePersistence.normalizeTagInputWhileEditing(suggestion)
+      )
+      if !normalizedQuery.isEmpty && !candidate.contains(normalizedQuery) {
+        return false
+      }
+      let inserted = seen.insert(candidate).inserted
+      return inserted
+    }
+    .prefix(3)
+    .map { $0 }
+  }
+
+  private var tagValidationErrorMessage: String? {
+    guard !tagText.isEmpty else { return nil }
+    switch EpisodePersistence.validateTagNameInput(tagText) {
+    case .valid:
+      return nil
+    case .empty:
+      return nil
+    case .tooLong:
+      return "20文字以内で入力してください"
+    case .containsDisallowedCharacters:
+      return "使用できるのは日本語・英数字のみです（記号・絵文字・空白は使えません）"
+    }
   }
 
   private func addProject(_ value: String) {
-    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return }
+    guard let trimmed = normalizedProjectName(value) else { return }
     guard selectedProjects.count < maxProjects else {
       projectText = ""
       return
@@ -379,19 +584,64 @@ struct NewEpisodeView: View {
   private func addEmotion(_ value: String) {
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
+    guard EpisodePersistence.emotionPresetOptions.contains(trimmed) else { return }
     guard selectedEmotions.count < maxEmotions else {
-      emotionText = ""
       return
     }
     if !selectedEmotions.contains(trimmed) {
       selectedEmotions.append(trimmed)
-      store.suggestionRepository.upsert(fieldType: "感情", value: trimmed)
     }
-    emotionText = ""
+  }
+
+  private func toggleEmotion(_ value: String) {
+    if selectedEmotions.contains(value) {
+      removeEmotion(value)
+    } else {
+      addEmotion(value)
+    }
   }
 
   private func removeEmotion(_ value: String) {
     selectedEmotions.removeAll { $0 == value }
+  }
+
+  private var emotionChipOptions: [String] {
+    let extraSelections = selectedEmotions.filter { selected in
+      !EpisodePersistence.emotionPresetOptions.contains(selected)
+    }
+    return EpisodePersistence.emotionPresetOptions + extraSelections
+  }
+
+  private func commitPlace(_ value: String) {
+    guard let trimmed = normalizedPlaceName(value) else { return }
+    selectedPlaceChip = trimmed
+    placeText = ""
+    store.suggestionRepository.upsert(fieldType: "場所", value: trimmed)
+  }
+
+  private func normalizedPersonName(_ value: String) -> String? {
+    EpisodePersistence.normalizeNameInput(value, limit: EpisodePersistence.personNameCharacterLimit)
+  }
+
+  private func normalizedProjectName(_ value: String) -> String? {
+    EpisodePersistence.normalizeNameInput(value, limit: EpisodePersistence.projectNameCharacterLimit)
+  }
+
+  private func normalizedPlaceName(_ value: String) -> String? {
+    EpisodePersistence.normalizeNameInput(value, limit: EpisodePersistence.placeNameCharacterLimit)
+  }
+
+  private func applySuggestionSelection(fieldType: String, value: String) {
+    switch fieldType {
+    case "企画名":
+      addProject(value)
+    case "人物":
+      addPerson(value)
+    case "場所":
+      commitPlace(value)
+    default:
+      break
+    }
   }
 
   private var actionBarView: some View {
@@ -433,21 +683,27 @@ struct NewEpisodeView: View {
   private func save() {
     let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedTitle.isEmpty, !trimmedBody.isEmpty else { return }
-    let trimmedType = (selectedCategory ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    let type = trimmedType.isEmpty ? nil : trimmedType
-    let trimmedPlace = (selectedPlaceChip ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard
+      !trimmedTitle.isEmpty,
+      !isBodyOverLimit,
+      !isPersonNameOverLimit,
+      !isProjectNameOverLimit,
+      !isPlaceNameOverLimit
+    else { return }
+    let selectedPlaceValue = (selectedPlaceChip ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let placeValue =
+      selectedPlaceValue.isEmpty ? normalizedPlaceName(placeText) : selectedPlaceValue
     _ = modelContext.createEpisode(
       title: trimmedTitle,
-      body: trimmedBody,
+      body: trimmedBody.isEmpty ? nil : trimmedBody,
       date: selectedDate ?? Date(),
       unlockDate: selectedReleaseDate,
-      type: type,
+      type: nil,
       tags: selectedTags,
       persons: selectedPersons,
       projects: selectedProjects,
       emotions: selectedEmotions,
-      place: trimmedPlace.isEmpty ? nil : trimmedPlace
+      place: placeValue
     )
     dismiss()
   }
@@ -474,6 +730,8 @@ private enum NewEpisodeStyle {
   static let actionButtonWidth: CGFloat = 120
   static let actionBarContentHeight: CGFloat = 72
   static let selectedChipHeight: CGFloat = 28
+  static let calendarSheetHeight: CGFloat = 560
+  static let calendarSheetSpacing: CGFloat = 10
 
   static let labelText = Color(hex: "4A5565")
   static let requiredText = Color(hex: "FB2C36")
@@ -482,6 +740,9 @@ private enum NewEpisodeStyle {
   static let inputBorder = Color(hex: "D1D5DC")
   static let chipFill = Color(hex: "F3F4F6")
   static let chipText = Color(hex: "364153")
+  static let emotionPresetSelectedFill = HomeStyle.fabRed.opacity(0.12)
+  static let emotionPresetSelectedBorder = HomeStyle.fabRed.opacity(0.5)
+  static let emotionPresetSelectedText = HomeStyle.fabRed
   static let limitText = Color(hex: "9CA3AF")
   static let headerText = Color(hex: "2A2525")
 
@@ -490,12 +751,22 @@ private enum NewEpisodeStyle {
   static let secondaryButtonBorder = Color(hex: "CAC4D0")
   static let secondaryButtonText = Color(hex: "49454F")
   static let actionBarBackground = Color.white
+  static let calendarTint = Color(hex: "355C7D")
+  static let calendarToolbarButtonFill = Color(hex: "E2E8F0")
+  static let calendarToolbarButtonText = Color(hex: "1F2937")
+  static let calendarToolbarButtonDestructiveText = HomeStyle.destructiveRed
 
   static let labelFont = Font.custom("Roboto-Medium", size: 14)
   static let inputFont = Font.custom("Roboto", size: 16)
-  static let headerFont = Font.custom("Roboto-Medium", size: 20)
+  static let headerFont = Font.system(size: 20, weight: .semibold)
   static let detailToggleFont = Font.custom("Roboto-Medium", size: 16)
   static let actionButtonFont = Font.system(size: 16, weight: .bold)
+  static let calendarToolbarButtonFont = Font.system(size: 15, weight: .semibold)
+  static let counterFont = Font.custom("Roboto", size: 12)
+  static let validationFont = Font.custom("Roboto", size: 12)
+  static let tagGuideFont = Font.custom("Roboto", size: 12)
+  static let validationText = HomeStyle.destructiveRed
+  static let tagGuideText = Color(hex: "6B7280")
 
   static let dateFormatter: DateFormatter = {
     let formatter = DateFormatter()
@@ -505,6 +776,8 @@ private enum NewEpisodeStyle {
     return formatter
   }()
 }
+
+private let tagInputGuideText = "使用可能: 漢字・ひらがな・カナ・英数字（小文字）"
 
 private struct FieldLabel: View {
   let title: String
@@ -555,6 +828,7 @@ private struct EpisodeChipInputField: View {
   @Binding var text: String
   @Binding var selection: String?
   var isFocused: Binding<Bool>? = nil
+  var onSubmit: (() -> Void)? = nil
 
   @FocusState private var focused: Bool
 
@@ -577,6 +851,11 @@ private struct EpisodeChipInputField: View {
         .onChange(of: focused) { _, newValue in
           isFocused?.wrappedValue = newValue
         }
+        .onSubmit {
+          onSubmit?()
+          focused = false
+          isFocused?.wrappedValue = false
+        }
       }
       Spacer(minLength: 0)
     }
@@ -587,48 +866,6 @@ private struct EpisodeChipInputField: View {
       RoundedRectangle(cornerRadius: NewEpisodeStyle.inputCornerRadius)
         .stroke(NewEpisodeStyle.inputBorder, lineWidth: NewEpisodeStyle.inputBorderWidth)
     )
-  }
-}
-
-private struct EpisodeDropdownField: View {
-  let placeholder: String
-  @Binding var selection: String?
-  let options: [String]
-
-  private var displayText: String {
-    selection ?? placeholder
-  }
-
-  private var displayColor: Color {
-    selection == nil ? NewEpisodeStyle.placeholderText : NewEpisodeStyle.inputText
-  }
-
-  var body: some View {
-    Menu {
-      ForEach(options, id: \.self) { option in
-        Button(option) {
-          selection = option
-        }
-      }
-    } label: {
-      HStack {
-        Text(displayText)
-          .font(NewEpisodeStyle.inputFont)
-          .foregroundColor(displayColor)
-        Spacer(minLength: 0)
-        Image(systemName: "chevron.down")
-          .font(.system(size: 14, weight: .semibold))
-          .foregroundColor(NewEpisodeStyle.chipText)
-      }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
-      .frame(height: NewEpisodeStyle.inputHeight)
-      .background(
-        RoundedRectangle(cornerRadius: NewEpisodeStyle.inputCornerRadius)
-          .stroke(NewEpisodeStyle.inputBorder, lineWidth: NewEpisodeStyle.inputBorderWidth)
-      )
-    }
-    .buttonStyle(.plain)
   }
 }
 
@@ -738,6 +975,7 @@ private struct EpisodeDateField: View {
   let title: String
   let placeholder: String
   @Binding var date: Date?
+  var allowsClearing: Bool = false
 
   @State private var showsPicker = false
   @State private var tempDate = Date()
@@ -776,11 +1014,12 @@ private struct EpisodeDateField: View {
     .buttonStyle(.plain)
     .sheet(isPresented: $showsPicker) {
       NavigationStack {
-        VStack {
+        VStack(spacing: NewEpisodeStyle.calendarSheetSpacing) {
           DatePicker("", selection: $tempDate, displayedComponents: .date)
             .datePickerStyle(.graphical)
             .labelsHidden()
-            .padding(.horizontal, 8)
+            .tint(NewEpisodeStyle.calendarTint)
+            .padding(.horizontal, 4)
 
           Button("決定") {
             date = tempDate
@@ -792,15 +1031,123 @@ private struct EpisodeDateField: View {
           .frame(height: 48)
           .background(NewEpisodeStyle.primaryButtonFill)
           .clipShape(Capsule())
-          .padding(.bottom, 12)
         }
+        .padding(.top, 8)
+        .padding(.bottom, 8)
         .navigationTitle(title)
         .toolbar {
-          ToolbarItem(placement: .cancellationAction) {
-            Button("閉じる") {
+          ToolbarItem(placement: .topBarLeading) {
+            Button {
               showsPicker = false
+            } label: {
+              CalendarToolbarButtonLabel(title: "閉じる")
+            }
+            .buttonStyle(.plain)
+          }
+          if allowsClearing {
+            ToolbarItem(placement: .topBarTrailing) {
+              Button {
+                date = nil
+                showsPicker = false
+              } label: {
+                CalendarToolbarButtonLabel(
+                  title: "クリア",
+                  textColor: NewEpisodeStyle.calendarToolbarButtonDestructiveText
+                )
+              }
+              .buttonStyle(.plain)
             }
           }
+        }
+      }
+      .presentationDetents([.height(NewEpisodeStyle.calendarSheetHeight)])
+      .presentationDragIndicator(.visible)
+    }
+  }
+}
+
+private struct CalendarToolbarButtonLabel: View {
+  let title: String
+  var textColor: Color = NewEpisodeStyle.calendarToolbarButtonText
+
+  var body: some View {
+    Text(title)
+      .font(NewEpisodeStyle.calendarToolbarButtonFont)
+      .lineLimit(1)
+      .fixedSize(horizontal: true, vertical: false)
+      .foregroundColor(textColor)
+      .padding(.horizontal, 10)
+      .padding(.vertical, 8)
+      .background(
+        Capsule()
+          .fill(NewEpisodeStyle.calendarToolbarButtonFill)
+      )
+  }
+}
+
+private struct NewEpisodeRegisteredTagSelectionSheet: View {
+  @Environment(\.dismiss) private var dismiss
+  let tags: [String]
+  let selectedTags: [String]
+  let onSelect: (String) -> Void
+  @State private var query = ""
+
+  private var filteredTags: [String] {
+    let trimmed = EpisodePersistence.stripLeadingTagPrefix(
+      EpisodePersistence.normalizeTagInputWhileEditing(query.trimmingCharacters(in: .whitespacesAndNewlines))
+    )
+    let available = tags.filter { !selectedTags.contains($0) }
+    guard !trimmed.isEmpty else { return available }
+    return available.filter { tag in
+      let normalized = EpisodePersistence.stripLeadingTagPrefix(
+        EpisodePersistence.normalizeTagInputWhileEditing(tag)
+      )
+      return normalized.contains(trimmed)
+    }
+  }
+
+  var body: some View {
+    NavigationStack {
+      VStack(spacing: 12) {
+        HStack(spacing: 8) {
+          Image(systemName: "magnifyingglass")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundColor(NewEpisodeStyle.labelText)
+          TextField("タグを検索", text: $query)
+            .font(NewEpisodeStyle.inputFont)
+            .foregroundColor(NewEpisodeStyle.inputText)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: NewEpisodeStyle.inputHeight)
+        .background(
+          RoundedRectangle(cornerRadius: NewEpisodeStyle.inputCornerRadius)
+            .stroke(NewEpisodeStyle.inputBorder, lineWidth: NewEpisodeStyle.inputBorderWidth)
+        )
+
+        ScrollView {
+          FlowLayout(spacing: NewEpisodeStyle.chipSpacing) {
+            ForEach(filteredTags, id: \.self) { tag in
+              Button {
+                onSelect(tag)
+                dismiss()
+              } label: {
+                EpisodeChip(title: tag, height: NewEpisodeStyle.chipHeightSmall)
+              }
+              .buttonStyle(.plain)
+            }
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.vertical, 4)
+        }
+      }
+      .padding(16)
+      .navigationTitle("登録タグ選択")
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button("閉じる") {
+            dismiss()
+          }
+          .font(NewEpisodeStyle.calendarToolbarButtonFont)
         }
       }
     }
@@ -847,6 +1194,36 @@ private struct EpisodeChip: View {
       .frame(height: height)
       .background(NewEpisodeStyle.chipFill)
       .clipShape(Capsule())
+  }
+}
+
+private struct EmotionPresetChip: View {
+  let title: String
+  let isSelected: Bool
+
+  var body: some View {
+    HStack(spacing: 6) {
+      if isSelected {
+        Image(systemName: "checkmark")
+          .font(.system(size: 11, weight: .semibold))
+      }
+      Text(title)
+        .font(NewEpisodeStyle.labelFont)
+    }
+      .foregroundColor(isSelected ? NewEpisodeStyle.emotionPresetSelectedText : NewEpisodeStyle.chipText)
+      .padding(.horizontal, 14)
+      .frame(height: NewEpisodeStyle.chipHeightSmall)
+      .background(
+        Capsule()
+          .fill(isSelected ? NewEpisodeStyle.emotionPresetSelectedFill : NewEpisodeStyle.chipFill)
+      )
+      .overlay(
+        Capsule()
+          .stroke(
+            isSelected ? NewEpisodeStyle.emotionPresetSelectedBorder : NewEpisodeStyle.inputBorder,
+            lineWidth: isSelected ? 1.2 : 1
+          )
+      )
   }
 }
 

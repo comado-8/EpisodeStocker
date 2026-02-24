@@ -34,6 +34,33 @@ final class PersistenceUpsertTests: XCTestCase {
         XCTAssertEqual(revived.nameNormalized, "仕事")
     }
 
+    func testUpsertTagReusesLegacyFullwidthHashTag() throws {
+        let legacy = Tag(name: "＃仕事", nameNormalized: "＃仕事")
+        context.insert(legacy)
+        try context.save()
+
+        let reused = try XCTUnwrap(context.upsertTag(name: "仕事"))
+
+        XCTAssertEqual(reused.id, legacy.id)
+        XCTAssertEqual(reused.name, "仕事")
+        XCTAssertEqual(reused.nameNormalized, "仕事")
+    }
+
+    func testUpsertTagCompactsWhitespaces() throws {
+        let tag = try XCTUnwrap(context.upsertTag(name: " # T a　g Name "))
+        XCTAssertEqual(tag.name, "tagname")
+        XCTAssertEqual(tag.nameNormalized, "tagname")
+    }
+
+    func testUpsertTagCanonicalizesEnglishCaseToLowercase() throws {
+        let first = try XCTUnwrap(context.upsertTag(name: "#TaG"))
+        let second = try XCTUnwrap(context.upsertTag(name: "#TAG"))
+
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(second.name, "tag")
+        XCTAssertEqual(second.nameNormalized, "tag")
+    }
+
     func testUpsertTagsDeduplicatesNormalizedValues() throws {
         let tags = context.upsertTags(from: ["#Alpha", " alpha ", "ALPHA", "#Beta", "  "])
         XCTAssertEqual(tags.count, 2)

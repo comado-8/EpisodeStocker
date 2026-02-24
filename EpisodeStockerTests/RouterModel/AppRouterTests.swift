@@ -31,4 +31,24 @@ final class AppRouterTests: XCTestCase {
 
         XCTAssertTrue(router.path.isEmpty)
     }
+
+    func testRootTabSwitchRequestLifecycle() {
+        let router = AppRouter()
+
+        router.requestRootTabSwitch(.analytics)
+        XCTAssertEqual(router.pendingRootTabSwitch, .analytics)
+        XCTAssertNil(router.committedRootTabSwitch)
+
+        router.cancelRootTabSwitchRequest()
+        XCTAssertNil(router.pendingRootTabSwitch)
+        XCTAssertNil(router.committedRootTabSwitch)
+
+        router.requestRootTabSwitch(.tags)
+        router.commitRootTabSwitch(.tags)
+        XCTAssertNil(router.pendingRootTabSwitch)
+        XCTAssertEqual(router.committedRootTabSwitch, .tags)
+
+        router.consumeCommittedRootTabSwitch()
+        XCTAssertNil(router.committedRootTabSwitch)
+    }
 }

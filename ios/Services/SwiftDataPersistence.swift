@@ -1,22 +1,124 @@
 import Foundation
 import SwiftData
 
+enum TagValidationResult: Equatable {
+    case valid(name: String)
+    case empty
+    case tooLong(limit: Int)
+    case containsDisallowedCharacters
+
+    var normalizedName: String? {
+        guard case let .valid(name) = self else { return nil }
+        return name
+    }
+}
+
 @MainActor
 enum EpisodePersistence {
-    static func normalizeName(_ value: String) -> (name: String, normalized: String)? {
+    private nonisolated static let tagNameLimit = 20
+    nonisolated static let bodyCharacterLimit = 800
+    nonisolated static let personNameCharacterLimit = 10
+    nonisolated static let projectNameCharacterLimit = 20
+    nonisolated static let placeNameCharacterLimit = 20
+    nonisolated static let emotionPresetOptions: [String] = [
+        "楽しい",
+        "嬉しい",
+        "ワクワク",
+        "安心",
+        "達成感",
+        "感謝",
+        "緊張",
+        "不安",
+        "辛い",
+        "悔しい",
+        "悲しい",
+        "怒り",
+        "驚き",
+        "困惑",
+        "集中",
+    ]
+
+    nonisolated static func stripLeadingTagPrefix(_ value: String) -> String {
+        var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let first = trimmed.first, first == "#" || first == "＃" {
+            trimmed.removeFirst()
+            trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return trimmed
+    }
+
+    nonisolated static func normalizeName(_ value: String) -> (name: String, normalized: String)? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return (trimmed, trimmed.lowercased())
     }
 
-    static func normalizeTagName(_ value: String) -> (name: String, normalized: String)? {
-        var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix("#") {
-            trimmed.removeFirst()
-            trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
+    nonisolated static func normalizeTagName(_ value: String) -> (name: String, normalized: String)? {
+        let canonical = normalizedTagCandidate(value)
+        guard !canonical.isEmpty else { return nil }
+        return (canonical, canonical)
+    }
+
+    nonisolated static func validateTagNameInput(_ value: String) -> TagValidationResult {
+        let strippedPrefix = stripLeadingTagPrefix(value)
+        let normalized = applyingNFKC(strippedPrefix)
+        let compacted = removingTagWhitespaces(normalized)
+
+        let canonical = compacted.lowercased()
+
+        guard !canonical.isEmpty else { return .empty }
+        guard !containsWhitespace(normalized) else { return .containsDisallowedCharacters }
+        guard canonical.count <= tagNameLimit else { return .tooLong(limit: tagNameLimit) }
+        guard containsOnlyAllowedTagCharacters(canonical) else { return .containsDisallowedCharacters }
+
+        return .valid(name: canonical)
+    }
+
+    nonisolated static func normalizeTagInputWhileEditing(_ value: String) -> String {
+        applyingNFKC(value).lowercased()
+    }
+
+    nonisolated static func clampBodyText(_ value: String, limit: Int = bodyCharacterLimit) -> String {
+        guard value.count > limit else { return value }
+        return String(value.prefix(limit))
+    }
+
+    nonisolated static func normalizeNameInput(
+        _ value: String,
+        limit: Int
+    ) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return (trimmed, trimmed.lowercased())
+        guard trimmed.count <= limit else { return nil }
+        return trimmed
+    }
+
+    private nonisolated static func normalizedTagCandidate(_ value: String) -> String {
+        let strippedPrefix = stripLeadingTagPrefix(value)
+        let normalized = applyingNFKC(strippedPrefix)
+        return removingTagWhitespaces(normalized).lowercased()
+    }
+
+    private nonisolated static func applyingNFKC(_ value: String) -> String {
+        value.precomposedStringWithCompatibilityMapping
+    }
+
+    private nonisolated static func removingTagWhitespaces(_ value: String) -> String {
+        let scalars = value.unicodeScalars.filter { scalar in
+            !CharacterSet.whitespacesAndNewlines.contains(scalar)
+        }
+        return String(String.UnicodeScalarView(scalars))
+    }
+
+    private nonisolated static func containsWhitespace(_ value: String) -> Bool {
+        value.unicodeScalars.contains { CharacterSet.whitespacesAndNewlines.contains($0) }
+    }
+
+    private nonisolated static func containsOnlyAllowedTagCharacters(_ value: String) -> Bool {
+        value.range(
+            of: #"^[\p{Hiragana}\p{Katakana}\p{Han}A-Za-z0-9ー]+$"#,
+            options: .regularExpression
+        ) != nil
     }
 }
 
@@ -35,7 +137,12 @@ extension ModelContext {
         guard let info = EpisodePersistence.normalizeTagName(name) else { return nil }
         let normalized = info.normalized
         let descriptor = FetchDescriptor<Tag>()
-        if let existing = (try? fetch(descriptor))?.first(where: { $0.nameNormalized == normalized }) {
+        if let existing = (try? fetch(descriptor))?.first(where: {
+            if $0.nameNormalized == normalized {
+                return true
+            }
+            return EpisodePersistence.normalizeTagName($0.name)?.normalized == normalized
+        }) {
             existing.name = info.name
             existing.nameNormalized = info.normalized
             existing.isSoftDeleted = false

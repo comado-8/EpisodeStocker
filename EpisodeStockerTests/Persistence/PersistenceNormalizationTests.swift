@@ -15,11 +15,110 @@ final class PersistenceNormalizationTests: XCTestCase {
 
     func testNormalizeTagNameRemovesLeadingHashTrimsAndLowercases() {
         let result = EpisodePersistence.normalizeTagName("  #TaG Name  ")
-        XCTAssertEqual(result?.name, "TaG Name")
-        XCTAssertEqual(result?.normalized, "tag name")
+        XCTAssertEqual(result?.name, "tagname")
+        XCTAssertEqual(result?.normalized, "tagname")
     }
 
     func testNormalizeTagNameReturnsNilWhenOnlyHash() {
         XCTAssertNil(EpisodePersistence.normalizeTagName("   #   "))
+        XCTAssertNil(EpisodePersistence.normalizeTagName("###"))
+        XCTAssertNil(EpisodePersistence.normalizeTagName("  ＃＃＃  "))
+    }
+
+    func testNormalizeTagNameSupportsFullwidthHashPrefix() {
+        let result = EpisodePersistence.normalizeTagName("  ＃＃TaG Name  ")
+        XCTAssertEqual(result?.name, "tagname")
+        XCTAssertEqual(result?.normalized, "tagname")
+    }
+
+    func testNormalizeTagNameRemovesAllWhitespaces() {
+        let result = EpisodePersistence.normalizeTagName("  # T a　g \n Name \t ")
+        XCTAssertEqual(result?.name, "tagname")
+        XCTAssertEqual(result?.normalized, "tagname")
+    }
+
+    func testNormalizeTagNameAppliesNFKC() {
+        let result = EpisodePersistence.normalizeTagName("＃Ｔｅｓｔ１２３")
+        XCTAssertEqual(result?.name, "test123")
+        XCTAssertEqual(result?.normalized, "test123")
+    }
+
+    func testValidateTagNameInputReturnsEmptyAfterNormalization() {
+        XCTAssertEqual(EpisodePersistence.validateTagNameInput("###"), .empty)
+        XCTAssertEqual(EpisodePersistence.validateTagNameInput(" ＃ ＃ "), .empty)
+    }
+
+    func testValidateTagNameInputReturnsTooLong() {
+        let tooLong = String(repeating: "a", count: 21)
+        XCTAssertEqual(EpisodePersistence.validateTagNameInput(tooLong), .tooLong(limit: 20))
+    }
+
+    func testValidateTagNameInputReturnsContainsDisallowedCharacters() {
+        XCTAssertEqual(
+            EpisodePersistence.validateTagNameInput("tag name"),
+            .containsDisallowedCharacters
+        )
+        XCTAssertEqual(
+            EpisodePersistence.validateTagNameInput("tag!"),
+            .containsDisallowedCharacters
+        )
+        XCTAssertEqual(
+            EpisodePersistence.validateTagNameInput("tag🙂"),
+            .containsDisallowedCharacters
+        )
+    }
+
+    func testValidateTagNameInputReturnsValidForJapaneseAndAlphanumeric() {
+        let result = EpisodePersistence.validateTagNameInput("＃仕事2026")
+        XCTAssertEqual(result, .valid(name: "仕事2026"))
+
+        let katakana = EpisodePersistence.validateTagNameInput("#ユーザー")
+        XCTAssertEqual(katakana, .valid(name: "ユーザー"))
+
+        let english = EpisodePersistence.validateTagNameInput("#TaG")
+        XCTAssertEqual(english, .valid(name: "tag"))
+    }
+
+    func testClampBodyTextDoesNotChangeWhenWithinLimit() {
+        let withinLimit = String(repeating: "a", count: 800)
+        XCTAssertEqual(EpisodePersistence.clampBodyText(withinLimit), withinLimit)
+    }
+
+    func testClampBodyTextTruncatesWhenOverLimit() {
+        let overLimit = String(repeating: "b", count: 801)
+        let clamped = EpisodePersistence.clampBodyText(overLimit)
+        XCTAssertEqual(clamped.count, 800)
+        XCTAssertEqual(clamped, String(repeating: "b", count: 800))
+    }
+
+    func testClampBodyTextSupportsJapaneseAndEmoji() {
+        let input = String(repeating: "あ", count: 799) + "🙂🙂"
+        let clamped = EpisodePersistence.clampBodyText(input)
+        XCTAssertEqual(clamped.count, 800)
+        XCTAssertTrue(clamped.hasSuffix("🙂"))
+        XCTAssertFalse(clamped.hasSuffix("🙂🙂"))
+    }
+
+    func testEmotionPresetOptionsAreFixedFifteenValues() {
+        XCTAssertEqual(
+            EpisodePersistence.emotionPresetOptions,
+            [
+                "楽しい",
+                "嬉しい",
+                "ワクワク",
+                "安心",
+                "達成感",
+                "感謝",
+                "緊張",
+                "不安",
+                "辛い",
+                "悔しい",
+                "悲しい",
+                "怒り",
+                "驚き",
+                "困惑",
+                "集中",
+            ]
+        )
     }
 }
