@@ -1150,6 +1150,8 @@ private struct EpisodeDateField: View {
         .padding(.top, 8)
         .padding(.bottom, 8)
         .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar(.visible, for: .navigationBar)
         .toolbar {
           ToolbarItem(placement: .topBarLeading) {
             Button {

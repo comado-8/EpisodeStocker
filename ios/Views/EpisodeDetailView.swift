@@ -1958,6 +1958,8 @@ private struct ReleaseLogDateRow: View {
           .padding(.top, 8)
           .padding(.bottom, 8)
           .navigationTitle(title)
+          .navigationBarTitleDisplayMode(.large)
+          .toolbar(.visible, for: .navigationBar)
           .toolbar {
             ToolbarItem(placement: .topBarLeading) {
               Button {
@@ -2030,6 +2032,8 @@ private struct ReleaseLogOptionalDateRow: View {
           .padding(.top, 8)
           .padding(.bottom, 8)
           .navigationTitle(title)
+          .navigationBarTitleDisplayMode(.large)
+          .toolbar(.visible, for: .navigationBar)
           .toolbar {
             ToolbarItem(placement: .topBarLeading) {
               Button {
@@ -2278,6 +2282,8 @@ private struct DetailDateField: View {
         .padding(.top, 8)
         .padding(.bottom, 8)
         .navigationTitle("日付を選択")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar(.visible, for: .navigationBar)
         .toolbar {
           ToolbarItem(placement: .topBarLeading) {
             Button {
@@ -2352,6 +2358,8 @@ private struct DetailOptionalDateField: View {
         .padding(.top, 8)
         .padding(.bottom, 8)
         .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar(.visible, for: .navigationBar)
         .toolbar {
           ToolbarItem(placement: .topBarLeading) {
             Button {

@@ -165,6 +165,8 @@ struct TagListView: View {
           }
         }
         .navigationTitle(context.title)
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar(.visible, for: .navigationBar)
         .toolbar {
           ToolbarItem(placement: .topBarTrailing) {
             Button("閉じる") {

@@ -120,6 +120,8 @@ struct SuggestionManagerView: View {
         .padding(.top, 12)
       }
       .navigationTitle("履歴を管理")
+      .navigationBarTitleDisplayMode(.large)
+      .toolbar(.visible, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
           Button("閉じる") {
