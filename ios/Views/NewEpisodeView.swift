@@ -27,6 +27,7 @@ struct NewEpisodeView: View {
   @State private var isKeyboardVisible = false
   @State private var showsDiscardAlert = false
   @State private var pendingAction: NewEpisodePendingAction?
+  @State private var initialSelectedDate: Date?
   @State private var initialReleaseDate: Date?
   @State private var hasCapturedInitialDraftState = false
 
@@ -99,7 +100,8 @@ struct NewEpisodeView: View {
   }
 
   private var hasUnsavedDraftChanges: Bool {
-    let releaseDateChanged = selectedReleaseDate != initialReleaseDate
+    let dateChanged = isDateChanged(current: selectedDate, initial: initialSelectedDate)
+    let releaseDateChanged = isDateChanged(current: selectedReleaseDate, initial: initialReleaseDate)
     let hasTypedContent =
       !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       || !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -113,8 +115,20 @@ struct NewEpisodeView: View {
       || !selectedProjects.isEmpty
       || !selectedEmotions.isEmpty
       || selectedPlaceChip != nil
+      || dateChanged
       || releaseDateChanged
     return hasTypedContent || hasSelectedItems
+  }
+
+  private func isDateChanged(current: Date?, initial: Date?) -> Bool {
+    switch (current, initial) {
+    case (nil, nil):
+      return false
+    case let (lhs?, rhs?):
+      return !Calendar.current.isDate(lhs, inSameDayAs: rhs)
+    default:
+      return true
+    }
   }
 
   var body: some View {
@@ -214,6 +228,7 @@ struct NewEpisodeView: View {
       }
       .onAppear {
         if !hasCapturedInitialDraftState {
+          initialSelectedDate = selectedDate
           initialReleaseDate = selectedReleaseDate
           hasCapturedInitialDraftState = true
         }
