@@ -3,6 +3,12 @@ import XCTest
 
 @MainActor
 final class PersistenceNormalizationTests: XCTestCase {
+    func testStripLeadingTagPrefixRemovesAsciiAndFullwidthHashes() {
+        XCTAssertEqual(EpisodePersistence.stripLeadingTagPrefix("  # ＃ #  タグ  "), "タグ")
+        XCTAssertEqual(EpisodePersistence.stripLeadingTagPrefix("  ＃＃#Tag"), "Tag")
+        XCTAssertEqual(EpisodePersistence.stripLeadingTagPrefix("NoPrefix"), "NoPrefix")
+    }
+
     func testNormalizeNameTrimsAndLowercases() {
         let result = EpisodePersistence.normalizeName("  HeLLo World  ")
         XCTAssertEqual(result?.name, "HeLLo World")
@@ -77,6 +83,22 @@ final class PersistenceNormalizationTests: XCTestCase {
 
         let english = EpisodePersistence.validateTagNameInput("#TaG")
         XCTAssertEqual(english, .valid(name: "tag"))
+    }
+
+    func testNormalizeTagInputWhileEditingAppliesNFKCAndLowercase() {
+        XCTAssertEqual(
+            EpisodePersistence.normalizeTagInputWhileEditing("ＴｅＳｔ１２３"),
+            "test123"
+        )
+    }
+
+    func testNormalizeNameInputReturnsTrimmedValueWithinLimit() {
+        XCTAssertEqual(EpisodePersistence.normalizeNameInput("  Alice  ", limit: 5), "Alice")
+    }
+
+    func testNormalizeNameInputReturnsNilWhenEmptyOrOverLimit() {
+        XCTAssertNil(EpisodePersistence.normalizeNameInput("   \n\t", limit: 5))
+        XCTAssertNil(EpisodePersistence.normalizeNameInput("TooLong", limit: 5))
     }
 
     func testClampBodyTextDoesNotChangeWhenWithinLimit() {

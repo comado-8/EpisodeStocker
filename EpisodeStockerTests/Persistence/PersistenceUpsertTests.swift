@@ -52,6 +52,11 @@ final class PersistenceUpsertTests: XCTestCase {
         XCTAssertEqual(tag.nameNormalized, "tagname")
     }
 
+    func testUpsertTagReturnsNilForEmptyCandidate() {
+        XCTAssertNil(context.upsertTag(name: "   "))
+        XCTAssertNil(context.upsertTag(name: "###"))
+    }
+
     func testUpsertTagCanonicalizesEnglishCaseToLowercase() throws {
         let first = try XCTUnwrap(context.upsertTag(name: "#TaG"))
         let second = try XCTUnwrap(context.upsertTag(name: "#TAG"))
@@ -86,5 +91,65 @@ final class PersistenceUpsertTests: XCTestCase {
         let place1 = context.upsertPlace(name: "Shibuya")
         let place2 = context.upsertPlace(name: "shibuya")
         XCTAssertEqual(place1?.id, place2?.id)
+    }
+
+    func testUpsertEntitiesReviveDeletedRecords() throws {
+        let person = try XCTUnwrap(context.upsertPerson(name: "Alice"))
+        person.isSoftDeleted = true
+        person.deletedAt = Date(timeIntervalSince1970: 10)
+
+        let project = try XCTUnwrap(context.upsertProject(name: "Morning Show"))
+        project.isSoftDeleted = true
+        project.deletedAt = Date(timeIntervalSince1970: 10)
+
+        let emotion = try XCTUnwrap(context.upsertEmotion(name: "Happy"))
+        emotion.isSoftDeleted = true
+        emotion.deletedAt = Date(timeIntervalSince1970: 10)
+
+        let place = try XCTUnwrap(context.upsertPlace(name: "Shibuya"))
+        place.isSoftDeleted = true
+        place.deletedAt = Date(timeIntervalSince1970: 10)
+        try context.save()
+
+        let revivedPerson = try XCTUnwrap(context.upsertPerson(name: " alice "))
+        let revivedProject = try XCTUnwrap(context.upsertProject(name: "morning show"))
+        let revivedEmotion = try XCTUnwrap(context.upsertEmotion(name: "happy"))
+        let revivedPlace = try XCTUnwrap(context.upsertPlace(name: "shibuya"))
+
+        XCTAssertEqual(revivedPerson.id, person.id)
+        XCTAssertEqual(revivedProject.id, project.id)
+        XCTAssertEqual(revivedEmotion.id, emotion.id)
+        XCTAssertEqual(revivedPlace.id, place.id)
+
+        XCTAssertFalse(revivedPerson.isSoftDeleted)
+        XCTAssertFalse(revivedProject.isSoftDeleted)
+        XCTAssertFalse(revivedEmotion.isSoftDeleted)
+        XCTAssertFalse(revivedPlace.isSoftDeleted)
+        XCTAssertNil(revivedPerson.deletedAt)
+        XCTAssertNil(revivedProject.deletedAt)
+        XCTAssertNil(revivedEmotion.deletedAt)
+        XCTAssertNil(revivedPlace.deletedAt)
+    }
+
+    func testUpsertCollectionHelpersSkipEmptyAndDeduplicate() throws {
+        let persons = context.upsertPersons(from: [" Alice ", "alice", " ", "Bob"])
+        let projects = context.upsertProjects(from: ["Morning", "morning", "", "Night"])
+        let emotions = context.upsertEmotions(from: ["Happy", "happy", " ", "Sad"])
+        let places = context.upsertPlaces(from: ["Shibuya", "shibuya", "", "Studio"])
+
+        XCTAssertEqual(persons.count, 2)
+        XCTAssertEqual(projects.count, 2)
+        XCTAssertEqual(emotions.count, 2)
+        XCTAssertEqual(places.count, 2)
+
+        let fetchedPersons = try context.fetch(FetchDescriptor<Person>())
+        let fetchedProjects = try context.fetch(FetchDescriptor<Project>())
+        let fetchedEmotions = try context.fetch(FetchDescriptor<Emotion>())
+        let fetchedPlaces = try context.fetch(FetchDescriptor<Place>())
+
+        XCTAssertEqual(fetchedPersons.count, 2)
+        XCTAssertEqual(fetchedProjects.count, 2)
+        XCTAssertEqual(fetchedEmotions.count, 2)
+        XCTAssertEqual(fetchedPlaces.count, 2)
     }
 }

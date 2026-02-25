@@ -33,8 +33,8 @@ struct AnalyticsView: View {
 
 private enum AnalyticsStyle {
     static let figmaTopInset: CGFloat = 59
-    static let headerFont = Font.system(size: 24, weight: .semibold)
-    static let bodyFont = Font.custom("Roboto", size: 13)
+    static let headerFont = AppTypography.screenTitle
+    static let bodyFont = Font.system(size: 13, weight: .regular)
     static let headerText = Color(hex: "2A2525")
     static let bodyText = Color(hex: "6B7280")
 }

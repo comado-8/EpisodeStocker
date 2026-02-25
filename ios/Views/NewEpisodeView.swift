@@ -140,12 +140,13 @@ struct NewEpisodeView: View {
         .presentationBackground(Color.white)
     }
     .sheet(isPresented: $showsTagSelectionSheet) {
-      NewEpisodeRegisteredTagSelectionSheet(
+      RegisteredTagSelectionSheet(
         tags: registeredTagSuggestions,
         selectedTags: selectedTags,
         onSelect: { value in
           addTag(value)
-        }
+        },
+        style: NewEpisodeStyle.registeredTagSelectionSheetStyle
       )
       .presentationDetents([.medium, .large])
       .presentationDragIndicator(.visible)
@@ -320,7 +321,7 @@ struct NewEpisodeView: View {
             .foregroundColor(NewEpisodeStyle.validationText)
             .fixedSize(horizontal: false, vertical: true)
         }
-        Text(tagInputGuideText)
+        Text(TagInputConstants.guideText)
           .font(NewEpisodeStyle.tagGuideFont)
           .foregroundColor(NewEpisodeStyle.tagGuideText)
           .fixedSize(horizontal: false, vertical: true)
@@ -348,7 +349,14 @@ struct NewEpisodeView: View {
 
           ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: NewEpisodeStyle.chipSpacing) {
-              ForEach(filteredTagSuggestions(query: tagText), id: \.self) { tag in
+              ForEach(
+                TagInputHelpers.filteredSuggestions(
+                  query: tagText,
+                  selectedTags: selectedTags,
+                  registeredTagSuggestions: registeredTagSuggestions
+                ),
+                id: \.self
+              ) { tag in
                 Button {
                   addTag(tag)
                 } label: {
@@ -530,38 +538,8 @@ struct NewEpisodeView: View {
     return "#\(normalized)"
   }
 
-  private func filteredTagSuggestions(query: String) -> [String] {
-    let normalizedQuery = EpisodePersistence.stripLeadingTagPrefix(
-      EpisodePersistence.normalizeTagInputWhileEditing(query.trimmingCharacters(in: .whitespacesAndNewlines))
-    )
-    var seen = Set<String>()
-    return registeredTagSuggestions.filter { suggestion in
-      guard !selectedTags.contains(suggestion) else { return false }
-      let candidate = EpisodePersistence.stripLeadingTagPrefix(
-        EpisodePersistence.normalizeTagInputWhileEditing(suggestion)
-      )
-      if !normalizedQuery.isEmpty && !candidate.contains(normalizedQuery) {
-        return false
-      }
-      let inserted = seen.insert(candidate).inserted
-      return inserted
-    }
-    .prefix(3)
-    .map { $0 }
-  }
-
   private var tagValidationErrorMessage: String? {
-    guard !tagText.isEmpty else { return nil }
-    switch EpisodePersistence.validateTagNameInput(tagText) {
-    case .valid:
-      return nil
-    case .empty:
-      return nil
-    case .tooLong:
-      return "20文字以内で入力してください"
-    case .containsDisallowedCharacters:
-      return "使用できるのは日本語・英数字のみです（記号・絵文字・空白は使えません）"
-    }
+    TagInputHelpers.validationMessage(for: tagText)
   }
 
   private func addProject(_ value: String) {
@@ -756,15 +734,15 @@ private enum NewEpisodeStyle {
   static let calendarToolbarButtonText = Color(hex: "1F2937")
   static let calendarToolbarButtonDestructiveText = HomeStyle.destructiveRed
 
-  static let labelFont = Font.custom("Roboto-Medium", size: 14)
-  static let inputFont = Font.custom("Roboto", size: 16)
-  static let headerFont = Font.system(size: 20, weight: .semibold)
-  static let detailToggleFont = Font.custom("Roboto-Medium", size: 16)
+  static let labelFont = Font.system(size: 14, weight: .medium)
+  static let inputFont = Font.system(size: 16, weight: .regular)
+  static let headerFont = AppTypography.formScreenTitle
+  static let detailToggleFont = Font.system(size: 16, weight: .medium)
   static let actionButtonFont = Font.system(size: 16, weight: .bold)
   static let calendarToolbarButtonFont = Font.system(size: 15, weight: .semibold)
-  static let counterFont = Font.custom("Roboto", size: 12)
-  static let validationFont = Font.custom("Roboto", size: 12)
-  static let tagGuideFont = Font.custom("Roboto", size: 12)
+  static let counterFont = Font.system(size: 12, weight: .regular)
+  static let validationFont = Font.system(size: 12, weight: .regular)
+  static let tagGuideFont = Font.system(size: 12, weight: .regular)
   static let validationText = HomeStyle.destructiveRed
   static let tagGuideText = Color(hex: "6B7280")
 
@@ -775,9 +753,23 @@ private enum NewEpisodeStyle {
     formatter.dateFormat = "yyyy/MM/dd"
     return formatter
   }()
-}
 
-private let tagInputGuideText = "使用可能: 漢字・ひらがな・カナ・英数字（小文字）"
+  static let registeredTagSelectionSheetStyle = RegisteredTagSelectionSheetStyle(
+    labelText: labelText,
+    inputFont: inputFont,
+    inputText: inputText,
+    inputHeight: inputHeight,
+    inputCornerRadius: inputCornerRadius,
+    inputBorder: inputBorder,
+    inputBorderWidth: inputBorderWidth,
+    chipSpacing: chipSpacing,
+    chipHeight: chipHeightSmall,
+    chipFont: labelFont,
+    chipText: chipText,
+    chipFill: chipFill,
+    closeButtonFont: calendarToolbarButtonFont
+  )
+}
 
 private struct FieldLabel: View {
   let title: String
@@ -866,58 +858,6 @@ private struct EpisodeChipInputField: View {
       RoundedRectangle(cornerRadius: NewEpisodeStyle.inputCornerRadius)
         .stroke(NewEpisodeStyle.inputBorder, lineWidth: NewEpisodeStyle.inputBorderWidth)
     )
-  }
-}
-
-private struct FlowLayout: Layout {
-  let spacing: CGFloat
-
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let maxWidth = proposal.width ?? .greatestFiniteMagnitude
-    var currentX: CGFloat = 0
-    var totalHeight: CGFloat = 0
-    var lineHeight: CGFloat = 0
-    var maxLineWidth: CGFloat = 0
-
-    for subview in subviews {
-      let size = subview.sizeThatFits(.unspecified)
-      if currentX + size.width > maxWidth, currentX > 0 {
-        totalHeight += lineHeight + spacing
-        maxLineWidth = max(maxLineWidth, currentX - spacing)
-        currentX = 0
-        lineHeight = 0
-      }
-      currentX += size.width + spacing
-      lineHeight = max(lineHeight, size.height)
-    }
-
-    totalHeight += lineHeight
-    maxLineWidth = max(maxLineWidth, currentX - spacing)
-
-    let width = proposal.width ?? maxLineWidth
-    return CGSize(width: width, height: totalHeight)
-  }
-
-  func placeSubviews(
-    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-  ) {
-    var currentX = bounds.minX
-    var currentY = bounds.minY
-    var lineHeight: CGFloat = 0
-
-    for subview in subviews {
-      let size = subview.sizeThatFits(.unspecified)
-      if currentX + size.width > bounds.maxX, currentX > bounds.minX {
-        currentX = bounds.minX
-        currentY += lineHeight + spacing
-        lineHeight = 0
-      }
-      subview.place(
-        at: CGPoint(x: currentX, y: currentY),
-        proposal: ProposedViewSize(width: size.width, height: size.height))
-      currentX += size.width + spacing
-      lineHeight = max(lineHeight, size.height)
-    }
   }
 }
 
@@ -1040,7 +980,12 @@ private struct EpisodeDateField: View {
             Button {
               showsPicker = false
             } label: {
-              CalendarToolbarButtonLabel(title: "閉じる")
+              CalendarToolbarButtonLabel(
+                title: "閉じる",
+                font: NewEpisodeStyle.calendarToolbarButtonFont,
+                fillColor: NewEpisodeStyle.calendarToolbarButtonFill,
+                textColor: NewEpisodeStyle.calendarToolbarButtonText
+              )
             }
             .buttonStyle(.plain)
           }
@@ -1052,6 +997,8 @@ private struct EpisodeDateField: View {
               } label: {
                 CalendarToolbarButtonLabel(
                   title: "クリア",
+                  font: NewEpisodeStyle.calendarToolbarButtonFont,
+                  fillColor: NewEpisodeStyle.calendarToolbarButtonFill,
                   textColor: NewEpisodeStyle.calendarToolbarButtonDestructiveText
                 )
               }
@@ -1062,94 +1009,6 @@ private struct EpisodeDateField: View {
       }
       .presentationDetents([.height(NewEpisodeStyle.calendarSheetHeight)])
       .presentationDragIndicator(.visible)
-    }
-  }
-}
-
-private struct CalendarToolbarButtonLabel: View {
-  let title: String
-  var textColor: Color = NewEpisodeStyle.calendarToolbarButtonText
-
-  var body: some View {
-    Text(title)
-      .font(NewEpisodeStyle.calendarToolbarButtonFont)
-      .lineLimit(1)
-      .fixedSize(horizontal: true, vertical: false)
-      .foregroundColor(textColor)
-      .padding(.horizontal, 10)
-      .padding(.vertical, 8)
-      .background(
-        Capsule()
-          .fill(NewEpisodeStyle.calendarToolbarButtonFill)
-      )
-  }
-}
-
-private struct NewEpisodeRegisteredTagSelectionSheet: View {
-  @Environment(\.dismiss) private var dismiss
-  let tags: [String]
-  let selectedTags: [String]
-  let onSelect: (String) -> Void
-  @State private var query = ""
-
-  private var filteredTags: [String] {
-    let trimmed = EpisodePersistence.stripLeadingTagPrefix(
-      EpisodePersistence.normalizeTagInputWhileEditing(query.trimmingCharacters(in: .whitespacesAndNewlines))
-    )
-    let available = tags.filter { !selectedTags.contains($0) }
-    guard !trimmed.isEmpty else { return available }
-    return available.filter { tag in
-      let normalized = EpisodePersistence.stripLeadingTagPrefix(
-        EpisodePersistence.normalizeTagInputWhileEditing(tag)
-      )
-      return normalized.contains(trimmed)
-    }
-  }
-
-  var body: some View {
-    NavigationStack {
-      VStack(spacing: 12) {
-        HStack(spacing: 8) {
-          Image(systemName: "magnifyingglass")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundColor(NewEpisodeStyle.labelText)
-          TextField("タグを検索", text: $query)
-            .font(NewEpisodeStyle.inputFont)
-            .foregroundColor(NewEpisodeStyle.inputText)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: NewEpisodeStyle.inputHeight)
-        .background(
-          RoundedRectangle(cornerRadius: NewEpisodeStyle.inputCornerRadius)
-            .stroke(NewEpisodeStyle.inputBorder, lineWidth: NewEpisodeStyle.inputBorderWidth)
-        )
-
-        ScrollView {
-          FlowLayout(spacing: NewEpisodeStyle.chipSpacing) {
-            ForEach(filteredTags, id: \.self) { tag in
-              Button {
-                onSelect(tag)
-                dismiss()
-              } label: {
-                EpisodeChip(title: tag, height: NewEpisodeStyle.chipHeightSmall)
-              }
-              .buttonStyle(.plain)
-            }
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.vertical, 4)
-        }
-      }
-      .padding(16)
-      .navigationTitle("登録タグ選択")
-      .toolbar {
-        ToolbarItem(placement: .topBarTrailing) {
-          Button("閉じる") {
-            dismiss()
-          }
-          .font(NewEpisodeStyle.calendarToolbarButtonFont)
-        }
-      }
     }
   }
 }

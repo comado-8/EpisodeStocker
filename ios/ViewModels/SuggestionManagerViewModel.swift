@@ -12,20 +12,27 @@ final class SuggestionManagerViewModel: ObservableObject {
   }
 
   private let repository: SuggestionRepository
-  private let fieldType: String
+  private let fieldType: SuggestionFieldType
   private var lastDeletedId: UUID?
 
-  var title: String { fieldType }
+  var title: String { fieldType.label }
 
-  init(repository: SuggestionRepository, fieldType: String) {
+  init(repository: SuggestionRepository, fieldType: SuggestionFieldType) {
     self.repository = repository
     self.fieldType = fieldType
     fetch()
   }
 
+  convenience init(repository: SuggestionRepository, fieldType: String) {
+    self.init(repository: repository, fieldType: SuggestionFieldType(fieldType))
+  }
+
   func fetch() {
     suggestions = repository.fetch(
-      fieldType: fieldType, query: query.isEmpty ? nil : query, includeDeleted: includeDeleted)
+      fieldType: fieldType.label,
+      query: query.isEmpty ? nil : query,
+      includeDeleted: includeDeleted
+    )
   }
 
   func softDelete(_ id: UUID) {

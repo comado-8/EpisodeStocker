@@ -174,10 +174,10 @@ private enum SettingsStyle {
     static let iconGlyphSize: CGFloat = 18
     static let chevronSize: CGFloat = 12
 
-    static let headerFont = Font.system(size: 24, weight: .semibold)
-    static let subheaderFont = Font.custom("Roboto", size: 13)
-    static let rowTitleFont = Font.custom("Roboto-Bold", size: 15)
-    static let rowBodyFont = Font.custom("Roboto", size: 12)
+    static let headerFont = AppTypography.screenTitle
+    static let subheaderFont = Font.system(size: 13, weight: .regular)
+    static let rowTitleFont = Font.system(size: 15, weight: .bold)
+    static let rowBodyFont = Font.system(size: 12, weight: .regular)
 
     static let headerText = Color(hex: "2A2525")
     static let subheaderText = Color(hex: "6B7280")
@@ -197,20 +197,6 @@ private enum SettingsStyle {
     static let cardShadowSecondary = Color.black.opacity(0.06)
     static let cardShadowSecondaryRadius: CGFloat = 6
     static let cardShadowSecondaryY: CGFloat = 3
-}
-
-private extension SettingsView {
-    func baseSafeAreaBottom() -> CGFloat {
-        #if canImport(UIKit)
-        let windowScene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first
-        if let window = windowScene?.windows.first(where: { $0.isKeyWindow }) {
-            return window.safeAreaInsets.bottom
-        }
-        #endif
-        return 0
-    }
 }
 
 private struct SettingsDetailHeader: View {
@@ -686,17 +672,6 @@ private struct SettingsDetailContainerView<Content: View>: View {
         }
     }
 
-    private func baseSafeAreaBottom() -> CGFloat {
-        #if canImport(UIKit)
-        let windowScene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first
-        if let window = windowScene?.windows.first(where: { $0.isKeyWindow }) {
-            return window.safeAreaInsets.bottom
-        }
-        #endif
-        return 0
-    }
 }
 
 private enum SettingsDetailStyle {
@@ -712,15 +687,15 @@ private enum SettingsDetailStyle {
     static let actionHeight: CGFloat = 44
     static let actionCornerRadius: CGFloat = 12
 
-    static let headerFont = Font.custom("Roboto-Bold", size: 20)
-    static let subheaderFont = Font.custom("Roboto", size: 13)
-    static let sectionTitleFont = Font.custom("Roboto-Bold", size: 14)
-    static let sectionSubtitleFont = Font.custom("Roboto", size: 12)
-    static let rowTitleFont = Font.custom("Roboto-Medium", size: 13)
-    static let rowValueFont = Font.custom("Roboto", size: 13)
-    static let rowMetaFont = Font.custom("Roboto", size: 11)
-    static let actionFont = Font.custom("Roboto-Bold", size: 14)
-    static let segmentFont = Font.custom("Roboto-Medium", size: 13)
+    static let headerFont = AppTypography.screenTitle
+    static let subheaderFont = Font.system(size: 13, weight: .regular)
+    static let sectionTitleFont = Font.system(size: 14, weight: .bold)
+    static let sectionSubtitleFont = Font.system(size: 12, weight: .regular)
+    static let rowTitleFont = Font.system(size: 13, weight: .medium)
+    static let rowValueFont = Font.system(size: 13, weight: .regular)
+    static let rowMetaFont = Font.system(size: 11, weight: .regular)
+    static let actionFont = Font.system(size: 14, weight: .bold)
+    static let segmentFont = Font.system(size: 13, weight: .medium)
 
     static let headerText = Color(hex: "2A2525")
     static let subheaderText = Color(hex: "6B7280")
@@ -753,6 +728,18 @@ private enum SettingsDetailStyle {
 
     static let toggleTint = HomeStyle.fabRed
     static let linkIcon = HomeStyle.fabRed
+}
+
+private func baseSafeAreaBottom() -> CGFloat {
+    #if canImport(UIKit)
+    let windowScene = UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .first
+    if let window = windowScene?.windows.first(where: { $0.isKeyWindow }) {
+        return window.safeAreaInsets.bottom
+    }
+    #endif
+    return 0
 }
 
 struct SettingsView_Previews: PreviewProvider {

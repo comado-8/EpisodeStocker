@@ -17,9 +17,10 @@ struct SuggestionManagerView: View {
   private var tags: [Tag]
   @StateObject private var vm: SuggestionManagerViewModel
   @State private var showsUndoToast = false
+  @State private var undoToastTask: Task<Void, Never>?
   private let onSelect: ((String) -> Void)?
   private let repository: SuggestionRepository
-  private let fieldType: String
+  private let fieldType: SuggestionFieldType
 
   init(
     repository: SuggestionRepository,
@@ -27,9 +28,11 @@ struct SuggestionManagerView: View {
     onSelect: ((String) -> Void)? = nil
   ) {
     self.repository = repository
-    self.fieldType = fieldType
+    let resolvedFieldType = SuggestionFieldType(fieldType)
+    self.fieldType = resolvedFieldType
     _vm = StateObject(
-      wrappedValue: SuggestionManagerViewModel(repository: repository, fieldType: fieldType))
+      wrappedValue: SuggestionManagerViewModel(repository: repository, fieldType: resolvedFieldType)
+    )
     self.onSelect = onSelect
   }
 
@@ -41,9 +44,10 @@ struct SuggestionManagerView: View {
         VStack(spacing: SuggestionManagerStyle.sectionSpacing) {
           controlsCard
 
+          let usageCounts = usageCountsByNormalizedValue()
           List {
             ForEach(vm.suggestions) { suggestion in
-              let activeCount = activeUsageCount(for: suggestion.value)
+              let activeCount = activeUsageCount(for: suggestion.value, usageCounts: usageCounts)
               let isDeletionProtected = isDeletionProtectedSuggestion(
                 suggestion: suggestion,
                 activeUsageCount: activeCount
@@ -87,10 +91,14 @@ struct SuggestionManagerView: View {
                   } else {
                     Button {
                       vm.softDelete(suggestion.id)
+                      undoToastTask?.cancel()
                       showsUndoToast = true
-                      Task {
+                      undoToastTask = Task {
                         try? await Task.sleep(nanoseconds: 3_000_000_000)
-                        showsUndoToast = false
+                        guard !Task.isCancelled else { return }
+                        await MainActor.run {
+                          showsUndoToast = false
+                        }
                       }
                     } label: {
                       swipeActionLabel(
@@ -130,6 +138,7 @@ struct SuggestionManagerView: View {
             Button {
               vm.undoDelete()
               showsUndoToast = false
+              undoToastTask?.cancel()
             } label: {
               HStack(spacing: 6) {
                 Image(systemName: "arrow.uturn.backward")
@@ -165,6 +174,14 @@ struct SuggestionManagerView: View {
     .onAppear {
       primeRepositoryFromEpisodeData()
       vm.fetch()
+    }
+    .onDisappear {
+      undoToastTask?.cancel()
+      undoToastTask = nil
+      NotificationCenter.default.post(
+        name: .suggestionManagerSheetDidDismiss,
+        object: fieldType.label
+      )
     }
   }
 
@@ -225,11 +242,11 @@ struct SuggestionManagerView: View {
     .filter { !$0.isEmpty }
     guard !existing.isEmpty else { return }
 
-    var current = repository.fetch(fieldType: fieldType, query: nil, includeDeleted: true).map(\.value)
+    var current = repository.fetch(fieldType: fieldType.label, query: nil, includeDeleted: true).map(\.value)
     for value in existing {
       let exists = current.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
       if !exists {
-        repository.upsert(fieldType: fieldType, value: value)
+        repository.upsert(fieldType: fieldType.label, value: value)
         current.append(value)
       }
     }
@@ -237,22 +254,22 @@ struct SuggestionManagerView: View {
 
   private func existingValuesForField() -> [String] {
     switch fieldType {
-    case "人物":
+    case .person:
       return persons.map(\.name)
-    case "企画名":
+    case .project:
       return projects.map(\.name)
-    case "感情":
+    case .emotion:
       return emotions.map(\.name)
-    case "場所":
+    case .place:
       return places.map(\.name)
-    case "タグ":
+    case .tag:
       return tags.map { tag in
         guard let normalized = EpisodePersistence.normalizeTagName(tag.name)?.name else {
           return ""
         }
         return "#\(normalized)"
       }
-    default:
+    case .unknown:
       return []
     }
   }
@@ -273,48 +290,49 @@ struct SuggestionManagerView: View {
     activeUsageCount: Int
   ) -> Bool {
     guard !suggestion.isDeleted else { return false }
-    guard fieldType != "感情" else { return false }
+    guard fieldType.protectsUsedEntriesFromDeletion else { return false }
     return activeUsageCount > 0
   }
 
-  private func activeUsageCount(for value: String) -> Int {
+  private func usageCountsByNormalizedValue() -> [String: Int] {
+    guard fieldType.supportsUsageCount else { return [:] }
+    var counts: [String: Int] = [:]
+    for episode in episodes {
+      var values = Set<String>()
+      switch fieldType {
+      case .person:
+        values = Set(episode.persons.compactMap { normalizedValueForField($0.name, fieldType: .person) })
+      case .project:
+        values = Set(episode.projects.compactMap { normalizedValueForField($0.name, fieldType: .project) })
+      case .place:
+        values = Set(episode.places.compactMap { normalizedValueForField($0.name, fieldType: .place) })
+      case .tag:
+        values = Set(episode.tags.compactMap { normalizedValueForField("#\($0.name)", fieldType: .tag) })
+      case .emotion, .unknown:
+        values = []
+      }
+      for value in values {
+        counts[value, default: 0] += 1
+      }
+    }
+    return counts
+  }
+
+  private func activeUsageCount(for value: String, usageCounts: [String: Int]) -> Int {
     guard let normalizedValue = normalizedValueForField(value, fieldType: fieldType) else {
       return 0
     }
-    return episodes.reduce(into: 0) { count, episode in
-      let hasValue: Bool
-      switch fieldType {
-      case "人物":
-        hasValue = episode.persons.contains {
-          normalizedValueForField($0.name, fieldType: "人物") == normalizedValue
-        }
-      case "企画名":
-        hasValue = episode.projects.contains {
-          normalizedValueForField($0.name, fieldType: "企画名") == normalizedValue
-        }
-      case "場所":
-        hasValue = episode.places.contains {
-          normalizedValueForField($0.name, fieldType: "場所") == normalizedValue
-        }
-      case "タグ":
-        hasValue = episode.tags.contains {
-          normalizedValueForField("#\($0.name)", fieldType: "タグ") == normalizedValue
-        }
-      default:
-        hasValue = false
-      }
-      if hasValue {
-        count += 1
-      }
-    }
+    return usageCounts[normalizedValue, default: 0]
   }
 
-  private func normalizedValueForField(_ value: String, fieldType: String) -> String? {
+  private func normalizedValueForField(_ value: String, fieldType: SuggestionFieldType) -> String? {
     switch fieldType {
-    case "タグ":
+    case .tag:
       return EpisodePersistence.normalizeTagName(value)?.normalized
-    default:
+    case .person, .project, .emotion, .place:
       return EpisodePersistence.normalizeName(value)?.normalized
+    case .unknown:
+      return nil
     }
   }
 }
@@ -436,15 +454,15 @@ private enum SuggestionManagerStyle {
   static let toastButtonFill = HomeStyle.fabRed
 
   static let headerCloseFont = Font.system(size: 15, weight: .semibold)
-  static let subheaderFont = Font.custom("Roboto", size: 13)
-  static let inputFont = Font.custom("Roboto", size: 16)
-  static let toggleTitleFont = Font.custom("Roboto-Medium", size: 14)
-  static let toggleBodyFont = Font.custom("Roboto", size: 12)
-  static let rowTitleFont = Font.custom("Roboto-Medium", size: 15)
-  static let deletedBadgeFont = Font.custom("Roboto-Medium", size: 11)
-  static let inUseBadgeFont = Font.custom("Roboto-Medium", size: 11)
-  static let swipeActionFont = Font.custom("Roboto-Medium", size: 14)
-  static let toastFont = Font.custom("Roboto-Bold", size: 15)
+  static let subheaderFont = Font.system(size: 13, weight: .regular)
+  static let inputFont = Font.system(size: 16, weight: .regular)
+  static let toggleTitleFont = Font.system(size: 14, weight: .medium)
+  static let toggleBodyFont = Font.system(size: 12, weight: .regular)
+  static let rowTitleFont = Font.system(size: 15, weight: .medium)
+  static let deletedBadgeFont = Font.system(size: 11, weight: .medium)
+  static let inUseBadgeFont = Font.system(size: 11, weight: .medium)
+  static let swipeActionFont = Font.system(size: 14, weight: .medium)
+  static let toastFont = Font.system(size: 15, weight: .bold)
   static let toastButtonFont = Font.system(size: 15, weight: .heavy)
 
   static let toastHeight: CGFloat = 60

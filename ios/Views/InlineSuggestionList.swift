@@ -106,6 +106,13 @@ struct InlineSuggestionList: View {
     .onAppear { reload() }
     .onChange(of: query) { _, _ in reload() }
     .onChange(of: isActive) { _, _ in reload() }
+    .onReceive(NotificationCenter.default.publisher(for: .suggestionManagerSheetDidDismiss)) {
+      note in
+      guard let dismissedFieldType = note.object as? String, dismissedFieldType == fieldType else {
+        return
+      }
+      reload()
+    }
   }
 }
 
@@ -121,10 +128,12 @@ private enum InlineSuggestionStyle {
   static let manageFill = HomeStyle.fabRed.opacity(0.08)
   static let manageBorder = HomeStyle.fabRed.opacity(0.4)
 
-  static let chipFont = Font.custom("Roboto-Medium", size: 14)
-  static let manageFont = Font.custom("Roboto-Medium", size: 12)
+  static let chipFont = Font.system(size: 14, weight: .medium)
+  static let manageFont = Font.system(size: 12, weight: .medium)
 }
 
 extension Notification.Name {
   static let openSuggestionManagerSheet = Notification.Name("openSuggestionManagerSheet")
+  static let suggestionManagerSheetDidDismiss = Notification.Name(
+    "suggestionManagerSheetDidDismiss")
 }

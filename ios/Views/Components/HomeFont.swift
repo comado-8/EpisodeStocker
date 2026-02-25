@@ -1,9 +1,9 @@
 import SwiftUI
 
 enum HomeFont {
-    static func bodyLarge() -> Font { .custom("Roboto", size: 16) }
-    static func bodyMedium() -> Font { .custom("Roboto", size: 14) }
-    static func titleMedium() -> Font { .custom("Roboto-Medium", size: 16) }
-    static func labelLarge() -> Font { .custom("Roboto-Medium", size: 14) }
-    static func emptyStateTitle() -> Font { .custom("Roboto-Medium", size: 20) }
+    static func bodyLarge() -> Font { .system(size: 16, weight: .regular) }
+    static func bodyMedium() -> Font { .system(size: 14, weight: .regular) }
+    static func titleMedium() -> Font { .system(size: 16, weight: .medium) }
+    static func labelLarge() -> Font { .system(size: 14, weight: .medium) }
+    static func emptyStateTitle() -> Font { .system(size: 20, weight: .medium) }
 }

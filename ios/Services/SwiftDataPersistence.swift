@@ -53,12 +53,26 @@ enum EpisodePersistence {
         return (trimmed, trimmed.lowercased())
     }
 
+    /// Normalizes a tag for persistence by removing whitespace (including internal spaces),
+    /// converting to NFKC/lowercase and stripping leading `#`.
+    ///
+    /// This is intentionally lenient and differs from `validateTagNameInput(_:)`, which is
+    /// strict for UI feedback and rejects whitespace-containing input.
+    /// Existing tests in `PersistenceNormalizationTests` and `PersistenceUpsertTests` rely on
+    /// this strict-vs-lenient behavior split; keep both functions aligned with those expectations.
     nonisolated static func normalizeTagName(_ value: String) -> (name: String, normalized: String)? {
         let canonical = normalizedTagCandidate(value)
         guard !canonical.isEmpty else { return nil }
         return (canonical, canonical)
     }
 
+    /// Validates user-entered tag text for UI feedback before save.
+    ///
+    /// This validation is intentionally strict: whitespace is disallowed and returns
+    /// `.containsDisallowedCharacters`. In contrast, `normalizeTagName(_:)` is lenient and
+    /// removes whitespace for persistence normalization.
+    /// Existing tests in `PersistenceNormalizationTests` and `PersistenceUpsertTests` expect
+    /// this distinction.
     nonisolated static func validateTagNameInput(_ value: String) -> TagValidationResult {
         let strippedPrefix = stripLeadingTagPrefix(value)
         let normalized = applyingNFKC(strippedPrefix)

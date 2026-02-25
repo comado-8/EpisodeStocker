@@ -486,7 +486,7 @@ private struct TagEditorSheet: View {
             .fixedSize(horizontal: false, vertical: true)
         }
 
-        Text(tagInputGuideText)
+        Text(TagInputConstants.guideText)
           .font(TagStyle.editorGuideFont)
           .foregroundColor(TagStyle.guideText)
           .fixedSize(horizontal: false, vertical: true)
@@ -601,8 +601,6 @@ private func displayTagName(_ tag: Tag) -> String {
   return "#\(normalized)"
 }
 
-private let tagInputGuideText = "使用可能: 漢字・ひらがな・カナ・英数字（小文字）"
-
 private enum TagStyle {
   static let figmaTopInset: CGFloat = 59
   static let sectionSpacing: CGFloat = 16
@@ -627,26 +625,26 @@ private enum TagStyle {
   static let fabBottomOffset: CGFloat = 8
   static let listBottomPadding: CGFloat = 0
 
-  static let headerFont = Font.system(size: 24, weight: .semibold)
-  static let cardHeaderFont = Font.custom("Roboto-Medium", size: 16)
-  static let subheaderFont = Font.custom("Roboto", size: 13)
+  static let headerFont = AppTypography.screenTitle
+  static let cardHeaderFont = Font.system(size: 16, weight: .medium)
+  static let subheaderFont = Font.system(size: 13, weight: .regular)
   static let rowTitleFont = Font.system(size: 18, weight: .semibold)
-  static let rowMetaFont = Font.custom("Roboto", size: 12)
-  static let toastFont = Font.custom("Roboto-Bold", size: 15)
+  static let rowMetaFont = Font.system(size: 12, weight: .regular)
+  static let toastFont = Font.system(size: 15, weight: .bold)
   static let toastButtonFont = Font.system(size: 15, weight: .heavy)
-  static let swipeActionFont = Font.custom("Roboto-Medium", size: 12)
-  static let noticeFont = Font.custom("Roboto", size: 12)
-  static let editorLabelFont = Font.custom("Roboto-Medium", size: 13)
-  static let editorInputFont = Font.custom("Roboto", size: 16)
-  static let editorButtonFont = Font.custom("Roboto-Bold", size: 15)
+  static let swipeActionFont = Font.system(size: 12, weight: .medium)
+  static let noticeFont = Font.system(size: 12, weight: .regular)
+  static let editorLabelFont = Font.system(size: 13, weight: .medium)
+  static let editorInputFont = Font.system(size: 16, weight: .regular)
+  static let editorButtonFont = Font.system(size: 15, weight: .bold)
   static let editorPrimaryButtonFont = Font.system(size: 16, weight: .bold)
   static let sheetCloseFont = Font.system(size: 15, weight: .semibold)
-  static let editorPrefixFont = Font.custom("Roboto-Medium", size: 16)
-  static let editorValidationFont = Font.custom("Roboto", size: 12)
-  static let editorGuideFont = Font.custom("Roboto", size: 12)
-  static let searchLabelFont = Font.custom("Roboto-Medium", size: 12)
-  static let searchQueryFont = Font.custom("Roboto", size: 14)
-  static let searchCountFont = Font.custom("Roboto", size: 13)
+  static let editorPrefixFont = Font.system(size: 16, weight: .medium)
+  static let editorValidationFont = Font.system(size: 12, weight: .regular)
+  static let editorGuideFont = Font.system(size: 12, weight: .regular)
+  static let searchLabelFont = Font.system(size: 12, weight: .medium)
+  static let searchQueryFont = Font.system(size: 14, weight: .regular)
+  static let searchCountFont = Font.system(size: 13, weight: .regular)
   static let emptyTitleFont = rowTitleFont
   static let emptyBodyFont = rowMetaFont
 
@@ -710,13 +708,17 @@ extension TagListView {
   fileprivate func deleteTag(_ tag: Tag) {
     let episodeIds = modelContext.softDeleteTag(tag)
     pendingUndo = PendingTagDelete(tag: tag, episodeIds: episodeIds)
-    showsUndoToast = true
+    withAnimation(.easeInOut(duration: 0.2)) {
+      showsUndoToast = true
+    }
     undoTask?.cancel()
     undoTask = Task {
       try? await Task.sleep(nanoseconds: 3_000_000_000)
       if !Task.isCancelled {
         await MainActor.run {
-          showsUndoToast = false
+          withAnimation(.easeInOut(duration: 0.2)) {
+            showsUndoToast = false
+          }
           pendingUndo = nil
         }
       }
@@ -726,7 +728,9 @@ extension TagListView {
   fileprivate func undoDelete() {
     guard let pendingUndo else { return }
     modelContext.restoreTag(pendingUndo.tag, episodeIds: pendingUndo.episodeIds)
-    showsUndoToast = false
+    withAnimation(.easeInOut(duration: 0.2)) {
+      showsUndoToast = false
+    }
     self.pendingUndo = nil
     undoTask?.cancel()
   }
@@ -737,16 +741,7 @@ extension TagListView {
 }
 
 private func tagValidationErrorMessage(for result: TagValidationResult) -> String? {
-  switch result {
-  case .valid:
-    return nil
-  case .empty:
-    return nil
-  case .tooLong:
-    return "20文字以内で入力してください"
-  case .containsDisallowedCharacters:
-    return "使用できるのは日本語・英数字のみです（記号・絵文字・空白は使えません）"
-  }
+  TagInputHelpers.validationMessage(for: result)
 }
 
 extension View {

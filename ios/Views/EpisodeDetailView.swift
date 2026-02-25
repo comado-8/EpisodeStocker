@@ -158,7 +158,8 @@ struct EpisodeDetailView: View {
         selectedTags: selectedTags,
         onSelect: { value in
           addTag(value)
-        }
+        },
+        style: DetailStyle.registeredTagSelectionSheetStyle
       )
       .presentationDetents([.medium, .large])
       .presentationDragIndicator(.visible)
@@ -462,7 +463,7 @@ struct EpisodeDetailView: View {
             text: $tagText,
             selections: $selectedTags,
             maxSelections: maxTags,
-            suggestions: allTagSuggestions,
+            suggestions: registeredTagSuggestions,
             fieldType: "",
             validationMessage: tagValidationMessage,
             onCommit: addTag,
@@ -612,10 +613,6 @@ struct EpisodeDetailView: View {
       return selectedPlace.map { [$0] } ?? []
     }
     return episode.places.map(\.name)
-  }
-
-  private var allTagSuggestions: [String] {
-    registeredTagSuggestions
   }
 
   private var registeredTagSuggestions: [String] {
@@ -972,7 +969,7 @@ struct EpisodeDetailView: View {
       }
 
       if fieldType.isEmpty {
-        Text(tagInputGuideText)
+        Text(TagInputConstants.guideText)
           .font(DetailStyle.tagGuideFont)
           .foregroundColor(DetailStyle.tagGuideText)
           .fixedSize(horizontal: false, vertical: true)
@@ -980,7 +977,11 @@ struct EpisodeDetailView: View {
 
       let trimmed = text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
       if fieldType.isEmpty {
-        let filtered = filteredTagSuggestions(from: suggestions, query: trimmed)
+        let filtered = TagInputHelpers.filteredSuggestions(
+          query: trimmed,
+          selectedTags: selectedTags,
+          registeredTagSuggestions: suggestions
+        )
         HStack(spacing: 8) {
           Button {
             showsTagSelectionSheet = true
@@ -1031,27 +1032,6 @@ struct EpisodeDetailView: View {
         }
       }
     }
-  }
-
-  private func filteredTagSuggestions(from suggestions: [String], query: String) -> [String] {
-    let normalizedQuery = EpisodePersistence.stripLeadingTagPrefix(
-      EpisodePersistence.normalizeTagInputWhileEditing(query)
-    )
-    var seen = Set<String>()
-    let base = suggestions.filter { suggestion in
-      guard !selectedTags.contains(suggestion) else { return false }
-      let candidate = EpisodePersistence.stripLeadingTagPrefix(
-        EpisodePersistence.normalizeTagInputWhileEditing(suggestion)
-      )
-      if !normalizedQuery.isEmpty && !candidate.contains(normalizedQuery) {
-        return false
-      }
-      let inserted = seen.insert(candidate).inserted
-      return inserted
-    }
-    .prefix(3)
-    .map { $0 }
-    return base
   }
 
   private func handlePendingRootTabSwitch(_ requestedTab: RootTab?) {
@@ -1150,17 +1130,7 @@ struct EpisodeDetailView: View {
   }
 
   private var tagValidationMessage: String? {
-    guard !tagText.isEmpty else { return nil }
-    switch EpisodePersistence.validateTagNameInput(tagText) {
-    case .valid:
-      return nil
-    case .empty:
-      return nil
-    case .tooLong:
-      return "20文字以内で入力してください"
-    case .containsDisallowedCharacters:
-      return "使用できるのは日本語・英数字のみです（記号・絵文字・空白は使えません）"
-    }
+    TagInputHelpers.validationMessage(for: tagText)
   }
 
   private func addProject(_ value: String) {
@@ -1258,6 +1228,7 @@ struct EpisodeDetailView_Previews: PreviewProvider {
     NavigationStack {
       EpisodeDetailView(episode: sample)
         .environmentObject(EpisodeStore())
+        .environmentObject(AppRouter())
     }
   }
 }
@@ -1351,18 +1322,18 @@ private enum DetailStyle {
   static let calendarToolbarButtonText = Color(hex: "1F2937")
   static let calendarToolbarButtonDestructiveText = HomeStyle.destructiveRed
 
-  static let labelFont = Font.custom("Roboto-Medium", size: 14)
-  static let inputFont = Font.custom("Roboto", size: 16)
-  static let headerFont = Font.system(size: 20, weight: .semibold)
+  static let labelFont = Font.system(size: 14, weight: .medium)
+  static let inputFont = Font.system(size: 16, weight: .regular)
+  static let headerFont = AppTypography.formScreenTitle
   static let tabSelectedFont = Font.system(size: 16, weight: .semibold)
   static let tabFont = Font.system(size: 16, weight: .semibold)
-  static let detailToggleFont = Font.custom("Roboto-Medium", size: 16)
-  static let badgeFont = Font.custom("Roboto-Medium", size: 14)
-  static let chipFont = Font.custom("Roboto-Medium", size: 14)
-  static let counterFont = Font.custom("Roboto", size: 12)
-  static let validationFont = Font.custom("Roboto", size: 12)
-  static let tagGuideFont = Font.custom("Roboto", size: 12)
-  static let copyLabelFont = Font.custom("Roboto-Medium", size: 12)
+  static let detailToggleFont = Font.system(size: 16, weight: .medium)
+  static let badgeFont = Font.system(size: 14, weight: .medium)
+  static let chipFont = Font.system(size: 14, weight: .medium)
+  static let counterFont = Font.system(size: 12, weight: .regular)
+  static let validationFont = Font.system(size: 12, weight: .regular)
+  static let tagGuideFont = Font.system(size: 12, weight: .regular)
+  static let copyLabelFont = Font.system(size: 12, weight: .medium)
   static let editButtonFont = Font.system(size: 15, weight: .semibold)
   static let modalTitleFont = Font.system(size: 17, weight: .semibold)
   static let modalBodyFont = Font.system(size: 14, weight: .regular)
@@ -1406,9 +1377,23 @@ private enum DetailStyle {
     formatter.dateFormat = "yyyy/MM/dd"
     return formatter
   }()
-}
 
-private let tagInputGuideText = "使用可能: 漢字・ひらがな・カナ・英数字（小文字）"
+  static let registeredTagSelectionSheetStyle = RegisteredTagSelectionSheetStyle(
+    labelText: labelText,
+    inputFont: inputFont,
+    inputText: inputText,
+    inputHeight: inputHeight,
+    inputCornerRadius: inputCornerRadius,
+    inputBorder: inputBorder,
+    inputBorderWidth: inputBorderWidth,
+    chipSpacing: chipSpacing,
+    chipHeight: chipHeight,
+    chipFont: chipFont,
+    chipText: chipText,
+    chipFill: chipFill,
+    closeButtonFont: calendarToolbarButtonFont
+  )
+}
 
 private struct DetailTabButton: View {
   let title: String
@@ -1880,7 +1865,7 @@ private struct ReleaseLogDateRow: View {
               Button {
                 showsPicker = false
               } label: {
-                DetailCalendarToolbarButtonLabel(title: "閉じる")
+                CalendarToolbarButtonLabel(title: "閉じる", font: DetailStyle.calendarToolbarButtonFont, fillColor: DetailStyle.calendarToolbarButtonFill, textColor: DetailStyle.calendarToolbarButtonText)
               }
               .buttonStyle(.plain)
             }
@@ -1952,7 +1937,7 @@ private struct ReleaseLogOptionalDateRow: View {
               Button {
                 showsPicker = false
               } label: {
-                DetailCalendarToolbarButtonLabel(title: "閉じる")
+                CalendarToolbarButtonLabel(title: "閉じる", font: DetailStyle.calendarToolbarButtonFont, fillColor: DetailStyle.calendarToolbarButtonFill, textColor: DetailStyle.calendarToolbarButtonText)
               }
               .buttonStyle(.plain)
             }
@@ -1961,8 +1946,10 @@ private struct ReleaseLogOptionalDateRow: View {
                 date = nil
                 showsPicker = false
               } label: {
-                DetailCalendarToolbarButtonLabel(
+                CalendarToolbarButtonLabel(
                   title: "クリア",
+                  font: DetailStyle.calendarToolbarButtonFont,
+                  fillColor: DetailStyle.calendarToolbarButtonFill,
                   textColor: DetailStyle.calendarToolbarButtonDestructiveText
                 )
               }
@@ -2198,7 +2185,7 @@ private struct DetailDateField: View {
             Button {
               showsPicker = false
             } label: {
-              DetailCalendarToolbarButtonLabel(title: "閉じる")
+              CalendarToolbarButtonLabel(title: "閉じる", font: DetailStyle.calendarToolbarButtonFont, fillColor: DetailStyle.calendarToolbarButtonFill, textColor: DetailStyle.calendarToolbarButtonText)
             }
             .buttonStyle(.plain)
           }
@@ -2272,7 +2259,7 @@ private struct DetailOptionalDateField: View {
             Button {
               showsPicker = false
             } label: {
-              DetailCalendarToolbarButtonLabel(title: "閉じる")
+              CalendarToolbarButtonLabel(title: "閉じる", font: DetailStyle.calendarToolbarButtonFont, fillColor: DetailStyle.calendarToolbarButtonFill, textColor: DetailStyle.calendarToolbarButtonText)
             }
             .buttonStyle(.plain)
           }
@@ -2281,8 +2268,10 @@ private struct DetailOptionalDateField: View {
               date = nil
               showsPicker = false
             } label: {
-              DetailCalendarToolbarButtonLabel(
+              CalendarToolbarButtonLabel(
                 title: "クリア",
+                font: DetailStyle.calendarToolbarButtonFont,
+                fillColor: DetailStyle.calendarToolbarButtonFill,
                 textColor: DetailStyle.calendarToolbarButtonDestructiveText
               )
             }
@@ -2292,94 +2281,6 @@ private struct DetailOptionalDateField: View {
       }
       .presentationDetents([.height(DetailStyle.calendarSheetHeight)])
       .presentationDragIndicator(.visible)
-    }
-  }
-}
-
-private struct DetailCalendarToolbarButtonLabel: View {
-  let title: String
-  var textColor: Color = DetailStyle.calendarToolbarButtonText
-
-  var body: some View {
-    Text(title)
-      .font(DetailStyle.calendarToolbarButtonFont)
-      .lineLimit(1)
-      .fixedSize(horizontal: true, vertical: false)
-      .foregroundColor(textColor)
-      .padding(.horizontal, 10)
-      .padding(.vertical, 8)
-      .background(
-        Capsule()
-          .fill(DetailStyle.calendarToolbarButtonFill)
-      )
-  }
-}
-
-private struct RegisteredTagSelectionSheet: View {
-  @Environment(\.dismiss) private var dismiss
-  let tags: [String]
-  let selectedTags: [String]
-  let onSelect: (String) -> Void
-  @State private var query = ""
-
-  private var filteredTags: [String] {
-    let trimmed = EpisodePersistence.stripLeadingTagPrefix(
-      EpisodePersistence.normalizeTagInputWhileEditing(query.trimmingCharacters(in: .whitespacesAndNewlines))
-    )
-    let available = tags.filter { !selectedTags.contains($0) }
-    guard !trimmed.isEmpty else { return available }
-    return available.filter { tag in
-      let normalized = EpisodePersistence.stripLeadingTagPrefix(
-        EpisodePersistence.normalizeTagInputWhileEditing(tag)
-      )
-      return normalized.contains(trimmed)
-    }
-  }
-
-  var body: some View {
-    NavigationStack {
-      VStack(spacing: 12) {
-        HStack(spacing: 8) {
-          Image(systemName: "magnifyingglass")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundColor(DetailStyle.labelText)
-          TextField("タグを検索", text: $query)
-            .font(DetailStyle.inputFont)
-            .foregroundColor(DetailStyle.inputText)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: DetailStyle.inputHeight)
-        .background(
-          RoundedRectangle(cornerRadius: DetailStyle.inputCornerRadius)
-            .stroke(DetailStyle.inputBorder, lineWidth: DetailStyle.inputBorderWidth)
-        )
-
-        ScrollView {
-          FlowLayout(spacing: DetailStyle.chipSpacing) {
-            ForEach(filteredTags, id: \.self) { tag in
-              Button {
-                onSelect(tag)
-                dismiss()
-              } label: {
-                DetailChip(title: tag)
-              }
-              .buttonStyle(.plain)
-            }
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.vertical, 4)
-        }
-      }
-      .padding(16)
-      .navigationTitle("登録タグ選択")
-      .toolbar {
-        ToolbarItem(placement: .topBarTrailing) {
-          Button("閉じる") {
-            dismiss()
-          }
-          .font(DetailStyle.calendarToolbarButtonFont)
-        }
-      }
     }
   }
 }
@@ -2574,58 +2475,6 @@ private struct DetailSelectedChip: View {
     .frame(height: DetailStyle.chipHeight)
     .background(DetailStyle.chipFill)
     .clipShape(Capsule())
-  }
-}
-
-private struct FlowLayout: Layout {
-  let spacing: CGFloat
-
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let maxWidth = proposal.width ?? .greatestFiniteMagnitude
-    var currentX: CGFloat = 0
-    var totalHeight: CGFloat = 0
-    var lineHeight: CGFloat = 0
-    var maxLineWidth: CGFloat = 0
-
-    for subview in subviews {
-      let size = subview.sizeThatFits(.unspecified)
-      if currentX + size.width > maxWidth, currentX > 0 {
-        totalHeight += lineHeight + spacing
-        maxLineWidth = max(maxLineWidth, currentX - spacing)
-        currentX = 0
-        lineHeight = 0
-      }
-      currentX += size.width + spacing
-      lineHeight = max(lineHeight, size.height)
-    }
-
-    totalHeight += lineHeight
-    maxLineWidth = max(maxLineWidth, currentX - spacing)
-
-    let width = proposal.width ?? maxLineWidth
-    return CGSize(width: width, height: totalHeight)
-  }
-
-  func placeSubviews(
-    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-  ) {
-    var currentX = bounds.minX
-    var currentY = bounds.minY
-    var lineHeight: CGFloat = 0
-
-    for subview in subviews {
-      let size = subview.sizeThatFits(.unspecified)
-      if currentX + size.width > bounds.maxX, currentX > bounds.minX {
-        currentX = bounds.minX
-        currentY += lineHeight + spacing
-        lineHeight = 0
-      }
-      subview.place(
-        at: CGPoint(x: currentX, y: currentY),
-        proposal: ProposedViewSize(width: size.width, height: size.height))
-      currentX += size.width + spacing
-      lineHeight = max(lineHeight, size.height)
-    }
   }
 }
 
