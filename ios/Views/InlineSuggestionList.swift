@@ -49,40 +49,31 @@ struct InlineSuggestionList: View {
     let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
     let showsForEmptyQuery = trimmedQuery.isEmpty && showWhenQueryEmpty
     let showsForTypedQuery = !trimmedQuery.isEmpty && isActive
-    let shouldShow = !suggestions.isEmpty && (showsForEmptyQuery || showsForTypedQuery)
+    let shouldShow = showsForEmptyQuery || showsForTypedQuery
 
     VStack(alignment: .leading, spacing: 8) {
       if shouldShow {
-        VStack(alignment: .leading, spacing: InlineSuggestionStyle.rowSpacing) {
-          if !trimmedQuery.isEmpty {
-            HStack(spacing: 8) {
-              Text("候補")
-                .font(InlineSuggestionStyle.labelFont)
-                .foregroundColor(InlineSuggestionStyle.labelText)
-              Spacer()
-              Button(action: {
-                NotificationCenter.default.post(
-                  name: .openSuggestionManagerSheet, object: fieldType)
-              }) {
-                HStack(spacing: 4) {
-                  Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 12, weight: .semibold))
-                  Text("候補を管理")
-                }
-                .font(InlineSuggestionStyle.manageFont)
-                .foregroundColor(InlineSuggestionStyle.manageText)
-                .padding(.horizontal, 10)
-                .frame(height: InlineSuggestionStyle.manageHeight)
-                .background(InlineSuggestionStyle.manageFill)
-                .overlay(
-                  Capsule()
-                    .stroke(InlineSuggestionStyle.manageBorder, lineWidth: 1)
-                )
-                .clipShape(Capsule())
-              }
-              .buttonStyle(.plain)
+        HStack(spacing: 8) {
+          Button(action: {
+            NotificationCenter.default.post(
+              name: .openSuggestionManagerSheet, object: fieldType)
+          }) {
+            HStack(spacing: 4) {
+              Image(systemName: "slider.horizontal.3")
+              Text("履歴管理/選択")
             }
+            .font(InlineSuggestionStyle.manageFont)
+            .foregroundColor(InlineSuggestionStyle.manageText)
+            .padding(.horizontal, 10)
+            .frame(height: InlineSuggestionStyle.manageHeight)
+            .background(InlineSuggestionStyle.manageFill)
+            .overlay(
+              Capsule()
+                .stroke(InlineSuggestionStyle.manageBorder, lineWidth: 1)
+            )
+            .clipShape(Capsule())
           }
+          .buttonStyle(.plain)
 
           ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: InlineSuggestionStyle.chipSpacing) {
@@ -107,22 +98,28 @@ struct InlineSuggestionList: View {
               }
             }
           }
+          .frame(maxWidth: .infinity, alignment: .leading)
         }
       }
     }
     .onAppear { reload() }
     .onChange(of: query) { _, _ in reload() }
     .onChange(of: isActive) { _, _ in reload() }
+    .onReceive(NotificationCenter.default.publisher(for: .suggestionManagerSheetDidDismiss)) {
+      note in
+      guard let dismissedFieldType = note.object as? String, dismissedFieldType == fieldType else {
+        return
+      }
+      reload()
+    }
   }
 }
 
 private enum InlineSuggestionStyle {
-  static let rowSpacing: CGFloat = 6
   static let chipSpacing: CGFloat = 8
   static let chipHeight: CGFloat = 28
   static let manageHeight: CGFloat = 26
 
-  static let labelText = Color(hex: "4A5565")
   static let chipText = Color(hex: "364153")
   static let chipFill = Color(hex: "F3F4F6")
   static let chipBorder = Color(hex: "D1D5DC")
@@ -130,11 +127,12 @@ private enum InlineSuggestionStyle {
   static let manageFill = HomeStyle.fabRed.opacity(0.08)
   static let manageBorder = HomeStyle.fabRed.opacity(0.4)
 
-  static let labelFont = Font.custom("Roboto-Medium", size: 12)
-  static let chipFont = Font.custom("Roboto-Medium", size: 14)
-  static let manageFont = Font.custom("Roboto-Medium", size: 12)
+  static let chipFont = Font.system(size: 14, weight: .medium)
+  static let manageFont = Font.system(size: 12, weight: .medium)
 }
 
 extension Notification.Name {
   static let openSuggestionManagerSheet = Notification.Name("openSuggestionManagerSheet")
+  static let suggestionManagerSheetDidDismiss = Notification.Name(
+    "suggestionManagerSheetDidDismiss")
 }

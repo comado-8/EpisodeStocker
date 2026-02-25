@@ -2,6 +2,15 @@ import XCTest
 @testable import EpisodeStocker
 
 final class SuggestionRepositoryTests: XCTestCase {
+    func testDefaultRepositoryStartsWithNoSuggestions() {
+        let repo = InMemorySuggestionRepository()
+
+        XCTAssertTrue(repo.fetch(fieldType: "人物", query: nil, includeDeleted: false).isEmpty)
+        XCTAssertTrue(repo.fetch(fieldType: "企画名", query: nil, includeDeleted: false).isEmpty)
+        XCTAssertTrue(repo.fetch(fieldType: "感情", query: nil, includeDeleted: false).isEmpty)
+        XCTAssertTrue(repo.fetch(fieldType: "場所", query: nil, includeDeleted: false).isEmpty)
+    }
+
     func testFetchRespectsFieldTypeQueryAndDeletedFlag() {
         let now = Date()
         let repo = InMemorySuggestionRepository(

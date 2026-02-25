@@ -101,7 +101,7 @@ struct HomeView: View {
             ZStack(alignment: .bottomTrailing) {
                 HomeStyle.background.ignoresSafeArea()
 
-                ScrollView {
+                VStack(spacing: HomeStyle.sectionSpacing) {
                     VStack(spacing: HomeStyle.sectionSpacing) {
                         HomeSearchBarView(
                             text: $query,
@@ -173,23 +173,26 @@ struct HomeView: View {
                             )
                         }
 
+                        Rectangle()
+                            .fill(HomeStyle.outline)
+                            .frame(width: contentWidth, height: HomeStyle.dividerHeight)
+
+                        if isSelectionMode {
+                            HomeSelectionStatusRow(
+                                count: selectedEpisodeIDs.count,
+                                onCancel: { endSelection() },
+                                onDelete: { showsDeleteAlert = selectedEpisodeIDs.isEmpty == false }
+                            )
+                            .frame(width: contentWidth, height: HomeStyle.selectionStatusRowHeight)
+                        } else {
+                            HomeStatusSegmentedControl(selection: $statusFilter, width: segmentedWidth)
+                                .frame(width: contentWidth, height: HomeStyle.statusRowHeight)
+                        }
+                    }
+                    .frame(width: contentWidth, alignment: .top)
+
+                    ScrollView {
                         VStack(spacing: HomeStyle.sectionSpacing) {
-                            Rectangle()
-                                .fill(HomeStyle.outline)
-                                .frame(width: contentWidth, height: HomeStyle.dividerHeight)
-
-                            if isSelectionMode {
-                                HomeSelectionStatusRow(
-                                    count: selectedEpisodeIDs.count,
-                                    onCancel: { endSelection() },
-                                    onDelete: { showsDeleteAlert = selectedEpisodeIDs.isEmpty == false }
-                                )
-                                .frame(width: contentWidth, height: HomeStyle.selectionStatusRowHeight)
-                            } else {
-                                HomeStatusSegmentedControl(selection: $statusFilter, width: segmentedWidth)
-                                    .frame(width: contentWidth, height: HomeStyle.statusRowHeight)
-                            }
-
                             if isShowingSearchResults {
                                 HStack(spacing: 8) {
                                     Text("検索結果")
@@ -228,17 +231,21 @@ struct HomeView: View {
                                 .padding(.top, HomeStyle.listSpacing - HomeStyle.sectionSpacing)
                             }
                         }
-                        .onTapGesture {
-                            if isSearchFocused {
-                                isSearchFocused = false
-                                hideKeyboard()
-                            }
-                        }
+                        .frame(width: contentWidth, alignment: .topLeading)
+                        .padding(.bottom, HomeStyle.tabBarHeight + 16 + bottomInset)
                     }
-                    .padding(.top, topPadding)
-                    .padding(.bottom, HomeStyle.tabBarHeight + 16 + bottomInset)
-                    .frame(maxWidth: .infinity)
                 }
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        if isSearchFocused {
+                            isSearchFocused = false
+                            hideKeyboard()
+                        }
+                    },
+                    including: .subviews
+                )
+                .padding(.top, topPadding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
                 if !isSelectionMode {
                     HomeFloatingButton {
@@ -271,18 +278,6 @@ struct HomeView: View {
 private extension HomeView {
     func borderColor(for episode: Episode) -> Color {
         episode.isUnlocked ? HomeStyle.cardBorder : HomeStyle.lockedCardBorder
-    }
-
-    func baseSafeAreaBottom() -> CGFloat {
-        #if canImport(UIKit)
-        let windowScene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first
-        if let window = windowScene?.windows.first(where: { $0.isKeyWindow }) {
-            return window.safeAreaInsets.bottom
-        }
-        #endif
-        return 0
     }
 
     func hasAnySearchCondition() -> Bool {
@@ -333,9 +328,11 @@ private extension HomeView {
     @ViewBuilder
     func episodeListRow(episode: Episode, width: CGFloat) -> some View {
         let isSelected = selectedEpisodeIDs.contains(episode.id)
+        let trimmedBody = episode.body?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let subtitle = (trimmedBody?.isEmpty ?? true) ? "本文なし" : (trimmedBody ?? "本文なし")
         let rowView = EpisodeCardRow(
             title: episode.title,
-            subtitle: episode.body ?? "Subhead",
+            subtitle: subtitle,
             date: episode.date,
             isUnlocked: episode.isUnlocked,
             width: width,

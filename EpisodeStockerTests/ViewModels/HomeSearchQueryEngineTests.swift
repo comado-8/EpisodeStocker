@@ -46,6 +46,17 @@ final class HomeSearchQueryEngineTests: XCTestCase {
         XCTAssertEqual(result.map(\.id), [tagged.id])
     }
 
+    func testTagSearchNormalizesLeadingFullwidthHash() {
+        let tagged = makeEpisode(title: "Tag target", body: "", tags: ["#仕事"])
+        _ = makeEpisode(title: "Other", body: "", tags: ["#雑談"])
+
+        let token = HomeSearchFilterToken(field: .tag, value: "＃仕事")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+        let result = filter(search: search, statusFilter: .all)
+
+        XCTAssertEqual(result.map(\.id), [tagged.id])
+    }
+
     func testSameFieldMultipleTokensUseOr() {
         let first = makeEpisode(title: "A", body: "", tags: ["#仕事"])
         let second = makeEpisode(title: "B", body: "", tags: ["#学び"])
@@ -319,6 +330,31 @@ final class HomeSearchQueryEngineTests: XCTestCase {
         XCTAssertEqual(values.count, 2)
         let firstValue = try XCTUnwrap(values.first)
         XCTAssertEqual(firstValue.lowercased(), "alpha")
+    }
+
+    func testTagSuggestionsMatchFullwidthHashQuery() {
+        _ = makeEpisode(title: "1", body: "", tags: ["#仕事"])
+        let search = HomeSearchQueryState(freeText: "＃仕", tokens: [], activeField: .tag)
+        let items = HomeSearchQueryEngine.suggestions(for: search, episodes: fetchEpisodes())
+
+        let values = items.compactMap { item -> String? in
+            if case let .value(field: .tag, value: value) = item.kind {
+                return value
+            }
+            return nil
+        }
+        XCTAssertTrue(values.contains("仕事"))
+    }
+
+    func testTagSearchNormalizesWhitespaces() {
+        let tagged = makeEpisode(title: "Tag target", body: "", tags: ["#TagName"])
+        _ = makeEpisode(title: "Other", body: "", tags: ["#Another"])
+
+        let token = HomeSearchFilterToken(field: .tag, value: "#Tag Name")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+        let result = filter(search: search, statusFilter: .all)
+
+        XCTAssertEqual(result.map(\.id), [tagged.id])
     }
 }
 

@@ -22,6 +22,7 @@ struct EpisodeDetailContainer: View {
 
 struct EpisodeDetailView: View {
   @EnvironmentObject private var store: EpisodeStore
+  @EnvironmentObject private var router: AppRouter
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   let episode: Episode
@@ -37,7 +38,6 @@ struct EpisodeDetailView: View {
   @State private var bodyText: String
   @State private var dateValue: Date
   @State private var releaseDateValue: Date?
-  @State private var selectedCategory: String?
   @State private var didCopyBody = false
   @State private var didCopyTitle = false
   @State private var showsDiscardAlert = false
@@ -52,7 +52,6 @@ struct EpisodeDetailView: View {
   @State private var selectedTags: [String] = []
   @State private var projectText = ""
   @State private var selectedProjects: [String] = []
-  @State private var emotionText = ""
   @State private var selectedEmotions: [String] = []
   @State private var placeText = ""
   @State private var selectedPlace: String?
@@ -60,7 +59,6 @@ struct EpisodeDetailView: View {
   // focus states for inputs to control inline suggestion visibility
   @State private var personFieldFocused = false
   @State private var projectFieldFocused = false
-  @State private var emotionFieldFocused = false
   @State private var placeFieldFocused = false
 
   // sheet is presented via `suggestionManagerField` using `.sheet(item:)` to avoid presentation races
@@ -70,12 +68,12 @@ struct EpisodeDetailView: View {
   }
 
   @State private var suggestionManagerField: SuggestionField? = nil
+  @State private var showsTagSelectionSheet = false
 
   private let maxPersons = 10
   private let maxTags = 10
   private let maxEmotions = 3
-  private let maxProjects = 10
-  private let categoryOptions = ["会話ネタ", "アイデア", "学び", "トラブル"]
+  private let maxProjects = 3
 
   init(episode: Episode) {
     self.episode = episode
@@ -83,7 +81,7 @@ struct EpisodeDetailView: View {
     _bodyText = State(initialValue: episode.body ?? "")
     _dateValue = State(initialValue: episode.date)
     _releaseDateValue = State(initialValue: episode.unlockDate)
-    _selectedCategory = State(initialValue: episode.type)
+    _selectedTags = State(initialValue: EpisodeDetailView.orderedTagChips(from: episode.tags))
   }
 
   var body: some View {
@@ -93,6 +91,7 @@ struct EpisodeDetailView: View {
       let horizontalPadding = max(
         DetailStyle.horizontalPadding, (proxy.size.width - contentWidth) / 2)
       let topPadding = max(0, DetailStyle.figmaTopInset - proxy.safeAreaInsets.top)
+      let tabBarOffset = max(0, HomeStyle.tabBarHeight - 48)
 
       ZStack {
         VStack(spacing: 0) {
@@ -114,7 +113,7 @@ struct EpisodeDetailView: View {
             }
             .padding(.top, DetailStyle.sectionSpacing)
             .padding(.horizontal, horizontalPadding)
-            .padding(.bottom, 16)
+            .padding(.bottom, 24 + tabBarOffset)
             .frame(maxWidth: .infinity, alignment: .topLeading)
           }
           .contentShape(Rectangle())
@@ -142,10 +141,102 @@ struct EpisodeDetailView: View {
       .presentationDragIndicator(.visible)
     }
     .sheet(item: $suggestionManagerField) { field in
-      SuggestionManagerView(repository: store.suggestionRepository, fieldType: field.field)
+      SuggestionManagerView(
+        repository: store.suggestionRepository,
+        fieldType: field.field,
+        onSelect: { value in
+          applySuggestionSelection(fieldType: field.field, value: value)
+        }
+      )
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .presentationBackground(Color.white)
     }
+    .sheet(isPresented: $showsTagSelectionSheet) {
+      RegisteredTagSelectionSheet(
+        tags: registeredTagSuggestions,
+        selectedTags: selectedTags,
+        onSelect: { value in
+          addTag(value)
+        },
+        style: DetailStyle.registeredTagSelectionSheetStyle
+      )
+      .presentationDetents([.medium, .large])
+      .presentationDragIndicator(.visible)
+      .presentationBackground(Color.white)
+    }
+    .onChange(of: tagText) { _, newValue in
+      let normalized = EpisodePersistence.normalizeTagInputWhileEditing(newValue)
+      if normalized != newValue {
+        tagText = normalized
+      }
+    }
+    .onChange(of: isEditing) { _, _ in
+      syncUnsavedEditStateToRouter()
+    }
+    .onChange(of: hasUnsavedChanges) { _, _ in
+      syncUnsavedEditStateToRouter()
+    }
+    .onChange(of: router.pendingRootTabSwitch) { _, requestedTab in
+      handlePendingRootTabSwitch(requestedTab)
+    }
+    .onAppear {
+      syncUnsavedEditStateToRouter()
+    }
+    .onDisappear {
+      router.hasUnsavedEpisodeDetailChanges = false
+    }
+  }
+
+  private var bodyCharacterCountText: String {
+    "\(bodyText.count) / \(EpisodePersistence.bodyCharacterLimit)"
+  }
+
+  private var isBodyOverLimit: Bool {
+    bodyText.count > EpisodePersistence.bodyCharacterLimit
+  }
+
+  private var bodyLengthValidationMessage: String? {
+    guard isBodyOverLimit else { return nil }
+    return "本文は\(EpisodePersistence.bodyCharacterLimit)文字以内で入力してください"
+  }
+
+  private var isPersonNameOverLimit: Bool {
+    personText.trimmingCharacters(in: .whitespacesAndNewlines).count
+      > EpisodePersistence.personNameCharacterLimit
+  }
+
+  private var isProjectNameOverLimit: Bool {
+    projectText.trimmingCharacters(in: .whitespacesAndNewlines).count
+      > EpisodePersistence.projectNameCharacterLimit
+  }
+
+  private var isPlaceNameOverLimit: Bool {
+    placeText.trimmingCharacters(in: .whitespacesAndNewlines).count
+      > EpisodePersistence.placeNameCharacterLimit
+  }
+
+  private var personValidationMessage: String? {
+    guard isPersonNameOverLimit else { return nil }
+    return "人物は\(EpisodePersistence.personNameCharacterLimit)文字以内で入力してください"
+  }
+
+  private var projectValidationMessage: String? {
+    guard isProjectNameOverLimit else { return nil }
+    return "企画名は\(EpisodePersistence.projectNameCharacterLimit)文字以内で入力してください"
+  }
+
+  private var placeValidationMessage: String? {
+    guard isPlaceNameOverLimit else { return nil }
+    return "場所は\(EpisodePersistence.placeNameCharacterLimit)文字以内で入力してください"
+  }
+
+  private var isRegistrationSaveEnabled: Bool {
+    !titleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && !isBodyOverLimit
+      && !isPersonNameOverLimit
+      && !isProjectNameOverLimit
+      && !isPlaceNameOverLimit
   }
 
   private var headerView: some View {
@@ -174,24 +265,26 @@ struct EpisodeDetailView: View {
         } label: {
           HStack(spacing: 4) {
             Image(systemName: isEditing ? "checkmark" : "pencil")
-              .font(.system(size: 18, weight: .bold))
+              .font(.system(size: 16, weight: .semibold))
               .frame(width: 24, height: 24)
             Text(isEditing ? "保存" : "編集")
               .font(DetailStyle.editButtonFont)
           }
           .foregroundColor(DetailStyle.editAccent)
-          .padding(.horizontal, 10)
-          .padding(.vertical, 6)
+          .padding(.horizontal, 14)
+          .padding(.vertical, 8)
           .background(
-            RoundedRectangle(cornerRadius: DetailStyle.editButtonCornerRadius)
+            Capsule()
               .fill(DetailStyle.editButtonFill)
           )
           .overlay(
-            RoundedRectangle(cornerRadius: DetailStyle.editButtonCornerRadius)
+            Capsule()
               .stroke(DetailStyle.editButtonBorder, lineWidth: 1)
           )
         }
         .buttonStyle(.plain)
+        .disabled(isEditing && !isRegistrationSaveEnabled)
+        .opacity(isEditing && !isRegistrationSaveEnabled ? 0.6 : 1)
       }
     }
     .frame(height: DetailStyle.headerHeight)
@@ -273,21 +366,13 @@ struct EpisodeDetailView: View {
         }
 
         VStack(alignment: .leading, spacing: DetailStyle.fieldSpacing) {
-          DetailFieldLabel(title: "種別")
-          if isEditing {
-            DetailDropdownField(
-              placeholder: "未設定",
-              selection: $selectedCategory,
-              options: categoryOptions
-            )
-          } else {
-            DetailChip(title: (selectedCategory ?? "").isEmpty ? "未設定" : (selectedCategory ?? ""))
-          }
-        }
-
-        VStack(alignment: .leading, spacing: DetailStyle.fieldSpacing) {
           HStack {
-            DetailFieldLabel(title: "本文", required: true)
+            DetailFieldLabel(title: "本文")
+            if isEditing {
+              Text(bodyCharacterCountText)
+                .font(DetailStyle.counterFont)
+                .foregroundColor(DetailStyle.counterText)
+            }
             Spacer()
             if didCopyBody {
               Text("コピー済み")
@@ -303,9 +388,18 @@ struct EpisodeDetailView: View {
             .buttonStyle(.plain)
           }
           if isEditing {
-            EditableTextArea(placeholder: "本文を入力", text: $bodyText)
+            EditableTextArea(
+              placeholder: "本文を入力",
+              text: $bodyText
+            )
           } else {
             ReadOnlyTextArea(text: bodyText.isEmpty ? "本文なし" : bodyText)
+          }
+          if let bodyLengthValidationMessage, isEditing {
+            Text(bodyLengthValidationMessage)
+              .font(DetailStyle.validationFont)
+              .foregroundColor(DetailStyle.validationText)
+              .fixedSize(horizontal: false, vertical: true)
           }
         }
       }
@@ -341,19 +435,20 @@ struct EpisodeDetailView: View {
   private var detailSections: some View {
     VStack(alignment: .leading, spacing: DetailStyle.detailsSpacing) {
       detailSection(
-        title: "人物（Who）",
-        existing: displayPersons,
+        title: "企画名",
+        existing: displayProjects,
         showsEditorWhenEditing: true,
         editor: {
           multiChipEditor(
-            placeholder: "人物名を入力してEnter",
-            text: $personText,
-            selections: $selectedPersons,
-            maxSelections: maxPersons,
+            placeholder: "企画名を入力してEnter",
+            text: $projectText,
+            selections: $selectedProjects,
+            maxSelections: maxProjects,
             suggestions: [],
-            fieldType: "人物",
-            onCommit: addPerson,
-            onRemove: removePerson
+            fieldType: "企画名",
+            validationMessage: projectValidationMessage,
+            onCommit: addProject,
+            onRemove: removeProject
           )
         }
       )
@@ -368,28 +463,11 @@ struct EpisodeDetailView: View {
             text: $tagText,
             selections: $selectedTags,
             maxSelections: maxTags,
-            suggestions: tagSuggestions,
-            fieldType: "",
+            suggestions: registeredTagSuggestions,
+            fieldType: DetailFieldType.tag,
+            validationMessage: tagValidationMessage,
             onCommit: addTag,
             onRemove: removeTag
-          )
-        }
-      )
-
-      detailSection(
-        title: "企画名",
-        existing: displayProjects,
-        showsEditorWhenEditing: true,
-        editor: {
-          multiChipEditor(
-            placeholder: "企画名を入力してEnter",
-            text: $projectText,
-            selections: $selectedProjects,
-            maxSelections: maxProjects,
-            suggestions: [],
-            fieldType: "企画名",
-            onCommit: addProject,
-            onRemove: removeProject
           )
         }
       )
@@ -399,15 +477,25 @@ struct EpisodeDetailView: View {
         existing: displayEmotions,
         showsEditorWhenEditing: true,
         editor: {
+          emotionPresetEditor
+        }
+      )
+
+      detailSection(
+        title: "人物",
+        existing: displayPersons,
+        showsEditorWhenEditing: true,
+        editor: {
           multiChipEditor(
-            placeholder: "感情を選択または入力",
-            text: $emotionText,
-            selections: $selectedEmotions,
-            maxSelections: maxEmotions,
+            placeholder: "人物名を入力してEnter",
+            text: $personText,
+            selections: $selectedPersons,
+            maxSelections: maxPersons,
             suggestions: [],
-            fieldType: "感情",
-            onCommit: addEmotion,
-            onRemove: removeEmotion
+            fieldType: "人物",
+            validationMessage: personValidationMessage,
+            onCommit: addPerson,
+            onRemove: removePerson
           )
         }
       )
@@ -422,14 +510,13 @@ struct EpisodeDetailView: View {
               placeholder: "場所を入力",
               text: $placeText,
               selection: $selectedPlace,
-              isFocused: $placeFieldFocused
+              isFocused: $placeFieldFocused,
+              onSubmit: { commitPlace(placeText) }
             )
             InlineSuggestionList(
               fieldType: "場所", query: $placeText, maxItems: 3, isActive: placeFieldFocused,
               onSelect: { option in
-                selectedPlace = option
-                placeText = option
-                store.suggestionRepository.upsert(fieldType: "場所", value: option)
+                commitPlace(option)
               }
             )
             .environmentObject(store)
@@ -439,9 +526,32 @@ struct EpisodeDetailView: View {
                 suggestionManagerField = SuggestionField(field: field)
               }
             }
+            if let placeValidationMessage {
+              Text(placeValidationMessage)
+                .font(DetailStyle.validationFont)
+                .foregroundColor(DetailStyle.validationText)
+                .fixedSize(horizontal: false, vertical: true)
+            }
           }
         }
       )
+    }
+  }
+
+  private var emotionPresetEditor: some View {
+    FlowLayout(spacing: DetailStyle.chipSpacing) {
+      ForEach(emotionChipOptions, id: \.self) { option in
+        let selected = selectedEmotions.contains(option)
+        let disabled = !selected && selectedEmotions.count >= maxEmotions
+        Button {
+          toggleEmotion(option)
+        } label: {
+          EmotionPresetDetailChip(title: option, isSelected: selected)
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.55 : 1)
+      }
     }
   }
 
@@ -479,14 +589,11 @@ struct EpisodeDetailView: View {
   }
 
   private var episodeTagNames: [String] {
-    episode.tags.map { "#\($0.name)" }
+    EpisodeDetailView.orderedTagChips(from: episode.tags)
   }
 
   private var displayTagChips: [String] {
-    if isEditing {
-      return selectedTags.isEmpty ? episodeTagNames : selectedTags
-    }
-    return episodeTagNames
+    selectedTags.isEmpty ? episodeTagNames : selectedTags
   }
 
   private var displayPersons: [String] {
@@ -508,9 +615,8 @@ struct EpisodeDetailView: View {
     return episode.places.map(\.name)
   }
 
-  private var tagSuggestions: [String] {
-    let names = allTags.map { "#\($0.name)" }
-    return names.isEmpty ? ["タグA", "タグB"] : names
+  private var registeredTagSuggestions: [String] {
+    allTags.sorted { $0.updatedAt > $1.updatedAt }.compactMap(displayTagName)
   }
 
   private var releaseLogCount: Int {
@@ -575,7 +681,7 @@ struct EpisodeDetailView: View {
       }
     } else {
       selectedPersons = episode.persons.map(\.name)
-      selectedTags = episode.tags.map { "#\($0.name)" }
+      selectedTags = EpisodeDetailView.orderedTagChips(from: episode.tags)
       selectedProjects = episode.projects.map(\.name)
       selectedEmotions = episode.emotions.map(\.name)
       selectedPlace = episode.places.first?.name
@@ -587,9 +693,15 @@ struct EpisodeDetailView: View {
   private func saveChanges() -> Bool {
     let trimmedTitle = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let trimmedCategory = (selectedCategory ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    let trimmedPlace = (selectedPlace ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedTitle.isEmpty else { return false }
+    let selectedPlaceValue = (selectedPlace ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let placeValue = selectedPlaceValue.isEmpty ? normalizedPlaceName(placeText) : selectedPlaceValue
+    guard
+      !trimmedTitle.isEmpty,
+      !isBodyOverLimit,
+      !isPersonNameOverLimit,
+      !isProjectNameOverLimit,
+      !isPlaceNameOverLimit
+    else { return false }
 
     modelContext.updateEpisode(
       episode,
@@ -597,12 +709,12 @@ struct EpisodeDetailView: View {
       body: trimmedBody.isEmpty ? nil : trimmedBody,
       date: dateValue,
       unlockDate: releaseDateValue,
-      type: trimmedCategory.isEmpty ? nil : trimmedCategory,
+      type: episode.type,
       tags: selectedTags,
       persons: selectedPersons,
       projects: selectedProjects,
       emotions: selectedEmotions,
-      place: trimmedPlace.isEmpty ? nil : trimmedPlace
+      place: placeValue
     )
     return true
   }
@@ -617,7 +729,6 @@ struct EpisodeDetailView: View {
       body: bodyText,
       date: dateValue,
       releaseDate: releaseDateValue,
-      category: selectedCategory,
       persons: selectedPersons,
       personText: personText,
       tags: selectedTags,
@@ -625,7 +736,6 @@ struct EpisodeDetailView: View {
       projects: selectedProjects,
       projectText: projectText,
       emotions: selectedEmotions,
-      emotionText: emotionText,
       place: selectedPlace,
       placeText: placeText
     )
@@ -662,7 +772,6 @@ struct EpisodeDetailView: View {
     bodyText = snapshot.body
     dateValue = snapshot.date
     releaseDateValue = snapshot.releaseDate
-    selectedCategory = snapshot.category
     selectedPersons = snapshot.persons
     personText = snapshot.personText
     selectedTags = snapshot.tags
@@ -670,7 +779,6 @@ struct EpisodeDetailView: View {
     selectedProjects = snapshot.projects
     projectText = snapshot.projectText
     selectedEmotions = snapshot.emotions
-    emotionText = snapshot.emotionText
     selectedPlace = snapshot.place
     placeText = snapshot.placeText
   }
@@ -680,7 +788,7 @@ struct EpisodeDetailView: View {
       Color.black.opacity(0.25)
         .ignoresSafeArea()
         .onTapGesture {
-          showsDiscardAlert = false
+          cancelDiscardPrompt()
         }
 
       VStack(spacing: 20) {
@@ -722,11 +830,12 @@ struct EpisodeDetailView: View {
           .frame(height: DetailStyle.modalButtonHeight)
           .background(DetailStyle.modalPrimaryFill)
           .clipShape(Capsule())
+          .disabled(!isRegistrationSaveEnabled)
+          .opacity(isRegistrationSaveEnabled ? 1 : 0.6)
         }
 
         Button("キャンセル") {
-          showsDiscardAlert = false
-          pendingAction = nil
+          cancelDiscardPrompt()
         }
         .font(DetailStyle.modalButtonFont)
         .foregroundColor(DetailStyle.labelText)
@@ -746,6 +855,8 @@ struct EpisodeDetailView: View {
       dismiss()
     case .switchTab(let tab):
       selectedTab = tab
+    case .switchRootTab(let tab):
+      router.commitRootTabSwitch(tab)
     case .none:
       break
     }
@@ -835,6 +946,7 @@ struct EpisodeDetailView: View {
     maxSelections: Int,
     suggestions: [String],
     fieldType: String,
+    validationMessage: String? = nil,
     onCommit: @escaping (String) -> Void,
     onRemove: @escaping (String) -> Void
   ) -> some View {
@@ -849,11 +961,62 @@ struct EpisodeDetailView: View {
         isFocused: bindingForFieldType(fieldType)
       )
 
+      if let validationMessage {
+        Text(validationMessage)
+          .font(DetailStyle.validationFont)
+          .foregroundColor(DetailStyle.validationText)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      if fieldType == DetailFieldType.tag {
+        Text(TagInputConstants.guideText)
+          .font(DetailStyle.tagGuideFont)
+          .foregroundColor(DetailStyle.tagGuideText)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
       let trimmed = text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
-      if fieldType.isEmpty {
-        if trimmed.isEmpty {
-          // tags: show tag suggestions when input is empty
-          suggestionRow(suggestions, onSelect: onCommit)
+      if fieldType == DetailFieldType.tag {
+        let filtered = TagInputHelpers.filteredSuggestions(
+          query: trimmed,
+          selectedTags: selectedTags,
+          registeredTagSuggestions: suggestions
+        )
+        HStack(spacing: 8) {
+          Button {
+            showsTagSelectionSheet = true
+          } label: {
+            HStack(spacing: 4) {
+              Image(systemName: "tag")
+                .font(.system(size: 12, weight: .semibold))
+              Text("登録タグ選択")
+            }
+            .font(DetailStyle.tagGuideFont)
+            .foregroundColor(HomeStyle.fabRed)
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(HomeStyle.fabRed.opacity(0.08))
+            .overlay(
+              Capsule()
+                .stroke(HomeStyle.fabRed.opacity(0.4), lineWidth: 1)
+            )
+            .clipShape(Capsule())
+          }
+          .buttonStyle(.plain)
+
+          ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DetailStyle.chipSpacing) {
+              ForEach(filtered, id: \.self) { title in
+                Button {
+                  onCommit(title)
+                } label: {
+                  DetailChip(title: title)
+                }
+                .buttonStyle(.plain)
+              }
+            }
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
         }
       } else {
         // history-backed fields: show history for empty input, and filtered suggestions for typed input
@@ -871,11 +1034,28 @@ struct EpisodeDetailView: View {
     }
   }
 
+  private func handlePendingRootTabSwitch(_ requestedTab: RootTab?) {
+    guard let requestedTab else { return }
+    guard isEditing && hasUnsavedChanges else {
+      router.commitRootTabSwitch(requestedTab)
+      return
+    }
+    pendingAction = .switchRootTab(requestedTab)
+    showsDiscardAlert = true
+  }
+
+  private func cancelDiscardPrompt() {
+    if case .switchRootTab(_) = pendingAction {
+      router.cancelRootTabSwitchRequest()
+    }
+    showsDiscardAlert = false
+    pendingAction = nil
+  }
+
   private func bindingForFieldType(_ fieldType: String) -> Binding<Bool>? {
     switch fieldType {
     case "人物": return $personFieldFocused
     case "企画名": return $projectFieldFocused
-    case "感情": return $emotionFieldFocused
     case "場所": return $placeFieldFocused
     default: return nil
     }
@@ -885,7 +1065,6 @@ struct EpisodeDetailView: View {
     switch fieldType {
     case "人物": return personFieldFocused
     case "企画名": return projectFieldFocused
-    case "感情": return emotionFieldFocused
     case "場所": return placeFieldFocused
     default: return false
     }
@@ -906,8 +1085,9 @@ struct EpisodeDetailView: View {
   }
 
   private func addPerson(_ name: String) {
-    addTo(&selectedPersons, value: name, max: maxPersons, clear: { personText = "" })
-    store.suggestionRepository.upsert(fieldType: "人物", value: name)
+    guard let normalized = normalizedPersonName(name) else { return }
+    addTo(&selectedPersons, value: normalized, max: maxPersons, clear: { personText = "" })
+    store.suggestionRepository.upsert(fieldType: "人物", value: normalized)
   }
 
   private func removePerson(_ name: String) {
@@ -915,12 +1095,7 @@ struct EpisodeDetailView: View {
   }
 
   private func addTag(_ value: String) {
-    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    let normalized = normalizedTag(trimmed)
-    guard let normalized else {
-      tagText = ""
-      return
-    }
+    guard let normalized = normalizedTag(value) else { return }
     addTo(&selectedTags, value: normalized, max: maxTags, clear: { tagText = "" })
     // Tags are managed separately; do not record as suggestion here
   }
@@ -930,14 +1105,38 @@ struct EpisodeDetailView: View {
   }
 
   private func normalizedTag(_ value: String) -> String? {
-    guard !value.isEmpty else { return nil }
-    if value.hasPrefix("#") { return value }
-    return "#\(value)"
+    guard let normalized = EpisodePersistence.validateTagNameInput(value).normalizedName else {
+      return nil
+    }
+    return "#\(normalized)"
+  }
+
+  private func displayTagName(_ tag: Tag) -> String? {
+    guard let normalized = EpisodePersistence.normalizeTagName(tag.name)?.name else {
+      return nil
+    }
+    return "#\(normalized)"
+  }
+
+  private static func orderedTagChips(from tags: [Tag]) -> [String] {
+    tags
+      .sorted { $0.updatedAt < $1.updatedAt }
+      .compactMap { tag in
+        guard let normalized = EpisodePersistence.normalizeTagName(tag.name)?.name else {
+          return nil
+        }
+        return "#\(normalized)"
+      }
+  }
+
+  private var tagValidationMessage: String? {
+    TagInputHelpers.validationMessage(for: tagText)
   }
 
   private func addProject(_ value: String) {
-    addTo(&selectedProjects, value: value, max: maxProjects, clear: { projectText = "" })
-    store.suggestionRepository.upsert(fieldType: "企画名", value: value)
+    guard let normalized = normalizedProjectName(value) else { return }
+    addTo(&selectedProjects, value: normalized, max: maxProjects, clear: { projectText = "" })
+    store.suggestionRepository.upsert(fieldType: "企画名", value: normalized)
   }
 
   private func removeProject(_ value: String) {
@@ -945,12 +1144,64 @@ struct EpisodeDetailView: View {
   }
 
   private func addEmotion(_ value: String) {
-    addTo(&selectedEmotions, value: value, max: maxEmotions, clear: { emotionText = "" })
-    store.suggestionRepository.upsert(fieldType: "感情", value: value)
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard EpisodePersistence.emotionPresetOptions.contains(trimmed) else { return }
+    addTo(&selectedEmotions, value: trimmed, max: maxEmotions, clear: {})
+  }
+
+  private func toggleEmotion(_ value: String) {
+    if selectedEmotions.contains(value) {
+      removeEmotion(value)
+    } else {
+      addEmotion(value)
+    }
   }
 
   private func removeEmotion(_ value: String) {
     selectedEmotions.removeAll { $0 == value }
+  }
+
+  private var emotionChipOptions: [String] {
+    let extraSelections = selectedEmotions.filter { selected in
+      !EpisodePersistence.emotionPresetOptions.contains(selected)
+    }
+    return EpisodePersistence.emotionPresetOptions + extraSelections
+  }
+
+  private func commitPlace(_ value: String) {
+    guard let normalized = normalizedPlaceName(value) else { return }
+    selectedPlace = normalized
+    placeText = ""
+    store.suggestionRepository.upsert(fieldType: "場所", value: normalized)
+  }
+
+  private func normalizedPersonName(_ value: String) -> String? {
+    EpisodePersistence.normalizeNameInput(value, limit: EpisodePersistence.personNameCharacterLimit)
+  }
+
+  private func normalizedProjectName(_ value: String) -> String? {
+    EpisodePersistence.normalizeNameInput(value, limit: EpisodePersistence.projectNameCharacterLimit)
+  }
+
+  private func normalizedPlaceName(_ value: String) -> String? {
+    EpisodePersistence.normalizeNameInput(value, limit: EpisodePersistence.placeNameCharacterLimit)
+  }
+
+  private func applySuggestionSelection(fieldType: String, value: String) {
+    switch fieldType {
+    case "企画名":
+      addProject(value)
+    case "人物":
+      addPerson(value)
+    case "場所":
+      commitPlace(value)
+    default:
+      break
+    }
+  }
+
+  private func syncUnsavedEditStateToRouter() {
+    router.hasUnsavedEpisodeDetailChanges = isEditing && hasUnsavedChanges
   }
 
   private func addTo(_ collection: inout [String], value: String, max: Int, clear: () -> Void) {
@@ -977,6 +1228,7 @@ struct EpisodeDetailView_Previews: PreviewProvider {
     NavigationStack {
       EpisodeDetailView(episode: sample)
         .environmentObject(EpisodeStore())
+        .environmentObject(AppRouter())
     }
   }
 }
@@ -989,6 +1241,11 @@ private enum EpisodeDetailTab {
 private enum PendingAction {
   case back
   case switchTab(EpisodeDetailTab)
+  case switchRootTab(RootTab)
+}
+
+private enum DetailFieldType {
+  static let tag = "__tag__"
 }
 
 private struct DetailEditBaseline: Equatable {
@@ -996,7 +1253,6 @@ private struct DetailEditBaseline: Equatable {
   var body: String = ""
   var date: Date = .init()
   var releaseDate: Date? = nil
-  var category: String? = nil
   var persons: [String] = []
   var personText: String = ""
   var tags: [String] = []
@@ -1004,7 +1260,6 @@ private struct DetailEditBaseline: Equatable {
   var projects: [String] = []
   var projectText: String = ""
   var emotions: [String] = []
-  var emotionText: String = ""
   var place: String? = nil
   var placeText: String = ""
 }
@@ -1030,6 +1285,8 @@ private enum DetailStyle {
   static let detailsSpacing: CGFloat = 24
   static let chipSpacing: CGFloat = 8
   static let iconButtonSize: CGFloat = 24
+  static let calendarSheetHeight: CGFloat = 560
+  static let calendarSheetSpacing: CGFloat = 10
 
   static let labelText = Color(hex: "4A5565")
   static let requiredText = Color(hex: "FB2C36")
@@ -1037,6 +1294,9 @@ private enum DetailStyle {
   static let inputBorder = Color(hex: "D1D5DC")
   static let chipFill = Color(hex: "F3F4F6")
   static let chipText = Color(hex: "364153")
+  static let emotionPresetSelectedFill = HomeStyle.fabRed.opacity(0.12)
+  static let emotionPresetSelectedBorder = HomeStyle.fabRed.opacity(0.5)
+  static let emotionPresetSelectedText = HomeStyle.fabRed
   static let headerText = Color(hex: "2A2525")
   static let tabSelectedText = Color(hex: "2A2525")
   static let tabUnselectedText = Color(hex: "4A5565")
@@ -1058,20 +1318,31 @@ private enum DetailStyle {
   static let releaseLogNoteColor = Color(hex: "364153")
   static let releaseLogOutcomeFill = Color(hex: "F3F4F6")
   static let releaseLogOutcomeSelectedFill = HomeStyle.fabRed
+  static let validationText = HomeStyle.destructiveRed
+  static let tagGuideText = Color(hex: "6B7280")
+  static let counterText = Color(hex: "9CA3AF")
+  static let calendarTint = Color(hex: "355C7D")
+  static let calendarToolbarButtonFill = Color(hex: "E2E8F0")
+  static let calendarToolbarButtonText = Color(hex: "1F2937")
+  static let calendarToolbarButtonDestructiveText = HomeStyle.destructiveRed
 
-  static let labelFont = Font.custom("Roboto-Medium", size: 14)
-  static let inputFont = Font.custom("Roboto", size: 16)
-  static let headerFont = Font.custom("Roboto-Medium", size: 20)
+  static let labelFont = Font.system(size: 14, weight: .medium)
+  static let inputFont = Font.system(size: 16, weight: .regular)
+  static let headerFont = AppTypography.formScreenTitle
   static let tabSelectedFont = Font.system(size: 16, weight: .semibold)
   static let tabFont = Font.system(size: 16, weight: .semibold)
-  static let detailToggleFont = Font.custom("Roboto-Medium", size: 16)
-  static let badgeFont = Font.custom("Roboto-Medium", size: 14)
-  static let chipFont = Font.custom("Roboto-Medium", size: 14)
-  static let copyLabelFont = Font.custom("Roboto-Medium", size: 12)
-  static let editButtonFont = Font.custom("Roboto-Medium", size: 11)
+  static let detailToggleFont = Font.system(size: 16, weight: .medium)
+  static let badgeFont = Font.system(size: 14, weight: .medium)
+  static let chipFont = Font.system(size: 14, weight: .medium)
+  static let counterFont = Font.system(size: 12, weight: .regular)
+  static let validationFont = Font.system(size: 12, weight: .regular)
+  static let tagGuideFont = Font.system(size: 12, weight: .regular)
+  static let copyLabelFont = Font.system(size: 12, weight: .medium)
+  static let editButtonFont = Font.system(size: 15, weight: .semibold)
   static let modalTitleFont = Font.system(size: 17, weight: .semibold)
   static let modalBodyFont = Font.system(size: 14, weight: .regular)
   static let modalButtonFont = Font.system(size: 16, weight: .bold)
+  static let calendarToolbarButtonFont = Font.system(size: 15, weight: .semibold)
   static let editButtonCornerRadius: CGFloat = 10
   static let copyIconSize: CGFloat = 18
   static let copyButtonSize: CGFloat = 28
@@ -1110,6 +1381,22 @@ private enum DetailStyle {
     formatter.dateFormat = "yyyy/MM/dd"
     return formatter
   }()
+
+  static let registeredTagSelectionSheetStyle = RegisteredTagSelectionSheetStyle(
+    labelText: labelText,
+    inputFont: inputFont,
+    inputText: inputText,
+    inputHeight: inputHeight,
+    inputCornerRadius: inputCornerRadius,
+    inputBorder: inputBorder,
+    inputBorderWidth: inputBorderWidth,
+    chipSpacing: chipSpacing,
+    chipHeight: chipHeight,
+    chipFont: chipFont,
+    chipText: chipText,
+    chipFill: chipFill,
+    closeButtonFont: calendarToolbarButtonFont
+  )
 }
 
 private struct DetailTabButton: View {
@@ -1556,11 +1843,12 @@ private struct ReleaseLogDateRow: View {
       .buttonStyle(.plain)
       .sheet(isPresented: $showsPicker) {
         NavigationStack {
-          VStack {
+          VStack(spacing: DetailStyle.calendarSheetSpacing) {
             DatePicker("", selection: $tempDate, displayedComponents: .date)
               .datePickerStyle(.graphical)
               .labelsHidden()
-              .padding(.horizontal, 8)
+              .tint(DetailStyle.calendarTint)
+              .padding(.horizontal, 4)
 
             Button("決定") {
               date = tempDate
@@ -1572,17 +1860,23 @@ private struct ReleaseLogDateRow: View {
             .frame(height: DetailStyle.modalButtonHeight)
             .background(DetailStyle.modalPrimaryFill)
             .clipShape(Capsule())
-            .padding(.bottom, 12)
           }
+          .padding(.top, 8)
+          .padding(.bottom, 8)
           .navigationTitle(title)
           .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-              Button("閉じる") {
+            ToolbarItem(placement: .topBarLeading) {
+              Button {
                 showsPicker = false
+              } label: {
+                CalendarToolbarButtonLabel(title: "閉じる", font: DetailStyle.calendarToolbarButtonFont, fillColor: DetailStyle.calendarToolbarButtonFill, textColor: DetailStyle.calendarToolbarButtonText)
               }
+              .buttonStyle(.plain)
             }
           }
         }
+        .presentationDetents([.height(DetailStyle.calendarSheetHeight)])
+        .presentationDragIndicator(.visible)
       }
     }
   }
@@ -1621,11 +1915,12 @@ private struct ReleaseLogOptionalDateRow: View {
       .buttonStyle(.plain)
       .sheet(isPresented: $showsPicker) {
         NavigationStack {
-          VStack {
+          VStack(spacing: DetailStyle.calendarSheetSpacing) {
             DatePicker("", selection: $tempDate, displayedComponents: .date)
               .datePickerStyle(.graphical)
               .labelsHidden()
-              .padding(.horizontal, 8)
+              .tint(DetailStyle.calendarTint)
+              .padding(.horizontal, 4)
 
             Button("決定") {
               date = tempDate
@@ -1637,23 +1932,37 @@ private struct ReleaseLogOptionalDateRow: View {
             .frame(height: DetailStyle.modalButtonHeight)
             .background(DetailStyle.modalPrimaryFill)
             .clipShape(Capsule())
-            .padding(.bottom, 12)
           }
+          .padding(.top, 8)
+          .padding(.bottom, 8)
           .navigationTitle(title)
           .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-              Button("閉じる") {
+            ToolbarItem(placement: .topBarLeading) {
+              Button {
                 showsPicker = false
+              } label: {
+                CalendarToolbarButtonLabel(title: "閉じる", font: DetailStyle.calendarToolbarButtonFont, fillColor: DetailStyle.calendarToolbarButtonFill, textColor: DetailStyle.calendarToolbarButtonText)
               }
+              .buttonStyle(.plain)
             }
-            ToolbarItem(placement: .confirmationAction) {
-              Button("クリア") {
+            ToolbarItem(placement: .topBarTrailing) {
+              Button {
                 date = nil
                 showsPicker = false
+              } label: {
+                CalendarToolbarButtonLabel(
+                  title: "クリア",
+                  font: DetailStyle.calendarToolbarButtonFont,
+                  fillColor: DetailStyle.calendarToolbarButtonFill,
+                  textColor: DetailStyle.calendarToolbarButtonDestructiveText
+                )
               }
+              .buttonStyle(.plain)
             }
           }
         }
+        .presentationDetents([.height(DetailStyle.calendarSheetHeight)])
+        .presentationDragIndicator(.visible)
       }
     }
   }
@@ -1854,11 +2163,12 @@ private struct DetailDateField: View {
     .buttonStyle(.plain)
     .sheet(isPresented: $showsPicker) {
       NavigationStack {
-        VStack {
+        VStack(spacing: DetailStyle.calendarSheetSpacing) {
           DatePicker("", selection: $tempDate, displayedComponents: .date)
             .datePickerStyle(.graphical)
             .labelsHidden()
-            .padding(.horizontal, 8)
+            .tint(DetailStyle.calendarTint)
+            .padding(.horizontal, 4)
 
           Button("決定") {
             date = tempDate
@@ -1870,17 +2180,23 @@ private struct DetailDateField: View {
           .frame(height: 48)
           .background(HomeStyle.fabRed)
           .clipShape(Capsule())
-          .padding(.bottom, 12)
         }
+        .padding(.top, 8)
+        .padding(.bottom, 8)
         .navigationTitle("日付を選択")
         .toolbar {
-          ToolbarItem(placement: .cancellationAction) {
-            Button("閉じる") {
+          ToolbarItem(placement: .topBarLeading) {
+            Button {
               showsPicker = false
+            } label: {
+              CalendarToolbarButtonLabel(title: "閉じる", font: DetailStyle.calendarToolbarButtonFont, fillColor: DetailStyle.calendarToolbarButtonFill, textColor: DetailStyle.calendarToolbarButtonText)
             }
+            .buttonStyle(.plain)
           }
         }
       }
+      .presentationDetents([.height(DetailStyle.calendarSheetHeight)])
+      .presentationDragIndicator(.visible)
     }
   }
 }
@@ -1921,11 +2237,12 @@ private struct DetailOptionalDateField: View {
     .buttonStyle(.plain)
     .sheet(isPresented: $showsPicker) {
       NavigationStack {
-        VStack {
+        VStack(spacing: DetailStyle.calendarSheetSpacing) {
           DatePicker("", selection: $tempDate, displayedComponents: .date)
             .datePickerStyle(.graphical)
             .labelsHidden()
-            .padding(.horizontal, 8)
+            .tint(DetailStyle.calendarTint)
+            .padding(.horizontal, 4)
 
           Button("決定") {
             date = tempDate
@@ -1937,17 +2254,37 @@ private struct DetailOptionalDateField: View {
           .frame(height: DetailStyle.modalButtonHeight)
           .background(DetailStyle.modalPrimaryFill)
           .clipShape(Capsule())
-          .padding(.bottom, 12)
         }
+        .padding(.top, 8)
+        .padding(.bottom, 8)
         .navigationTitle(title)
         .toolbar {
-          ToolbarItem(placement: .cancellationAction) {
-            Button("閉じる") {
+          ToolbarItem(placement: .topBarLeading) {
+            Button {
               showsPicker = false
+            } label: {
+              CalendarToolbarButtonLabel(title: "閉じる", font: DetailStyle.calendarToolbarButtonFont, fillColor: DetailStyle.calendarToolbarButtonFill, textColor: DetailStyle.calendarToolbarButtonText)
             }
+            .buttonStyle(.plain)
+          }
+          ToolbarItem(placement: .topBarTrailing) {
+            Button {
+              date = nil
+              showsPicker = false
+            } label: {
+              CalendarToolbarButtonLabel(
+                title: "クリア",
+                font: DetailStyle.calendarToolbarButtonFont,
+                fillColor: DetailStyle.calendarToolbarButtonFill,
+                textColor: DetailStyle.calendarToolbarButtonDestructiveText
+              )
+            }
+            .buttonStyle(.plain)
           }
         }
       }
+      .presentationDetents([.height(DetailStyle.calendarSheetHeight)])
+      .presentationDragIndicator(.visible)
     }
   }
 }
@@ -1990,49 +2327,33 @@ private struct DetailChip: View {
   }
 }
 
-private struct DetailDropdownField: View {
-  let placeholder: String
-  @Binding var selection: String?
-  let options: [String]
-
-  private var displayText: String {
-    selection ?? placeholder
-  }
-
-  private var displayColor: Color {
-    selection == nil ? DetailStyle.labelText : DetailStyle.inputText
-  }
+private struct EmotionPresetDetailChip: View {
+  let title: String
+  let isSelected: Bool
 
   var body: some View {
-    Menu {
-      ForEach(options, id: \.self) { option in
-        Button(option) {
-          selection = option
-        }
+    HStack(spacing: 6) {
+      if isSelected {
+        Image(systemName: "checkmark")
+          .font(.system(size: 11, weight: .semibold))
       }
-    } label: {
-      HStack {
-        Text(displayText)
-          .font(DetailStyle.inputFont)
-          .foregroundColor(displayColor)
-        Spacer(minLength: 0)
-        Image(systemName: "chevron.down")
-          .font(.system(size: 14, weight: .semibold))
-          .foregroundColor(DetailStyle.chipText)
-      }
+      Text(title)
+        .font(DetailStyle.chipFont)
+    }
+      .foregroundColor(isSelected ? DetailStyle.emotionPresetSelectedText : DetailStyle.chipText)
       .padding(.horizontal, 12)
-      .padding(.vertical, 8)
-      .frame(height: DetailStyle.inputHeight)
+      .frame(height: DetailStyle.chipHeight)
       .background(
-        RoundedRectangle(cornerRadius: DetailStyle.inputCornerRadius)
-          .fill(Color.white)
+        Capsule()
+          .fill(isSelected ? DetailStyle.emotionPresetSelectedFill : DetailStyle.chipFill)
       )
       .overlay(
-        RoundedRectangle(cornerRadius: DetailStyle.inputCornerRadius)
-          .stroke(DetailStyle.inputBorder, lineWidth: DetailStyle.inputBorderWidth)
+        Capsule()
+          .stroke(
+            isSelected ? DetailStyle.emotionPresetSelectedBorder : DetailStyle.inputBorder,
+            lineWidth: isSelected ? 1.2 : 1
+          )
       )
-    }
-    .buttonStyle(.plain)
   }
 }
 
@@ -2041,6 +2362,7 @@ private struct DetailChipInputField: View {
   @Binding var text: String
   @Binding var selection: String?
   var isFocused: Binding<Bool>? = nil
+  var onSubmit: (() -> Void)? = nil
 
   @FocusState private var focused: Bool
 
@@ -2057,8 +2379,13 @@ private struct DetailChipInputField: View {
           .foregroundColor(DetailStyle.inputText)
           .frame(maxWidth: .infinity, alignment: .leading)
           .focused($focused)
-          .onChange(of: focused) { newValue in
+          .onChange(of: focused) { _, newValue in
             isFocused?.wrappedValue = newValue
+          }
+          .onSubmit {
+            onSubmit?()
+            focused = false
+            isFocused?.wrappedValue = false
           }
       }
       Spacer(minLength: 0)
@@ -2105,7 +2432,7 @@ private struct DetailMultiChipInputField: View {
           .foregroundColor(DetailStyle.inputText)
           .frame(minWidth: 80, alignment: .leading)
           .focused($focused)
-          .onChange(of: focused) { newValue in
+          .onChange(of: focused) { _, newValue in
             isFocused?.wrappedValue = newValue
           }
           .onSubmit {
@@ -2152,58 +2479,6 @@ private struct DetailSelectedChip: View {
     .frame(height: DetailStyle.chipHeight)
     .background(DetailStyle.chipFill)
     .clipShape(Capsule())
-  }
-}
-
-private struct FlowLayout: Layout {
-  let spacing: CGFloat
-
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let maxWidth = proposal.width ?? .greatestFiniteMagnitude
-    var currentX: CGFloat = 0
-    var totalHeight: CGFloat = 0
-    var lineHeight: CGFloat = 0
-    var maxLineWidth: CGFloat = 0
-
-    for subview in subviews {
-      let size = subview.sizeThatFits(.unspecified)
-      if currentX + size.width > maxWidth, currentX > 0 {
-        totalHeight += lineHeight + spacing
-        maxLineWidth = max(maxLineWidth, currentX - spacing)
-        currentX = 0
-        lineHeight = 0
-      }
-      currentX += size.width + spacing
-      lineHeight = max(lineHeight, size.height)
-    }
-
-    totalHeight += lineHeight
-    maxLineWidth = max(maxLineWidth, currentX - spacing)
-
-    let width = proposal.width ?? maxLineWidth
-    return CGSize(width: width, height: totalHeight)
-  }
-
-  func placeSubviews(
-    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-  ) {
-    var currentX = bounds.minX
-    var currentY = bounds.minY
-    var lineHeight: CGFloat = 0
-
-    for subview in subviews {
-      let size = subview.sizeThatFits(.unspecified)
-      if currentX + size.width > bounds.maxX, currentX > bounds.minX {
-        currentX = bounds.minX
-        currentY += lineHeight + spacing
-        lineHeight = 0
-      }
-      subview.place(
-        at: CGPoint(x: currentX, y: currentY),
-        proposal: ProposedViewSize(width: size.width, height: size.height))
-      currentX += size.width + spacing
-      lineHeight = max(lineHeight, size.height)
-    }
   }
 }
 

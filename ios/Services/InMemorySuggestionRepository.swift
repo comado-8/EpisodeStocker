@@ -6,56 +6,7 @@ final class InMemorySuggestionRepository: SuggestionRepository {
     label: "InMemorySuggestionRepository.queue", attributes: .concurrent)
 
   init(seed: [Suggestion] = []) {
-    if seed.isEmpty {
-      self.items = Self.defaultSeed()
-    } else {
-      self.items = seed
-    }
-  }
-
-  private static func defaultSeed() -> [Suggestion] {
-    let now = Date()
-    return [
-      // 人物
-      Suggestion(
-        id: UUID(), fieldType: "人物", value: "田中さん", usageCount: 5, lastUsedAt: now, isDeleted: false
-      ),
-      Suggestion(
-        id: UUID(), fieldType: "人物", value: "佐藤さん", usageCount: 3,
-        lastUsedAt: now.addingTimeInterval(-86400), isDeleted: false),
-      Suggestion(
-        id: UUID(), fieldType: "人物", value: "鈴木さん", usageCount: 1,
-        lastUsedAt: now.addingTimeInterval(-86400 * 2), isDeleted: false),
-      // 企画名
-      Suggestion(
-        id: UUID(), fieldType: "企画名", value: "朝の番組", usageCount: 4,
-        lastUsedAt: now.addingTimeInterval(-3600), isDeleted: false),
-      Suggestion(
-        id: UUID(), fieldType: "企画名", value: "夜のトーク", usageCount: 2,
-        lastUsedAt: now.addingTimeInterval(-86400), isDeleted: false),
-      Suggestion(
-        id: UUID(), fieldType: "企画名", value: "ラジオ企画", usageCount: 1,
-        lastUsedAt: now.addingTimeInterval(-86400 * 3), isDeleted: false),
-      // 場所
-      Suggestion(
-        id: UUID(), fieldType: "場所", value: "渋谷", usageCount: 6, lastUsedAt: now, isDeleted: false),
-      Suggestion(
-        id: UUID(), fieldType: "場所", value: "スタジオ", usageCount: 2,
-        lastUsedAt: now.addingTimeInterval(-7200), isDeleted: false),
-      Suggestion(
-        id: UUID(), fieldType: "場所", value: "カフェ", usageCount: 1,
-        lastUsedAt: now.addingTimeInterval(-86400), isDeleted: false),
-      // 感情
-      Suggestion(
-        id: UUID(), fieldType: "感情", value: "嬉しかった", usageCount: 7, lastUsedAt: now,
-        isDeleted: false),
-      Suggestion(
-        id: UUID(), fieldType: "感情", value: "楽しかった", usageCount: 3,
-        lastUsedAt: now.addingTimeInterval(-43200), isDeleted: false),
-      Suggestion(
-        id: UUID(), fieldType: "感情", value: "悲しかった", usageCount: 1,
-        lastUsedAt: now.addingTimeInterval(-86400 * 5), isDeleted: false),
-    ]
+    self.items = seed
   }
 
   func fetch(fieldType: String, query: String?, includeDeleted: Bool) -> [Suggestion] {
