@@ -446,103 +446,106 @@ private struct TagEditorSheet: View {
   }
 
   var body: some View {
-    let validationResult = EpisodePersistence.validateTagNameInput(name)
-    let normalizedName = validationResult.normalizedName
-    let duplicateName = normalizedName.flatMap { candidate in
-      existingNormalizedTagNames.contains(candidate) ? candidate : nil
-    }
-    let canSave = normalizedName != nil && duplicateName == nil
-    let errorMessage =
-      duplicateName.map { "既に「#\($0)」が登録されています" }
-      ?? tagValidationErrorMessage(for: validationResult)
+    GeometryReader { proxy in
+      let validationResult = EpisodePersistence.validateTagNameInput(name)
+      let normalizedName = validationResult.normalizedName
+      let duplicateName = normalizedName.flatMap { candidate in
+        existingNormalizedTagNames.contains(candidate) ? candidate : nil
+      }
+      let canSave = normalizedName != nil && duplicateName == nil
+      let errorMessage =
+        duplicateName.map { "既に「#\($0)」が登録されています" }
+        ?? TagInputHelpers.validationMessage(for: validationResult)
 
-    VStack(alignment: .leading, spacing: 16) {
-      VStack(alignment: .leading, spacing: 8) {
-        Text("タグ名")
-          .font(TagStyle.editorLabelFont)
-          .foregroundColor(TagStyle.subheaderText)
+      VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("タグ名")
+            .font(TagStyle.editorLabelFont)
+            .foregroundColor(TagStyle.subheaderText)
 
-        HStack(spacing: 8) {
-          Text("#")
-            .font(TagStyle.editorPrefixFont)
-            .foregroundColor(TagStyle.editorPrefixText)
-            .frame(width: 16, alignment: .center)
+          HStack(spacing: 8) {
+            Text("#")
+              .font(TagStyle.editorPrefixFont)
+              .foregroundColor(TagStyle.editorPrefixText)
+              .frame(width: 16, alignment: .center)
 
-          TextField(
-            "", text: $name, prompt: Text("タグを入力").foregroundColor(TagStyle.editorPlaceholderText)
-          )
-          .font(TagStyle.editorInputFont)
-          .foregroundColor(TagStyle.editorInputText)
-          .onChange(of: name) { _, newValue in
-            let normalized = EpisodePersistence.normalizeTagInputWhileEditing(newValue)
-            if normalized != newValue {
-              name = normalized
+            TextField(
+              "", text: $name, prompt: Text("タグを入力").foregroundColor(TagStyle.editorPlaceholderText)
+            )
+            .font(TagStyle.editorInputFont)
+            .foregroundColor(TagStyle.editorInputText)
+            .onChange(of: name) { _, newValue in
+              let normalized = EpisodePersistence.normalizeTagInputWhileEditing(newValue)
+              if normalized != newValue {
+                name = normalized
+              }
             }
           }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: TagStyle.editorInputHeight)
-        .background(
-          RoundedRectangle(cornerRadius: TagStyle.editorInputCornerRadius)
-            .stroke(TagStyle.editorInputBorder, lineWidth: TagStyle.editorInputBorderWidth)
-        )
+          .padding(.horizontal, 12)
+          .frame(height: TagStyle.editorInputHeight)
+          .background(
+            RoundedRectangle(cornerRadius: TagStyle.editorInputCornerRadius)
+              .stroke(TagStyle.editorInputBorder, lineWidth: TagStyle.editorInputBorderWidth)
+          )
 
-        if let errorMessage {
-          Text(errorMessage)
-            .font(TagStyle.editorValidationFont)
-            .foregroundColor(TagStyle.validationText)
+          if let errorMessage {
+            Text(errorMessage)
+              .font(TagStyle.editorValidationFont)
+              .foregroundColor(TagStyle.validationText)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+
+          Text(TagInputConstants.guideText)
+            .font(TagStyle.editorGuideFont)
+            .foregroundColor(TagStyle.guideText)
             .fixedSize(horizontal: false, vertical: true)
         }
 
-        Text(TagInputConstants.guideText)
-          .font(TagStyle.editorGuideFont)
-          .foregroundColor(TagStyle.guideText)
-          .fixedSize(horizontal: false, vertical: true)
-      }
+        HStack(spacing: 12) {
+          Button("キャンセル") {
+            dismiss()
+          }
+          .font(TagStyle.editorButtonFont)
+          .foregroundColor(TagStyle.editorCancelText)
+          .frame(maxWidth: .infinity)
+          .frame(height: TagStyle.editorButtonHeight)
+          .background(
+            Capsule()
+              .stroke(TagStyle.editorCancelBorder, lineWidth: 1)
+          )
 
-      HStack(spacing: 12) {
-        Button("キャンセル") {
-          dismiss()
+          Button(context.actionTitle) {
+            onSave(name)
+            dismiss()
+          }
+          .font(TagStyle.editorPrimaryButtonFont)
+          .foregroundColor(TagStyle.editorPrimaryText)
+          .frame(maxWidth: .infinity)
+          .frame(height: TagStyle.editorButtonHeight)
+          .background(
+            Capsule()
+              .fill(TagStyle.editorPrimaryFill)
+          )
+          .disabled(!canSave)
+          .opacity(canSave ? 1 : 0.5)
         }
-        .font(TagStyle.editorButtonFont)
-        .foregroundColor(TagStyle.editorCancelText)
-        .frame(maxWidth: .infinity)
-        .frame(height: TagStyle.editorButtonHeight)
-        .background(
-          Capsule()
-            .stroke(TagStyle.editorCancelBorder, lineWidth: 1)
-        )
-
-        Button(context.actionTitle) {
-          onSave(name)
-          dismiss()
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .fixedSize(horizontal: false, vertical: true)
+      .padding(.horizontal, 20)
+      .padding(.vertical, 16)
+      .background(Color.white)
+      .background(
+        GeometryReader { proxy in
+          Color.clear.preference(key: TagEditorHeightKey.self, value: proxy.size.height)
         }
-        .font(TagStyle.editorPrimaryButtonFont)
-        .foregroundColor(TagStyle.editorPrimaryText)
-        .frame(maxWidth: .infinity)
-        .frame(height: TagStyle.editorButtonHeight)
-        .background(
-          Capsule()
-            .fill(TagStyle.editorPrimaryFill)
-        )
-        .disabled(!canSave)
-        .opacity(canSave ? 1 : 0.5)
+      )
+      .onPreferenceChange(TagEditorHeightKey.self) { height in
+        let padded = height
+        let maxHeight = proxy.size.height * 0.8
+        measuredHeight = min(max(padded, 100), maxHeight)
       }
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .fixedSize(horizontal: false, vertical: true)
-    .padding(.horizontal, 20)
-    .padding(.vertical, 16)
-    .background(Color.white)
-    .background(
-      GeometryReader { proxy in
-        Color.clear.preference(key: TagEditorHeightKey.self, value: proxy.size.height)
-      }
-    )
-    .onPreferenceChange(TagEditorHeightKey.self) { height in
-      let padded = height
-      let maxHeight = UIScreen.main.bounds.height * 0.8
-      measuredHeight = min(max(padded, 100), maxHeight)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
   }
 }
@@ -750,10 +753,6 @@ extension TagListView {
       )
     )
   }
-}
-
-private func tagValidationErrorMessage(for result: TagValidationResult) -> String? {
-  TagInputHelpers.validationMessage(for: result)
 }
 
 extension View {

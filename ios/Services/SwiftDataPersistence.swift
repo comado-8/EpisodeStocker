@@ -183,8 +183,10 @@ extension ModelContext {
     func upsertPerson(name: String) -> Person? {
         guard let info = EpisodePersistence.normalizeName(name) else { return nil }
         let normalized = info.normalized
-        let descriptor = FetchDescriptor<Person>()
-        if let existing = (try? fetch(descriptor))?.first(where: { $0.nameNormalized == normalized }) {
+        let descriptor = FetchDescriptor<Person>(
+            predicate: #Predicate<Person> { $0.nameNormalized == normalized }
+        )
+        if let existing = (try? fetch(descriptor))?.first {
             existing.name = info.name
             existing.nameNormalized = info.normalized
             if existing.isSoftDeleted {
@@ -203,8 +205,10 @@ extension ModelContext {
     func upsertProject(name: String) -> Project? {
         guard let info = EpisodePersistence.normalizeName(name) else { return nil }
         let normalized = info.normalized
-        let descriptor = FetchDescriptor<Project>()
-        if let existing = (try? fetch(descriptor))?.first(where: { $0.nameNormalized == normalized }) {
+        let descriptor = FetchDescriptor<Project>(
+            predicate: #Predicate<Project> { $0.nameNormalized == normalized }
+        )
+        if let existing = (try? fetch(descriptor))?.first {
             existing.name = info.name
             existing.nameNormalized = info.normalized
             if existing.isSoftDeleted {
@@ -223,8 +227,10 @@ extension ModelContext {
     func upsertEmotion(name: String) -> Emotion? {
         guard let info = EpisodePersistence.normalizeName(name) else { return nil }
         let normalized = info.normalized
-        let descriptor = FetchDescriptor<Emotion>()
-        if let existing = (try? fetch(descriptor))?.first(where: { $0.nameNormalized == normalized }) {
+        let descriptor = FetchDescriptor<Emotion>(
+            predicate: #Predicate<Emotion> { $0.nameNormalized == normalized }
+        )
+        if let existing = (try? fetch(descriptor))?.first {
             existing.name = info.name
             existing.nameNormalized = info.normalized
             if existing.isSoftDeleted {
@@ -243,8 +249,10 @@ extension ModelContext {
     func upsertPlace(name: String) -> Place? {
         guard let info = EpisodePersistence.normalizeName(name) else { return nil }
         let normalized = info.normalized
-        let descriptor = FetchDescriptor<Place>()
-        if let existing = (try? fetch(descriptor))?.first(where: { $0.nameNormalized == normalized }) {
+        let descriptor = FetchDescriptor<Place>(
+            predicate: #Predicate<Place> { $0.nameNormalized == normalized }
+        )
+        if let existing = (try? fetch(descriptor))?.first {
             existing.name = info.name
             existing.nameNormalized = info.normalized
             if existing.isSoftDeleted {

@@ -47,11 +47,7 @@ struct RegisteredTagSelectionSheet: View {
   }
 
   private func normalizedTagKey(_ value: String) -> String {
-    EpisodePersistence.stripLeadingTagPrefix(
-      EpisodePersistence.normalizeTagInputWhileEditing(
-        value.trimmingCharacters(in: .whitespacesAndNewlines)
-      )
-    )
+    EpisodePersistence.normalizeTagName(value)?.normalized ?? ""
   }
 
   var body: some View {

@@ -37,5 +37,28 @@ final class SuggestionFieldTypeTests: XCTestCase {
     XCTAssertTrue(SuggestionFieldType.tag.protectsUsedEntriesFromDeletion)
     XCTAssertFalse(SuggestionFieldType.unknown("foo").protectsUsedEntriesFromDeletion)
   }
-}
 
+  func testRoundtripBetweenInitAndLabelAndUnknownDistinctness() {
+    let knownPairs: [(String, SuggestionFieldType)] = [
+      ("人物", .person),
+      ("企画名", .project),
+      ("感情", .emotion),
+      ("場所", .place),
+      ("タグ", .tag),
+    ]
+    for (raw, expected) in knownPairs {
+      let resolved = SuggestionFieldType(raw)
+      XCTAssertEqual(resolved, expected)
+      XCTAssertEqual(resolved.label, raw)
+    }
+
+    let unknownValues = ["other", "", "人物 ", "TAG"]
+    for value in unknownValues {
+      let resolved = SuggestionFieldType(value)
+      XCTAssertEqual(resolved, .unknown(value))
+      XCTAssertEqual(resolved.label, value)
+    }
+
+    XCTAssertNotEqual(SuggestionFieldType.unknown("a"), SuggestionFieldType.unknown("b"))
+  }
+}

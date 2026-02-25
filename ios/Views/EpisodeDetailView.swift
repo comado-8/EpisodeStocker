@@ -464,7 +464,7 @@ struct EpisodeDetailView: View {
             selections: $selectedTags,
             maxSelections: maxTags,
             suggestions: registeredTagSuggestions,
-            fieldType: "",
+            fieldType: DetailFieldType.tag,
             validationMessage: tagValidationMessage,
             onCommit: addTag,
             onRemove: removeTag
@@ -968,7 +968,7 @@ struct EpisodeDetailView: View {
           .fixedSize(horizontal: false, vertical: true)
       }
 
-      if fieldType.isEmpty {
+      if fieldType == DetailFieldType.tag {
         Text(TagInputConstants.guideText)
           .font(DetailStyle.tagGuideFont)
           .foregroundColor(DetailStyle.tagGuideText)
@@ -976,7 +976,7 @@ struct EpisodeDetailView: View {
       }
 
       let trimmed = text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
-      if fieldType.isEmpty {
+      if fieldType == DetailFieldType.tag {
         let filtered = TagInputHelpers.filteredSuggestions(
           query: trimmed,
           selectedTags: selectedTags,
@@ -1242,6 +1242,10 @@ private enum PendingAction {
   case back
   case switchTab(EpisodeDetailTab)
   case switchRootTab(RootTab)
+}
+
+private enum DetailFieldType {
+  static let tag = "__tag__"
 }
 
 private struct DetailEditBaseline: Equatable {
@@ -2375,7 +2379,7 @@ private struct DetailChipInputField: View {
           .foregroundColor(DetailStyle.inputText)
           .frame(maxWidth: .infinity, alignment: .leading)
           .focused($focused)
-          .onChange(of: focused) { newValue in
+          .onChange(of: focused) { _, newValue in
             isFocused?.wrappedValue = newValue
           }
           .onSubmit {
@@ -2428,7 +2432,7 @@ private struct DetailMultiChipInputField: View {
           .foregroundColor(DetailStyle.inputText)
           .frame(minWidth: 80, alignment: .leading)
           .focused($focused)
-          .onChange(of: focused) { newValue in
+          .onChange(of: focused) { _, newValue in
             isFocused?.wrappedValue = newValue
           }
           .onSubmit {

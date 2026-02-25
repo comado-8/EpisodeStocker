@@ -241,7 +241,8 @@ struct HomeView: View {
                             isSearchFocused = false
                             hideKeyboard()
                         }
-                    }
+                    },
+                    including: .subviews
                 )
                 .padding(.top, topPadding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -327,9 +328,11 @@ private extension HomeView {
     @ViewBuilder
     func episodeListRow(episode: Episode, width: CGFloat) -> some View {
         let isSelected = selectedEpisodeIDs.contains(episode.id)
+        let trimmedBody = episode.body?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let subtitle = (trimmedBody?.isEmpty ?? true) ? "本文なし" : (trimmedBody ?? "本文なし")
         let rowView = EpisodeCardRow(
             title: episode.title,
-            subtitle: episode.body ?? "本文なし",
+            subtitle: subtitle,
             date: episode.date,
             isUnlocked: episode.isUnlocked,
             width: width,

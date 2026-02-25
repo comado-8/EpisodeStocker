@@ -163,13 +163,13 @@ struct NewEpisodeView: View {
       ) { _ in
         isKeyboardVisible = false
       }
+    #endif
       .onChange(of: tagText) { _, newValue in
         let normalized = EpisodePersistence.normalizeTagInputWhileEditing(newValue)
         if normalized != newValue {
           tagText = normalized
         }
       }
-    #endif
   }
 
   private var headerView: some View {
