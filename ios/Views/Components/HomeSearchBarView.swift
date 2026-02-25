@@ -75,7 +75,7 @@ struct HomeSearchBarView: View {
         .background(isFocused.wrappedValue ? HomeStyle.searchActiveFill : HomeStyle.searchFill)
         .overlay(
             Capsule()
-                .stroke(
+                .strokeBorder(
                     isFocused.wrappedValue ? HomeStyle.searchActiveBorder : HomeStyle.searchBorder,
                     lineWidth: 0.9
                 )

@@ -129,8 +129,12 @@ struct EpisodeDetailView: View {
           }
         }
         .background(Color.white)
+        .contentShape(Rectangle())
         .simultaneousGesture(
-          DragGesture(minimumDistance: 24, coordinateSpace: .local)
+          DragGesture(
+            minimumDistance: DetailStyle.horizontalSwipeGestureMinimumDistance,
+            coordinateSpace: .local
+          )
             .onEnded { value in
               handleHorizontalSwipe(value)
             }
@@ -780,7 +784,7 @@ struct EpisodeDetailView: View {
     guard !showsDiscardAlert else { return }
     let dx = value.translation.width
     let dy = value.translation.height
-    guard abs(dx) > abs(dy) else { return }
+    guard abs(dx) > abs(dy) * DetailStyle.horizontalSwipeDominanceRatio else { return }
     guard abs(dx) >= DetailStyle.horizontalSwipeThreshold else { return }
 
     if dx < 0 {
@@ -795,7 +799,6 @@ struct EpisodeDetailView: View {
       return
     }
 
-    guard selectedTab == .registration else { return }
     guard value.startLocation.x <= DetailStyle.backSwipeEdgeWidth else { return }
     handleBack()
   }
@@ -1441,6 +1444,8 @@ private enum DetailStyle {
   static let releaseLogOutcomeFont = AppTypography.subtextEmphasis
   static let releaseLogCounterFont = AppTypography.subtext
   static let horizontalSwipeThreshold: CGFloat = 70
+  static let horizontalSwipeGestureMinimumDistance: CGFloat = 38
+  static let horizontalSwipeDominanceRatio: CGFloat = 1.2
   static let backSwipeEdgeWidth: CGFloat = 28
   static let tabSwitchDelayNanoseconds: UInt64 = 70_000_000
   static let tabSwitchAnimation = Animation.interactiveSpring(

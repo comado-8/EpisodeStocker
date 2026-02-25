@@ -10,7 +10,7 @@ struct EdgeSwipeBackModifier: ViewModifier {
   func body(content: Content) -> some View {
     content
       .simultaneousGesture(
-        DragGesture(minimumDistance: 20, coordinateSpace: .local)
+        DragGesture(minimumDistance: minimumDistance, coordinateSpace: .local)
           .onEnded { value in
             guard isEnabled else { return }
             let dx = value.translation.width

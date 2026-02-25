@@ -19,6 +19,7 @@ struct TagListView: View {
   @State private var editorContext: TagEditorContext?
   @State private var editorSheetHeight: CGFloat = 320
   @State private var navigationPath: [TagRoute] = []
+  @State private var fullScreenHeight: CGFloat = 0
 
   private var filteredTags: [Tag] {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -128,6 +129,12 @@ struct TagListView: View {
           }
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .onAppear {
+          syncFullScreenHeight(proxy.size.height)
+        }
+        .onChange(of: proxy.size.height) { _, newValue in
+          syncFullScreenHeight(newValue)
+        }
         .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(for: TagRoute.self) { route in
           TagDetailView(tagID: route.tagID, tagName: route.tagName)
@@ -152,6 +159,7 @@ struct TagListView: View {
         TagEditorSheet(
           context: context,
           measuredHeight: $editorSheetHeight,
+          fullScreenHeight: fullScreenHeight,
           existingNormalizedTagNames: existingTagNames
         ) { name in
           guard let normalized = EpisodePersistence.validateTagNameInput(name).normalizedName else {
@@ -179,6 +187,13 @@ struct TagListView: View {
       .presentationDetents([.height(editorSheetHeight)])
       .presentationDragIndicator(.visible)
       .presentationBackground(Color.white)
+    }
+  }
+
+  private func syncFullScreenHeight(_ value: CGFloat) {
+    guard value > 0 else { return }
+    if abs(fullScreenHeight - value) > 0.5 {
+      fullScreenHeight = value
     }
   }
 }
@@ -428,6 +443,7 @@ private struct TagEditorContext: Identifiable {
 private struct TagEditorSheet: View {
   let context: TagEditorContext
   @Binding var measuredHeight: CGFloat
+  let fullScreenHeight: CGFloat
   let existingNormalizedTagNames: Set<String>
   let onSave: (String) -> Void
 
@@ -437,11 +453,13 @@ private struct TagEditorSheet: View {
   init(
     context: TagEditorContext,
     measuredHeight: Binding<CGFloat>,
+    fullScreenHeight: CGFloat,
     existingNormalizedTagNames: Set<String>,
     onSave: @escaping (String) -> Void
   ) {
     self.context = context
     self._measuredHeight = measuredHeight
+    self.fullScreenHeight = fullScreenHeight
     self.existingNormalizedTagNames = existingNormalizedTagNames
     self.onSave = onSave
     _name = State(initialValue: context.initialName)
@@ -544,11 +562,7 @@ private struct TagEditorSheet: View {
       )
       .onPreferenceChange(TagEditorHeightKey.self) { height in
         let contentHeight = height
-        #if canImport(UIKit)
-          let viewportHeight = UIScreen.main.bounds.height
-        #else
-          let viewportHeight = proxy.size.height
-        #endif
+        let viewportHeight = fullScreenHeight > 0 ? fullScreenHeight : proxy.size.height
         let maxHeight = viewportHeight * 0.8
         let targetHeight = min(max(contentHeight, TagStyle.editorSheetMinHeight), maxHeight)
         if abs(measuredHeight - targetHeight) > 0.5 {

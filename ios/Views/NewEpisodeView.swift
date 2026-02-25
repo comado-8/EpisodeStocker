@@ -27,6 +27,8 @@ struct NewEpisodeView: View {
   @State private var isKeyboardVisible = false
   @State private var showsDiscardAlert = false
   @State private var pendingAction: NewEpisodePendingAction?
+  @State private var initialReleaseDate: Date?
+  @State private var hasCapturedInitialDraftState = false
 
   // focus states to control inline suggestion visibility
   @State private var personFieldFocused = false
@@ -97,6 +99,7 @@ struct NewEpisodeView: View {
   }
 
   private var hasUnsavedDraftChanges: Bool {
+    let releaseDateChanged = selectedReleaseDate != initialReleaseDate
     let hasTypedContent =
       !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       || !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -110,7 +113,7 @@ struct NewEpisodeView: View {
       || !selectedProjects.isEmpty
       || !selectedEmotions.isEmpty
       || selectedPlaceChip != nil
-      || selectedReleaseDate != nil
+      || releaseDateChanged
     return hasTypedContent || hasSelectedItems
   }
 
@@ -210,6 +213,10 @@ struct NewEpisodeView: View {
         handlePendingRootTabSwitch(requestedTab)
       }
       .onAppear {
+        if !hasCapturedInitialDraftState {
+          initialReleaseDate = selectedReleaseDate
+          hasCapturedInitialDraftState = true
+        }
         syncUnsavedDraftStateToRouter()
       }
       .onDisappear {
