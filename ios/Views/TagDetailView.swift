@@ -88,74 +88,22 @@ private struct TagDetailEpisodeRow: View {
   let width: CGFloat
   let onTap: () -> Void
 
-  private var emotions: [String] {
-    Array(
-      episode.emotions
-        .map(\.name)
-        .filter { value in
-          value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-        }
-        .prefix(3)
-    )
-  }
-
-  private var hiddenEmotionCount: Int {
-    max(0, episode.emotions.count - emotions.count)
-  }
-
   private var borderColor: Color {
     episode.isUnlocked ? HomeStyle.cardBorder : HomeStyle.lockedCardBorder
   }
 
   var body: some View {
     Button(action: onTap) {
-      VStack(alignment: .leading, spacing: 8) {
-        EpisodeCardRow(
-          title: episode.title,
-          subtitle: episode.body ?? "",
-          date: episode.date,
-          isUnlocked: episode.isUnlocked,
-          width: width,
-          borderColor: borderColor,
-          showsSelection: false,
-          isSelected: false
-        )
-
-        if emotions.isEmpty == false {
-          HStack(spacing: 8) {
-            ForEach(emotions, id: \.self) { emotion in
-              Text(emotion)
-                .font(HomeFont.bodyMedium())
-                .foregroundColor(HomeStyle.searchChipText)
-                .lineLimit(1)
-                .padding(.horizontal, 10)
-                .frame(height: HomeStyle.searchChipHeight)
-                .background(HomeStyle.searchChipFill)
-                .overlay(
-                  Capsule()
-                    .stroke(HomeStyle.searchChipBorder, lineWidth: 1)
-                )
-                .clipShape(Capsule())
-            }
-
-            if hiddenEmotionCount > 0 {
-              Text("+\(hiddenEmotionCount)")
-                .font(HomeFont.bodyMedium())
-                .foregroundColor(HomeStyle.searchChipText)
-                .padding(.horizontal, 10)
-                .frame(height: HomeStyle.searchChipHeight)
-                .background(HomeStyle.searchChipFill)
-                .overlay(
-                  Capsule()
-                    .stroke(HomeStyle.searchChipBorder, lineWidth: 1)
-                )
-                .clipShape(Capsule())
-            }
-
-            Spacer(minLength: 0)
-          }
-        }
-      }
+      EpisodeCardRow(
+        title: episode.title,
+        subtitle: episode.body ?? "",
+        date: episode.date,
+        isUnlocked: episode.isUnlocked,
+        width: width,
+        borderColor: borderColor,
+        showsSelection: false,
+        isSelected: false
+      )
     }
     .buttonStyle(.plain)
   }

@@ -423,13 +423,13 @@ private struct HomeSelectionStatusRow: View {
             Button("キャンセル") {
                 onCancel()
             }
-            .font(.system(size: 15, weight: .semibold))
+            .font(AppTypography.subtextEmphasis)
             .foregroundColor(HomeStyle.selectionCancelText)
 
             Spacer(minLength: 0)
 
             Text("\(count)件選択")
-                .font(.system(size: 15, weight: .semibold))
+                .font(AppTypography.subtextEmphasis)
                 .foregroundColor(HomeStyle.selectionCountText)
 
             Spacer(minLength: 0)
@@ -438,7 +438,7 @@ private struct HomeSelectionStatusRow: View {
                 onDelete()
             } label: {
                 Text("削除")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(AppTypography.subtextEmphasis)
                     .foregroundColor(HomeStyle.selectionDeleteText)
                     .padding(.horizontal, 16)
                     .frame(height: 34)

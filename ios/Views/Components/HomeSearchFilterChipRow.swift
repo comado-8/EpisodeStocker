@@ -17,12 +17,12 @@ struct HomeSearchFilterChipRow: View {
                                 onRemoveToken(token)
                             } label: {
                                 Image(systemName: "xmark")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.system(size: 12, weight: .semibold))
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("\(token.displayText)を削除")
                         }
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(AppTypography.subtextEmphasis)
                         .foregroundColor(HomeStyle.searchChipText)
                         .padding(.horizontal, 10)
                         .frame(height: HomeStyle.searchChipHeight)

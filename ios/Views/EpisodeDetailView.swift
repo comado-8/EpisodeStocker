@@ -43,6 +43,8 @@ struct EpisodeDetailView: View {
   @State private var showsDiscardAlert = false
   @State private var editBaseline = DetailEditBaseline()
   @State private var pendingAction: PendingAction?
+  @State private var tabTransitionDirection: TabTransitionDirection = .left
+  @State private var tabSwitchTask: Task<Void, Never>?
   @State private var showsReleaseLogSheet = false
   @State private var editingHistoryId: UUID?
   @State private var logDraft = ReleaseLogDraft()
@@ -105,11 +107,16 @@ struct EpisodeDetailView: View {
 
           ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: DetailStyle.sectionSpacing) {
-              if selectedTab == .registration {
-                registrationInfoView
-              } else {
-                releaseLogPlaceholder
+              ZStack(alignment: .topLeading) {
+                if selectedTab == .registration {
+                  registrationInfoView
+                    .transition(tabContentTransition)
+                } else {
+                  releaseLogPlaceholder
+                    .transition(tabContentTransition)
+                }
               }
+              .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             .padding(.top, DetailStyle.sectionSpacing)
             .padding(.horizontal, horizontalPadding)
@@ -122,6 +129,12 @@ struct EpisodeDetailView: View {
           }
         }
         .background(Color.white)
+        .simultaneousGesture(
+          DragGesture(minimumDistance: 24, coordinateSpace: .local)
+            .onEnded { value in
+              handleHorizontalSwipe(value)
+            }
+        )
 
         if showsDiscardAlert {
           discardAlertView
@@ -184,6 +197,8 @@ struct EpisodeDetailView: View {
       syncUnsavedEditStateToRouter()
     }
     .onDisappear {
+      tabSwitchTask?.cancel()
+      tabSwitchTask = nil
       router.hasUnsavedEpisodeDetailChanges = false
     }
   }
@@ -256,6 +271,9 @@ struct EpisodeDetailView: View {
       Text("エピソード詳細")
         .font(DetailStyle.headerFont)
         .foregroundColor(DetailStyle.headerText)
+        .lineLimit(1)
+        .minimumScaleFactor(0.82)
+        .layoutPriority(1)
 
       Spacer()
 
@@ -419,12 +437,20 @@ struct EpisodeDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: DetailStyle.detailToggleHeight)
+        .background(
+          RoundedRectangle(cornerRadius: DetailStyle.inputCornerRadius)
+            .fill(DetailStyle.detailToggleFill)
+        )
         .overlay(
           RoundedRectangle(cornerRadius: DetailStyle.inputCornerRadius)
-            .stroke(DetailStyle.inputBorder, lineWidth: DetailStyle.inputBorderWidth)
+            .stroke(
+              DetailStyle.detailToggleBorder,
+              lineWidth: DetailStyle.detailToggleBorderWidth
+            )
         )
       }
       .buttonStyle(.plain)
+      .padding(.top, DetailStyle.detailToggleTopSpacing)
 
       if showsDetails {
         detailSections
@@ -750,6 +776,30 @@ struct EpisodeDetailView: View {
     }
   }
 
+  private func handleHorizontalSwipe(_ value: DragGesture.Value) {
+    guard !showsDiscardAlert else { return }
+    let dx = value.translation.width
+    let dy = value.translation.height
+    guard abs(dx) > abs(dy) else { return }
+    guard abs(dx) >= DetailStyle.horizontalSwipeThreshold else { return }
+
+    if dx < 0 {
+      if selectedTab == .registration {
+        requestTabSwitch(.releaseLog)
+      }
+      return
+    }
+
+    if selectedTab == .releaseLog {
+      requestTabSwitch(.registration)
+      return
+    }
+
+    guard selectedTab == .registration else { return }
+    guard value.startLocation.x <= DetailStyle.backSwipeEdgeWidth else { return }
+    handleBack()
+  }
+
   private func requestTabSwitch(_ tab: EpisodeDetailTab) {
     guard tab != selectedTab else { return }
     if isEditing && hasUnsavedChanges {
@@ -757,9 +807,32 @@ struct EpisodeDetailView: View {
       showsDiscardAlert = true
     } else {
       isEditing = false
-      selectedTab = tab
       hideKeyboard()
+      scheduleTabSwitch(to: tab)
     }
+  }
+
+  private func scheduleTabSwitch(to tab: EpisodeDetailTab) {
+    tabSwitchTask?.cancel()
+    tabTransitionDirection = tab == .releaseLog ? .left : .right
+    tabSwitchTask = Task {
+      try? await Task.sleep(nanoseconds: DetailStyle.tabSwitchDelayNanoseconds)
+      guard !Task.isCancelled else { return }
+      await MainActor.run {
+        withAnimation(DetailStyle.tabSwitchAnimation) {
+          selectedTab = tab
+        }
+      }
+    }
+  }
+
+  private var tabContentTransition: AnyTransition {
+    let insertionEdge: Edge = tabTransitionDirection == .left ? .trailing : .leading
+    let removalEdge: Edge = tabTransitionDirection == .left ? .leading : .trailing
+    return .asymmetric(
+      insertion: .move(edge: insertionEdge).combined(with: .opacity),
+      removal: .move(edge: removalEdge).combined(with: .opacity)
+    )
   }
 
   private func discardChanges() {
@@ -854,7 +927,7 @@ struct EpisodeDetailView: View {
     case .back:
       dismiss()
     case .switchTab(let tab):
-      selectedTab = tab
+      scheduleTabSwitch(to: tab)
     case .switchRootTab(let tab):
       router.commitRootTabSwitch(tab)
     case .none:
@@ -886,7 +959,7 @@ struct EpisodeDetailView: View {
     let trimmedProject = logDraft.projectName.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedMemo = logDraft.memo.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedProject.isEmpty else { return }
-    guard let outcome = logDraft.outcome else { return }
+    let reaction = logDraft.outcome?.rawValue ?? ""
 
     if let historyId = editingHistoryId {
       if let log = episode.unlockLogs.first(where: { $0.id == historyId }) {
@@ -895,7 +968,7 @@ struct EpisodeDetailView: View {
           talkedAt: logDraft.talkedAt,
           mediaPublicAt: logDraft.mediaReleaseDate,
           projectNameText: trimmedProject,
-          reaction: outcome.rawValue,
+          reaction: reaction,
           memo: trimmedMemo
         )
       }
@@ -905,7 +978,7 @@ struct EpisodeDetailView: View {
         talkedAt: logDraft.talkedAt,
         mediaPublicAt: logDraft.mediaReleaseDate,
         projectNameText: trimmedProject,
-        reaction: outcome.rawValue,
+        reaction: reaction,
         memo: trimmedMemo
       )
     }
@@ -994,7 +1067,7 @@ struct EpisodeDetailView: View {
             .font(DetailStyle.tagGuideFont)
             .foregroundColor(HomeStyle.fabRed)
             .padding(.horizontal, 10)
-            .frame(height: 26)
+            .frame(height: DetailStyle.tagGuideActionHeight)
             .background(HomeStyle.fabRed.opacity(0.08))
             .overlay(
               Capsule()
@@ -1238,6 +1311,11 @@ private enum EpisodeDetailTab {
   case releaseLog
 }
 
+private enum TabTransitionDirection {
+  case left
+  case right
+}
+
 private enum PendingAction {
   case back
   case switchTab(EpisodeDetailTab)
@@ -1277,12 +1355,19 @@ private enum DetailStyle {
   static let inputCornerRadius: CGFloat = 10
   static let inputBorderWidth: CGFloat = 0.66
   static let detailToggleHeight: CGFloat = 52
-  static let headerHeight: CGFloat = 48
+  static let headerHeight: CGFloat = 56
   static let tabBarHeight: CGFloat = 48
   static let tabBarBorderWidth: CGFloat = 0.66
   static let tabIndicatorHeight: CGFloat = 2
-  static let chipHeight: CGFloat = 28
-  static let detailsSpacing: CGFloat = 24
+  static let chipHeight: CGFloat = 32
+  static let singleChipInputTopPadding: CGFloat = 8
+  static let singleChipInputBottomPadding: CGFloat = 6
+  static let multiChipInputTopPadding: CGFloat = 4
+  static let multiChipInputBottomPadding: CGFloat = 10
+  static let detailToggleTopSpacing: CGFloat = 8
+  static let detailToggleBorderWidth: CGFloat = 1
+  static let tagGuideActionHeight: CGFloat = 32
+  static let detailsSpacing: CGFloat = 30
   static let chipSpacing: CGFloat = 8
   static let iconButtonSize: CGFloat = 24
   static let calendarSheetHeight: CGFloat = 560
@@ -1290,18 +1375,20 @@ private enum DetailStyle {
 
   static let labelText = Color(hex: "4A5565")
   static let requiredText = Color(hex: "FB2C36")
-  static let inputText = Color(hex: "0A0A0A")
+  static let inputText = HomeStyle.textInput
   static let inputBorder = Color(hex: "D1D5DC")
   static let chipFill = Color(hex: "F3F4F6")
   static let chipText = Color(hex: "364153")
   static let emotionPresetSelectedFill = HomeStyle.fabRed.opacity(0.12)
   static let emotionPresetSelectedBorder = HomeStyle.fabRed.opacity(0.5)
   static let emotionPresetSelectedText = HomeStyle.fabRed
-  static let headerText = Color(hex: "2A2525")
-  static let tabSelectedText = Color(hex: "2A2525")
+  static let headerText = HomeStyle.textPrimary
+  static let tabSelectedText = HomeStyle.textPrimary
   static let tabUnselectedText = Color(hex: "4A5565")
   static let tabBarBorder = Color(hex: "D1D5DC")
   static let tabIndicatorFill = HomeStyle.fabRed
+  static let detailToggleFill = Color(hex: "F8FAFC")
+  static let detailToggleBorder = Color(hex: "CBD3DF")
   static let detailToggleText = Color(hex: "364153")
   static let readOnlyFill = Color(hex: "F3F4F6")
   static let readOnlyBorder = Color(hex: "E5E7EB")
@@ -1326,33 +1413,41 @@ private enum DetailStyle {
   static let calendarToolbarButtonText = Color(hex: "1F2937")
   static let calendarToolbarButtonDestructiveText = HomeStyle.destructiveRed
 
-  static let labelFont = Font.system(size: 14, weight: .medium)
-  static let inputFont = Font.system(size: 16, weight: .regular)
-  static let headerFont = AppTypography.formScreenTitle
-  static let tabSelectedFont = Font.system(size: 16, weight: .semibold)
-  static let tabFont = Font.system(size: 16, weight: .semibold)
-  static let detailToggleFont = Font.system(size: 16, weight: .medium)
-  static let badgeFont = Font.system(size: 14, weight: .medium)
-  static let chipFont = Font.system(size: 14, weight: .medium)
-  static let counterFont = Font.system(size: 12, weight: .regular)
-  static let validationFont = Font.system(size: 12, weight: .regular)
-  static let tagGuideFont = Font.system(size: 12, weight: .regular)
-  static let copyLabelFont = Font.system(size: 12, weight: .medium)
-  static let editButtonFont = Font.system(size: 15, weight: .semibold)
-  static let modalTitleFont = Font.system(size: 17, weight: .semibold)
-  static let modalBodyFont = Font.system(size: 14, weight: .regular)
-  static let modalButtonFont = Font.system(size: 16, weight: .bold)
-  static let calendarToolbarButtonFont = Font.system(size: 15, weight: .semibold)
+  static let labelFont = AppTypography.bodyEmphasis
+  static let inputFont = AppTypography.body
+  static let headerFont = Font.system(size: 28, weight: .semibold)
+  static let tabSelectedFont = AppTypography.bodyEmphasis
+  static let tabFont = AppTypography.bodyEmphasis
+  static let detailToggleFont = AppTypography.bodyEmphasis
+  static let badgeFont = AppTypography.subtextEmphasis
+  static let chipFont = AppTypography.subtextEmphasis
+  static let counterFont = AppTypography.subtext
+  static let validationFont = AppTypography.subtext
+  static let tagGuideFont = AppTypography.subtext
+  static let copyLabelFont = AppTypography.subtextEmphasis
+  static let editButtonFont = AppTypography.subtextEmphasis
+  static let modalTitleFont = AppTypography.sectionTitle
+  static let modalBodyFont = AppTypography.body
+  static let modalButtonFont = AppTypography.bodyEmphasis
+  static let calendarToolbarButtonFont = AppTypography.subtextEmphasis
   static let editButtonCornerRadius: CGFloat = 10
   static let copyIconSize: CGFloat = 18
   static let copyButtonSize: CGFloat = 28
-  static let releaseLogButtonFont = Font.system(size: 16, weight: .semibold)
-  static let releaseLogDateFont = Font.system(size: 16, weight: .semibold)
-  static let releaseLogMetaFont = Font.system(size: 14, weight: .regular)
-  static let releaseLogNoteFont = Font.system(size: 14, weight: .regular)
-  static let releaseLogSheetTitleFont = Font.system(size: 18, weight: .semibold)
-  static let releaseLogOutcomeFont = Font.system(size: 14, weight: .semibold)
-  static let releaseLogCounterFont = Font.system(size: 12, weight: .regular)
+  static let releaseLogButtonFont = AppTypography.bodyEmphasis
+  static let releaseLogDateFont = AppTypography.bodyEmphasis
+  static let releaseLogMetaFont = AppTypography.subtext
+  static let releaseLogNoteFont = AppTypography.subtext
+  static let releaseLogSheetTitleFont = Font.system(size: 28, weight: .semibold)
+  static let releaseLogOutcomeFont = AppTypography.subtextEmphasis
+  static let releaseLogCounterFont = AppTypography.subtext
+  static let horizontalSwipeThreshold: CGFloat = 70
+  static let backSwipeEdgeWidth: CGFloat = 28
+  static let tabSwitchDelayNanoseconds: UInt64 = 70_000_000
+  static let tabSwitchAnimation = Animation.interactiveSpring(
+    response: 0.42,
+    dampingFraction: 0.9,
+    blendDuration: 0.16
+  )
   static let modalCornerRadius: CGFloat = 16
   static let modalButtonHeight: CGFloat = 44
   static let modalButtonCornerRadius: CGFloat = 22
@@ -1607,7 +1702,6 @@ private struct ReleaseLogSheet: View {
 
   private var canSave: Bool {
     !draft.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      && draft.outcome != nil
   }
 
   var body: some View {
@@ -1652,7 +1746,7 @@ private struct ReleaseLogSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-              DetailFieldLabel(title: "手応え", required: true)
+              DetailFieldLabel(title: "手応え")
               HStack(spacing: 10) {
                 ForEach(ReleaseLogOutcome.allCases, id: \.self) { outcome in
                   Button {
@@ -2391,7 +2485,8 @@ private struct DetailChipInputField: View {
       Spacer(minLength: 0)
     }
     .padding(.horizontal, 12)
-    .padding(.vertical, 8)
+    .padding(.top, DetailStyle.singleChipInputTopPadding)
+    .padding(.bottom, DetailStyle.singleChipInputBottomPadding)
     .frame(height: DetailStyle.inputHeight)
     .background(
       RoundedRectangle(cornerRadius: DetailStyle.inputCornerRadius)
@@ -2444,7 +2539,8 @@ private struct DetailMultiChipInputField: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, 12)
-    .padding(.vertical, 8)
+    .padding(.top, DetailStyle.multiChipInputTopPadding)
+    .padding(.bottom, DetailStyle.multiChipInputBottomPadding)
     .frame(minHeight: DetailStyle.inputHeight, alignment: .topLeading)
     .background(
       RoundedRectangle(cornerRadius: DetailStyle.inputCornerRadius)

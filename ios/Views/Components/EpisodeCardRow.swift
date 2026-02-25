@@ -23,11 +23,11 @@ struct EpisodeCardRow: View {
             HStack(spacing: HomeStyle.cardContentSpacing) {
                 VStack(spacing: 0) {
                     Text(Self.yearFormatter.string(from: date))
-                        .font(.system(size: 10, weight: .medium))
+                        .font(HomeFont.cardDateYear())
                         .foregroundColor(dateTextColor)
 
                     Text(Self.monthDayFormatter.string(from: date))
-                        .font(.system(size: 18, weight: .medium))
+                        .font(HomeFont.cardDateDay())
                         .tracking(0.3)
                         .foregroundColor(dateTextColor)
                 }
@@ -37,13 +37,13 @@ struct EpisodeCardRow: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(AppTypography.sectionTitle)
                         .tracking(0.15)
-                        .foregroundColor(Color(hex: "1F1F1F"))
+                        .foregroundColor(HomeStyle.textPrimary)
                         .lineLimit(1)
 
                     Text(subtitle)
-                        .font(HomeFont.bodyMedium())
+                        .font(AppTypography.subtext)
                         .tracking(0.25)
                         .foregroundColor(HomeStyle.subtitle)
                         .lineLimit(1)
@@ -67,7 +67,10 @@ struct EpisodeCardRow: View {
     }
 
     private var cardBackgroundColor: Color {
-        (showsSelection && isSelected) ? HomeStyle.selectionCardBackground : .white
+        if showsSelection && isSelected {
+            return HomeStyle.selectionCardBackground
+        }
+        return isUnlocked ? HomeStyle.cardBackgroundUnlocked : HomeStyle.cardBackgroundLocked
     }
 
     private var dateTextColor: Color {

@@ -27,18 +27,23 @@ enum RootTab: String, CaseIterable {
 
 struct HomeTabBarView: View {
     @Binding var selection: RootTab
+    var onTabTap: ((RootTab) -> Void)? = nil
 
     var body: some View {
         HStack {
             ForEach(RootTab.allCases, id: \.self) { tab in
                 Button {
-                    selection = tab
+                    if let onTabTap {
+                        onTabTap(tab)
+                    } else {
+                        selection = tab
+                    }
                 } label: {
                     VStack(spacing: 4) {
                         Image(systemName: tab.systemImage)
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 17, weight: .semibold))
                         Text(tab.title)
-                            .font(HomeFont.labelLarge())
+                            .font(HomeFont.tabLabel())
                             .tracking(0.1)
                     }
                     .foregroundColor(selection == tab ? HomeStyle.tabSelected : HomeStyle.tabUnselected)

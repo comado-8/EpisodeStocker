@@ -43,7 +43,16 @@ struct HomeSearchBarView: View {
                     .focused(isFocused)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if !text.isEmpty {
+            if isFocused.wrappedValue {
+                Button {
+                    isFocused.wrappedValue = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .foregroundColor(HomeStyle.segmentText.opacity(0.75))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("検索入力を閉じる")
+            } else if !text.isEmpty {
                 Button {
                     if let onClearText {
                         onClearText()
@@ -64,6 +73,13 @@ struct HomeSearchBarView: View {
         .padding(.horizontal, 16)
         .frame(width: width, height: HomeStyle.searchHeight)
         .background(isFocused.wrappedValue ? HomeStyle.searchActiveFill : HomeStyle.searchFill)
+        .overlay(
+            Capsule()
+                .stroke(
+                    isFocused.wrappedValue ? HomeStyle.searchActiveBorder : HomeStyle.searchBorder,
+                    lineWidth: 0.9
+                )
+        )
         .clipShape(Capsule())
         .contentShape(Capsule())
         .onTapGesture {
