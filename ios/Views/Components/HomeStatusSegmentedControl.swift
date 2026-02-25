@@ -18,9 +18,9 @@ struct HomeStatusSegmentedControl: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: iconName(for: item))
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                         Text(item.rawValue)
-                            .font(.system(size: 14, weight: .medium))
+                            .font(AppTypography.bodyEmphasis)
                             .tracking(0.1)
                     }
                     .foregroundColor(selection == item ? selectedText(for: item) : HomeStyle.segmentText)
@@ -66,9 +66,11 @@ private extension HomeStatusSegmentedControl {
 
     func selectedText(for item: HomeStatusFilter) -> Color {
         switch item {
+        case .ok:
+            return HomeStyle.statusOkSelectedText
         case .locked:
-            return HomeStyle.lockedSegmentText
-        default:
+            return HomeStyle.statusLockedSelectedText
+        case .all:
             return HomeStyle.segmentSelectedText
         }
     }

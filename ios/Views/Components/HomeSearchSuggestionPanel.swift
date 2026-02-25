@@ -14,26 +14,32 @@ struct HomeSearchSuggestionPanel: View {
                     } label: {
                         HStack(alignment: .center, spacing: 10) {
                             Image(systemName: item.symbolName)
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(HomeStyle.searchSuggestionIcon)
                                 .frame(width: 18, height: 18)
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(item.title)
-                                    .font(.system(size: 14, weight: .medium))
+                                    .font(AppTypography.subtextEmphasis)
                                     .foregroundColor(HomeStyle.searchSuggestionTitle)
                                     .lineLimit(1)
                                 Text(item.subtitle)
-                                    .font(.system(size: 12, weight: .regular))
+                                    .font(AppTypography.subtext)
                                     .foregroundColor(HomeStyle.searchSuggestionSubtitle)
                                     .lineLimit(1)
                             }
                             Spacer(minLength: 0)
                         }
                         .padding(.horizontal, 12)
-                        .frame(height: HomeStyle.searchSuggestionRowHeight)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: HomeStyle.searchSuggestionRowHeight,
+                            alignment: .leading
+                        )
+                        .contentShape(Rectangle())
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                     .buttonStyle(.plain)
 
                     if index < items.count - 1 {

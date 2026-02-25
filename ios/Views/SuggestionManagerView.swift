@@ -120,6 +120,8 @@ struct SuggestionManagerView: View {
         .padding(.top, 12)
       }
       .navigationTitle("履歴を管理")
+      .navigationBarTitleDisplayMode(.large)
+      .toolbar(.visible, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
           Button("閉じる") {
@@ -423,16 +425,16 @@ private enum SuggestionManagerStyle {
   static let cardBorder = Color(hex: "E5E7EB")
   static let inputFill = Color(hex: "FFFFFF")
   static let inputBorder = Color(hex: "D1D5DC")
-  static let inputText = Color(hex: "0A0A0A")
+  static let inputText = HomeStyle.textInput
   static let inputIcon = Color(hex: "6B7280")
-  static let subheaderText = Color(hex: "6B7280")
-  static let toggleTitleText = Color(hex: "2A2525")
-  static let toggleBodyText = Color(hex: "6B7280")
+  static let subheaderText = HomeStyle.textSecondary
+  static let toggleTitleText = HomeStyle.textPrimary
+  static let toggleBodyText = HomeStyle.textSecondary
   static let toggleTint = HomeStyle.fabRed
 
   static let rowFill = Color(hex: "FFFFFF")
   static let rowBorder = Color(hex: "E5E7EB")
-  static let rowTitleText = Color(hex: "2A2525")
+  static let rowTitleText = HomeStyle.textPrimary
   static let deletedText = Color(hex: "9CA3AF")
   static let deletedBadgeFill = Color(hex: "F3F4F6")
   static let deletedBadgeBorder = Color(hex: "D1D5DC")
@@ -449,21 +451,21 @@ private enum SuggestionManagerStyle {
 
   static let toastFill = Color(hex: "FFF4F4")
   static let toastBorder = HomeStyle.fabRed.opacity(0.32)
-  static let toastText = Color(hex: "2A2525")
+  static let toastText = HomeStyle.textPrimary
   static let toastButtonText = Color.white
   static let toastButtonFill = HomeStyle.fabRed
 
-  static let headerCloseFont = Font.system(size: 15, weight: .semibold)
-  static let subheaderFont = Font.system(size: 13, weight: .regular)
-  static let inputFont = Font.system(size: 16, weight: .regular)
-  static let toggleTitleFont = Font.system(size: 14, weight: .medium)
-  static let toggleBodyFont = Font.system(size: 12, weight: .regular)
-  static let rowTitleFont = Font.system(size: 15, weight: .medium)
-  static let deletedBadgeFont = Font.system(size: 11, weight: .medium)
-  static let inUseBadgeFont = Font.system(size: 11, weight: .medium)
-  static let swipeActionFont = Font.system(size: 14, weight: .medium)
-  static let toastFont = Font.system(size: 15, weight: .bold)
-  static let toastButtonFont = Font.system(size: 15, weight: .heavy)
+  static let headerCloseFont = AppTypography.subtextEmphasis
+  static let subheaderFont = AppTypography.subtext
+  static let inputFont = AppTypography.body
+  static let toggleTitleFont = AppTypography.subtextEmphasis
+  static let toggleBodyFont = AppTypography.subtext
+  static let rowTitleFont = AppTypography.bodyEmphasis
+  static let deletedBadgeFont = AppTypography.meta
+  static let inUseBadgeFont = AppTypography.meta
+  static let swipeActionFont = AppTypography.subtextEmphasis
+  static let toastFont = AppTypography.subtextEmphasis
+  static let toastButtonFont = AppTypography.subtextEmphasis
 
   static let toastHeight: CGFloat = 60
   static let toastCornerRadius: CGFloat = 14

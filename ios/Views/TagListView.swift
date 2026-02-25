@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct TagListView: View {
+  @EnvironmentObject private var router: AppRouter
   @Environment(\.modelContext) private var modelContext
   @Query(
     filter: #Predicate<Tag> { $0.isSoftDeleted == false },
@@ -18,6 +19,7 @@ struct TagListView: View {
   @State private var editorContext: TagEditorContext?
   @State private var editorSheetHeight: CGFloat = 320
   @State private var navigationPath: [TagRoute] = []
+  @State private var fullScreenHeight: CGFloat = 0
 
   private var filteredTags: [Tag] {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -110,7 +112,7 @@ struct TagListView: View {
           .padding(.bottom, HomeStyle.tabBarHeight + TagStyle.listBottomPadding)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-          HomeFloatingButton {
+          HomeFloatingButton(iconStyle: .tagPlus) {
             editorContext = TagEditorContext(mode: .add)
           }
           .padding(.trailing, max(HomeStyle.fabTrailing, HomeStyle.horizontalPadding))
@@ -127,10 +129,28 @@ struct TagListView: View {
           }
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .onAppear {
+          syncFullScreenHeight(proxy.size.height)
+        }
+        .onChange(of: proxy.size.height) { _, newValue in
+          syncFullScreenHeight(newValue)
+        }
         .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(for: TagRoute.self) { route in
           TagDetailView(tagID: route.tagID, tagName: route.tagName)
         }
+      }
+    }
+    .onAppear {
+      router.hasTagDetailPath = !navigationPath.isEmpty
+    }
+    .onChange(of: navigationPath) { _, newValue in
+      router.hasTagDetailPath = !newValue.isEmpty
+    }
+    .onChange(of: router.tagRootResetSignal) { _, _ in
+      guard !navigationPath.isEmpty else { return }
+      withAnimation(.easeInOut(duration: 0.25)) {
+        navigationPath.removeAll()
       }
     }
     .sheet(item: $editorContext) { context in
@@ -139,6 +159,7 @@ struct TagListView: View {
         TagEditorSheet(
           context: context,
           measuredHeight: $editorSheetHeight,
+          fullScreenHeight: fullScreenHeight,
           existingNormalizedTagNames: existingTagNames
         ) { name in
           guard let normalized = EpisodePersistence.validateTagNameInput(name).normalizedName else {
@@ -152,6 +173,8 @@ struct TagListView: View {
           }
         }
         .navigationTitle(context.title)
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar(.visible, for: .navigationBar)
         .toolbar {
           ToolbarItem(placement: .topBarTrailing) {
             Button("閉じる") {
@@ -164,6 +187,13 @@ struct TagListView: View {
       .presentationDetents([.height(editorSheetHeight)])
       .presentationDragIndicator(.visible)
       .presentationBackground(Color.white)
+    }
+  }
+
+  private func syncFullScreenHeight(_ value: CGFloat) {
+    guard value > 0 else { return }
+    if abs(fullScreenHeight - value) > 0.5 {
+      fullScreenHeight = value
     }
   }
 }
@@ -240,21 +270,8 @@ private struct TagListCardView: View {
         .frame(maxHeight: .infinity)
       }
     }
-    .frame(width: width)
+    .frame(width: width, alignment: .top)
     .frame(maxHeight: .infinity, alignment: .top)
-    .background(Color.white)
-    .clipShape(RoundedRectangle(cornerRadius: TagStyle.cardCornerRadius, style: .continuous))
-    .overlay(
-      RoundedRectangle(cornerRadius: TagStyle.cardCornerRadius, style: .continuous)
-        .stroke(TagStyle.cardBorder, lineWidth: TagStyle.cardBorderWidth)
-    )
-    .shadow(
-      color: TagStyle.cardShadowPrimary, radius: TagStyle.cardShadowPrimaryRadius, x: 0,
-      y: TagStyle.cardShadowPrimaryY
-    )
-    .shadow(
-      color: TagStyle.cardShadowSecondary, radius: TagStyle.cardShadowSecondaryRadius, x: 0,
-      y: TagStyle.cardShadowSecondaryY)
   }
 }
 
@@ -426,6 +443,7 @@ private struct TagEditorContext: Identifiable {
 private struct TagEditorSheet: View {
   let context: TagEditorContext
   @Binding var measuredHeight: CGFloat
+  let fullScreenHeight: CGFloat
   let existingNormalizedTagNames: Set<String>
   let onSave: (String) -> Void
 
@@ -435,11 +453,13 @@ private struct TagEditorSheet: View {
   init(
     context: TagEditorContext,
     measuredHeight: Binding<CGFloat>,
+    fullScreenHeight: CGFloat,
     existingNormalizedTagNames: Set<String>,
     onSave: @escaping (String) -> Void
   ) {
     self.context = context
     self._measuredHeight = measuredHeight
+    self.fullScreenHeight = fullScreenHeight
     self.existingNormalizedTagNames = existingNormalizedTagNames
     self.onSave = onSave
     _name = State(initialValue: context.initialName)
@@ -541,9 +561,13 @@ private struct TagEditorSheet: View {
         }
       )
       .onPreferenceChange(TagEditorHeightKey.self) { height in
-        let padded = height
-        let maxHeight = proxy.size.height * 0.8
-        measuredHeight = min(max(padded, 100), maxHeight)
+        let contentHeight = height
+        let viewportHeight = fullScreenHeight > 0 ? fullScreenHeight : proxy.size.height
+        let maxHeight = viewportHeight * 0.8
+        let targetHeight = min(max(contentHeight, TagStyle.editorSheetMinHeight), maxHeight)
+        if abs(measuredHeight - targetHeight) > 0.5 {
+          measuredHeight = targetHeight
+        }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -637,32 +661,32 @@ private enum TagStyle {
   static let listBottomPadding: CGFloat = 0
 
   static let headerFont = AppTypography.screenTitle
-  static let cardHeaderFont = Font.system(size: 16, weight: .medium)
-  static let subheaderFont = Font.system(size: 13, weight: .regular)
-  static let rowTitleFont = Font.system(size: 18, weight: .semibold)
-  static let rowMetaFont = Font.system(size: 12, weight: .regular)
-  static let toastFont = Font.system(size: 15, weight: .bold)
-  static let toastButtonFont = Font.system(size: 15, weight: .heavy)
-  static let swipeActionFont = Font.system(size: 12, weight: .medium)
-  static let noticeFont = Font.system(size: 12, weight: .regular)
-  static let editorLabelFont = Font.system(size: 13, weight: .medium)
-  static let editorInputFont = Font.system(size: 16, weight: .regular)
-  static let editorButtonFont = Font.system(size: 15, weight: .bold)
-  static let editorPrimaryButtonFont = Font.system(size: 16, weight: .bold)
-  static let sheetCloseFont = Font.system(size: 15, weight: .semibold)
-  static let editorPrefixFont = Font.system(size: 16, weight: .medium)
-  static let editorValidationFont = Font.system(size: 12, weight: .regular)
-  static let editorGuideFont = Font.system(size: 12, weight: .regular)
-  static let searchLabelFont = Font.system(size: 12, weight: .medium)
-  static let searchQueryFont = Font.system(size: 14, weight: .regular)
-  static let searchCountFont = Font.system(size: 13, weight: .regular)
+  static let cardHeaderFont = AppTypography.sectionTitle
+  static let subheaderFont = AppTypography.subtext
+  static let rowTitleFont = AppTypography.sectionTitle
+  static let rowMetaFont = AppTypography.subtext
+  static let toastFont = AppTypography.subtextEmphasis
+  static let toastButtonFont = AppTypography.subtextEmphasis
+  static let swipeActionFont = AppTypography.subtext
+  static let noticeFont = AppTypography.subtext
+  static let editorLabelFont = AppTypography.bodyEmphasis
+  static let editorInputFont = AppTypography.body
+  static let editorButtonFont = AppTypography.bodyEmphasis
+  static let editorPrimaryButtonFont = AppTypography.bodyEmphasis
+  static let sheetCloseFont = AppTypography.subtextEmphasis
+  static let editorPrefixFont = AppTypography.bodyEmphasis
+  static let editorValidationFont = AppTypography.subtext
+  static let editorGuideFont = AppTypography.subtext
+  static let searchLabelFont = AppTypography.subtextEmphasis
+  static let searchQueryFont = AppTypography.body
+  static let searchCountFont = AppTypography.subtext
   static let emptyTitleFont = rowTitleFont
   static let emptyBodyFont = rowMetaFont
 
-  static let headerText = Color(hex: "2A2525")
-  static let subheaderText = Color(hex: "6B7280")
-  static let rowTitleText = Color(hex: "2A2525")
-  static let rowMetaText = Color(hex: "6B7280")
+  static let headerText = HomeStyle.textPrimary
+  static let subheaderText = HomeStyle.textSecondary
+  static let rowTitleText = HomeStyle.textPrimary
+  static let rowMetaText = HomeStyle.textSecondary
   static let rowDivider = Color(hex: "E5E7EB")
   static let cardBorder = Color(hex: "E5E7EB")
   static let headerIconTint = Color(hex: "101828")
@@ -672,15 +696,15 @@ private enum TagStyle {
   static let editButtonFill = HomeStyle.fabRed.opacity(0.12)
   static let editButtonBorder = HomeStyle.fabRed.opacity(0.45)
   static let editorPlaceholderText = Color.black.opacity(0.5)
-  static let editorInputText = Color(hex: "0A0A0A")
+  static let editorInputText = HomeStyle.textInput
   static let editorInputBorder = Color(hex: "D1D5DC")
   static let editorPrefixText = Color(hex: "4A5565")
   static let searchLabelText = HomeStyle.fabRed
   static let searchLabelFill = HomeStyle.fabRed.opacity(0.08)
-  static let searchQueryText = Color(hex: "4A5565")
-  static let searchCountText = Color(hex: "4A5565")
-  static let noticeText = Color(hex: "4A5565")
-  static let noticeIconText = Color(hex: "4A5565")
+  static let searchQueryText = HomeStyle.textSecondary
+  static let searchCountText = HomeStyle.textSecondary
+  static let noticeText = HomeStyle.textSecondary
+  static let noticeIconText = HomeStyle.textSecondary
   static let emptyTitleText = rowTitleText
   static let emptyBodyText = rowMetaText
   static let editorPrimaryFill = HomeStyle.fabRed
@@ -692,7 +716,7 @@ private enum TagStyle {
 
   static let toastFill = Color(hex: "FFF4F4")
   static let toastBorder = HomeStyle.fabRed.opacity(0.32)
-  static let toastText = Color(hex: "2A2525")
+  static let toastText = HomeStyle.textPrimary
   static let toastButtonText = Color.white
   static let toastButtonFill = HomeStyle.fabRed
 
@@ -704,6 +728,7 @@ private enum TagStyle {
   static let cardShadowSecondaryY: CGFloat = 3
 
   static let editorInputHeight: CGFloat = 44
+  static let editorSheetMinHeight: CGFloat = 280
   static let editorInputCornerRadius: CGFloat = 10
   static let editorInputBorderWidth: CGFloat = 0.66
   static let editorButtonHeight: CGFloat = 48
@@ -766,6 +791,8 @@ extension View {
 
 struct TagListView_Previews: PreviewProvider {
   static var previews: some View {
-    TagListView().environmentObject(EpisodeStore())
+    TagListView()
+      .environmentObject(EpisodeStore())
+      .environmentObject(AppRouter())
   }
 }

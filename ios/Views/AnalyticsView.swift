@@ -34,9 +34,9 @@ struct AnalyticsView: View {
 private enum AnalyticsStyle {
     static let figmaTopInset: CGFloat = 59
     static let headerFont = AppTypography.screenTitle
-    static let bodyFont = Font.system(size: 13, weight: .regular)
-    static let headerText = Color(hex: "2A2525")
-    static let bodyText = Color(hex: "6B7280")
+    static let bodyFont = AppTypography.body
+    static let headerText = HomeStyle.textPrimary
+    static let bodyText = HomeStyle.textSecondary
 }
 
 struct AnalyticsView_Previews: PreviewProvider {

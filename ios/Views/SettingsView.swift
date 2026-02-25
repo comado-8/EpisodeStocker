@@ -175,14 +175,14 @@ private enum SettingsStyle {
     static let chevronSize: CGFloat = 12
 
     static let headerFont = AppTypography.screenTitle
-    static let subheaderFont = Font.system(size: 13, weight: .regular)
-    static let rowTitleFont = Font.system(size: 15, weight: .bold)
-    static let rowBodyFont = Font.system(size: 12, weight: .regular)
+    static let subheaderFont = AppTypography.subtext
+    static let rowTitleFont = AppTypography.bodyEmphasis
+    static let rowBodyFont = AppTypography.subtext
 
-    static let headerText = Color(hex: "2A2525")
-    static let subheaderText = Color(hex: "6B7280")
-    static let rowTitleText = Color(hex: "2A2525")
-    static let rowBodyText = Color(hex: "6B7280")
+    static let headerText = HomeStyle.textPrimary
+    static let subheaderText = HomeStyle.textSecondary
+    static let rowTitleText = HomeStyle.textPrimary
+    static let rowBodyText = HomeStyle.textSecondary
 
     static let cardFill = Color.white
     static let cardBorder = Color(hex: "E5E7EB")
@@ -633,6 +633,7 @@ private struct SettingsDetailContainerView<Content: View>: View {
     let title: String
     let subtitle: String
     let content: Content
+    @Environment(\.dismiss) private var dismiss
 
     init(title: String, subtitle: String, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -669,6 +670,9 @@ private struct SettingsDetailContainerView<Content: View>: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
+            .edgeSwipeBack {
+                dismiss()
+            }
         }
     }
 
@@ -687,23 +691,23 @@ private enum SettingsDetailStyle {
     static let actionHeight: CGFloat = 44
     static let actionCornerRadius: CGFloat = 12
 
-    static let headerFont = AppTypography.screenTitle
-    static let subheaderFont = Font.system(size: 13, weight: .regular)
-    static let sectionTitleFont = Font.system(size: 14, weight: .bold)
-    static let sectionSubtitleFont = Font.system(size: 12, weight: .regular)
-    static let rowTitleFont = Font.system(size: 13, weight: .medium)
-    static let rowValueFont = Font.system(size: 13, weight: .regular)
-    static let rowMetaFont = Font.system(size: 11, weight: .regular)
-    static let actionFont = Font.system(size: 14, weight: .bold)
-    static let segmentFont = Font.system(size: 13, weight: .medium)
+    static let headerFont = AppTypography.sectionTitle
+    static let subheaderFont = AppTypography.subtext
+    static let sectionTitleFont = AppTypography.sectionTitle
+    static let sectionSubtitleFont = AppTypography.subtext
+    static let rowTitleFont = AppTypography.bodyEmphasis
+    static let rowValueFont = AppTypography.body
+    static let rowMetaFont = AppTypography.meta
+    static let actionFont = AppTypography.bodyEmphasis
+    static let segmentFont = AppTypography.subtextEmphasis
 
-    static let headerText = Color(hex: "2A2525")
-    static let subheaderText = Color(hex: "6B7280")
-    static let sectionTitleText = Color(hex: "2A2525")
-    static let sectionSubtitleText = Color(hex: "6B7280")
-    static let rowTitleText = Color(hex: "2A2525")
+    static let headerText = HomeStyle.textPrimary
+    static let subheaderText = HomeStyle.textSecondary
+    static let sectionTitleText = HomeStyle.textPrimary
+    static let sectionSubtitleText = HomeStyle.textSecondary
+    static let rowTitleText = HomeStyle.textPrimary
     static let rowValueText = Color(hex: "4A5565")
-    static let rowMetaText = Color(hex: "6B7280")
+    static let rowMetaText = HomeStyle.textSecondary
 
     static let cardFill = Color.white
     static let cardBorder = Color(hex: "E5E7EB")

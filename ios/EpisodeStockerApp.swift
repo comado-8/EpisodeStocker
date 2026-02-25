@@ -80,6 +80,7 @@ private struct RootTabContainer: View {
 
     var body: some View {
         RootTabView()
+            .preferredColorScheme(.light)
             .task { SeedData.seedIfNeeded(context: modelContext, profile: seedProfile) }
     }
 }

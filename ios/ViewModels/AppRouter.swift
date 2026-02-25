@@ -9,8 +9,15 @@ enum AppRoute: Hashable {
 final class AppRouter: ObservableObject {
     @Published var path: [AppRoute] = []
     @Published var hasUnsavedEpisodeDetailChanges = false
+    @Published var hasUnsavedNewEpisodeChanges = false
+    @Published var hasTagDetailPath = false
+    @Published var tagRootResetSignal = 0
     @Published var pendingRootTabSwitch: RootTab?
     @Published var committedRootTabSwitch: RootTab?
+
+    var hasUnsavedHomeStackChanges: Bool {
+        hasUnsavedEpisodeDetailChanges || hasUnsavedNewEpisodeChanges
+    }
 
     func push(_ route: AppRoute) {
         path.append(route)
@@ -35,5 +42,9 @@ final class AppRouter: ObservableObject {
 
     func consumeCommittedRootTabSwitch() {
         committedRootTabSwitch = nil
+    }
+
+    func requestTagRootReset() {
+        tagRootResetSignal &+= 1
     }
 }

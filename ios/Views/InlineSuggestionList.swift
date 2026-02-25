@@ -117,8 +117,8 @@ struct InlineSuggestionList: View {
 
 private enum InlineSuggestionStyle {
   static let chipSpacing: CGFloat = 8
-  static let chipHeight: CGFloat = 28
-  static let manageHeight: CGFloat = 26
+  static let chipHeight: CGFloat = 32
+  static let manageHeight: CGFloat = 32
 
   static let chipText = Color(hex: "364153")
   static let chipFill = Color(hex: "F3F4F6")
@@ -127,8 +127,8 @@ private enum InlineSuggestionStyle {
   static let manageFill = HomeStyle.fabRed.opacity(0.08)
   static let manageBorder = HomeStyle.fabRed.opacity(0.4)
 
-  static let chipFont = Font.system(size: 14, weight: .medium)
-  static let manageFont = Font.system(size: 12, weight: .medium)
+  static let chipFont = AppTypography.subtextEmphasis
+  static let manageFont = AppTypography.subtext
 }
 
 extension Notification.Name {

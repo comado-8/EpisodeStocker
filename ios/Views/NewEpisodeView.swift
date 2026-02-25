@@ -3,6 +3,7 @@ import SwiftUI
 
 struct NewEpisodeView: View {
   @EnvironmentObject var store: EpisodeStore
+  @EnvironmentObject private var router: AppRouter
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   @Query(filter: #Predicate<Tag> { $0.isSoftDeleted == false })
@@ -24,6 +25,11 @@ struct NewEpisodeView: View {
   @State private var showsDetails = true
   @State private var showsTagSelectionSheet = false
   @State private var isKeyboardVisible = false
+  @State private var showsDiscardAlert = false
+  @State private var pendingAction: NewEpisodePendingAction?
+  @State private var initialSelectedDate: Date?
+  @State private var initialReleaseDate: Date?
+  @State private var hasCapturedInitialDraftState = false
 
   // focus states to control inline suggestion visibility
   @State private var personFieldFocused = false
@@ -93,6 +99,38 @@ struct NewEpisodeView: View {
     return "場所は\(EpisodePersistence.placeNameCharacterLimit)文字以内で入力してください"
   }
 
+  private var hasUnsavedDraftChanges: Bool {
+    let dateChanged = isDateChanged(current: selectedDate, initial: initialSelectedDate)
+    let releaseDateChanged = isDateChanged(current: selectedReleaseDate, initial: initialReleaseDate)
+    let hasTypedContent =
+      !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || !personText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || !tagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || !projectText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || !placeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    let hasSelectedItems =
+      !selectedPersons.isEmpty
+      || !selectedTags.isEmpty
+      || !selectedProjects.isEmpty
+      || !selectedEmotions.isEmpty
+      || selectedPlaceChip != nil
+      || dateChanged
+      || releaseDateChanged
+    return hasTypedContent || hasSelectedItems
+  }
+
+  private func isDateChanged(current: Date?, initial: Date?) -> Bool {
+    switch (current, initial) {
+    case (nil, nil):
+      return false
+    case let (lhs?, rhs?):
+      return !Calendar.current.isDate(lhs, inSameDayAs: rhs)
+    default:
+      return true
+    }
+  }
+
   var body: some View {
     GeometryReader { proxy in
       let contentWidth = min(
@@ -104,25 +142,37 @@ struct NewEpisodeView: View {
 
       let actionBarHeight = NewEpisodeStyle.actionBarContentHeight + 1
 
-      ScrollView {
-        VStack(alignment: .leading, spacing: NewEpisodeStyle.sectionSpacing) {
-          headerView
-          formView
+      ZStack {
+        ScrollView {
+          VStack(alignment: .leading, spacing: NewEpisodeStyle.sectionSpacing) {
+            headerView
+            formView
+          }
+          .padding(.top, topPadding)
+          .padding(.bottom, actionBarHeight + tabBarOffset + 8)
+          .padding(.horizontal, horizontalPadding)
+          .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(.top, topPadding)
-        .padding(.bottom, actionBarHeight + tabBarOffset + 8)
-        .padding(.horizontal, horizontalPadding)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-      }
-      .contentShape(Rectangle())
-      .onTapGesture {
-        hideKeyboard()
-      }
-      .background(Color.white)
-      .overlay(alignment: .bottom) {
-        if !isKeyboardVisible {
-          actionBarView
-            .offset(y: -tabBarOffset)
+        .contentShape(Rectangle())
+        .onTapGesture {
+          hideKeyboard()
+        }
+        .background(Color.white)
+        .overlay(alignment: .bottom) {
+          if !isKeyboardVisible {
+            actionBarView
+              .overlay(alignment: .bottom) {
+                Rectangle()
+                  .fill(NewEpisodeStyle.actionBarBackground)
+                  .frame(height: NewEpisodeStyle.actionBarSeamOverlap)
+                  .offset(y: NewEpisodeStyle.actionBarSeamOverlap)
+              }
+              .offset(y: -tabBarOffset)
+          }
+        }
+
+        if showsDiscardAlert {
+          discardAlertView
         }
       }
     }
@@ -170,12 +220,32 @@ struct NewEpisodeView: View {
           tagText = normalized
         }
       }
+      .onChange(of: hasUnsavedDraftChanges) { _, _ in
+        syncUnsavedDraftStateToRouter()
+      }
+      .onChange(of: router.pendingRootTabSwitch) { _, requestedTab in
+        handlePendingRootTabSwitch(requestedTab)
+      }
+      .onAppear {
+        if !hasCapturedInitialDraftState {
+          initialSelectedDate = selectedDate
+          initialReleaseDate = selectedReleaseDate
+          hasCapturedInitialDraftState = true
+        }
+        syncUnsavedDraftStateToRouter()
+      }
+      .onDisappear {
+        router.hasUnsavedNewEpisodeChanges = false
+      }
+      .edgeSwipeBack {
+        requestClose()
+      }
   }
 
   private var headerView: some View {
     HStack(spacing: 8) {
       Button {
-        dismiss()
+        requestClose()
       } label: {
         Image(systemName: "chevron.left")
           .font(.system(size: 18, weight: .semibold))
@@ -207,8 +277,8 @@ struct NewEpisodeView: View {
       labeledField(title: "タイトル", required: true, placeholder: "タイトルを入力", text: $title)
 
       VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
-        FieldLabel(title: "本文")
-        HStack {
+        HStack(spacing: 8) {
+          FieldLabel(title: "本文")
           Spacer(minLength: 0)
           Text(bodyCharacterCountText)
             .font(NewEpisodeStyle.counterFont)
@@ -263,12 +333,20 @@ struct NewEpisodeView: View {
       }
       .frame(maxWidth: .infinity)
       .frame(height: NewEpisodeStyle.detailToggleHeight)
+      .background(
+        RoundedRectangle(cornerRadius: NewEpisodeStyle.inputCornerRadius)
+          .fill(NewEpisodeStyle.detailToggleFill)
+      )
       .overlay(
         RoundedRectangle(cornerRadius: NewEpisodeStyle.inputCornerRadius)
-          .stroke(NewEpisodeStyle.inputBorder, lineWidth: NewEpisodeStyle.inputBorderWidth)
+          .stroke(
+            NewEpisodeStyle.detailToggleBorder,
+            lineWidth: NewEpisodeStyle.detailToggleBorderWidth
+          )
       )
     }
     .buttonStyle(.plain)
+    .padding(.top, NewEpisodeStyle.detailToggleTopSpacing)
   }
 
   private var detailSection: some View {
@@ -337,7 +415,7 @@ struct NewEpisodeView: View {
             .font(NewEpisodeStyle.tagGuideFont)
             .foregroundColor(HomeStyle.fabRed)
             .padding(.horizontal, 10)
-            .frame(height: 26)
+            .frame(height: NewEpisodeStyle.tagGuideActionHeight)
             .background(HomeStyle.fabRed.opacity(0.08))
             .overlay(
               Capsule()
@@ -436,6 +514,7 @@ struct NewEpisodeView: View {
         }
       }
     }
+    .padding(.bottom, NewEpisodeStyle.detailBottomScrollPadding)
   }
 
   private var emotionPresetSelector: some View {
@@ -622,6 +701,107 @@ struct NewEpisodeView: View {
     }
   }
 
+  private func requestClose() {
+    guard hasUnsavedDraftChanges else {
+      router.hasUnsavedNewEpisodeChanges = false
+      dismiss()
+      return
+    }
+    pendingAction = .dismiss
+    showsDiscardAlert = true
+  }
+
+  private func handlePendingRootTabSwitch(_ requestedTab: RootTab?) {
+    guard let requestedTab else { return }
+    guard hasUnsavedDraftChanges else {
+      router.hasUnsavedNewEpisodeChanges = false
+      router.commitRootTabSwitch(requestedTab)
+      return
+    }
+    pendingAction = .switchRootTab(requestedTab)
+    showsDiscardAlert = true
+  }
+
+  private func proceedPendingActionWithDiscard() {
+    let action = pendingAction
+    pendingAction = nil
+    showsDiscardAlert = false
+    router.hasUnsavedNewEpisodeChanges = false
+
+    switch action {
+    case .dismiss:
+      dismiss()
+    case .switchRootTab(let tab):
+      router.commitRootTabSwitch(tab)
+    case .none:
+      break
+    }
+  }
+
+  private func cancelPendingAction() {
+    if case .switchRootTab(_) = pendingAction {
+      router.cancelRootTabSwitchRequest()
+    }
+    pendingAction = nil
+    showsDiscardAlert = false
+  }
+
+  private func syncUnsavedDraftStateToRouter() {
+    router.hasUnsavedNewEpisodeChanges = hasUnsavedDraftChanges
+  }
+
+  private var discardAlertView: some View {
+    ZStack {
+      Color.black.opacity(0.25)
+        .ignoresSafeArea()
+        .onTapGesture {
+          cancelPendingAction()
+        }
+
+      VStack(spacing: 20) {
+        VStack(spacing: 12) {
+          Text("入力内容を破棄しますか？")
+            .font(NewEpisodeStyle.modalTitleFont)
+            .foregroundColor(NewEpisodeStyle.headerText)
+          Text("保存していない入力内容は失われます。")
+            .font(NewEpisodeStyle.modalBodyFont)
+            .foregroundColor(NewEpisodeStyle.labelText)
+            .lineSpacing(4)
+            .multilineTextAlignment(.center)
+        }
+
+        HStack(spacing: 12) {
+          Button("破棄") {
+            proceedPendingActionWithDiscard()
+          }
+          .font(NewEpisodeStyle.modalButtonFont)
+          .foregroundColor(NewEpisodeStyle.modalDestructiveText)
+          .frame(maxWidth: .infinity)
+          .frame(height: NewEpisodeStyle.modalButtonHeight)
+          .overlay(
+            Capsule()
+              .stroke(NewEpisodeStyle.modalButtonBorder, lineWidth: 1)
+          )
+
+          Button("編集を続ける") {
+            cancelPendingAction()
+          }
+          .font(NewEpisodeStyle.modalButtonFont)
+          .foregroundColor(Color.white)
+          .frame(maxWidth: .infinity)
+          .frame(height: NewEpisodeStyle.modalButtonHeight)
+          .background(NewEpisodeStyle.modalPrimaryFill)
+          .clipShape(Capsule())
+        }
+      }
+      .padding(22)
+      .background(NewEpisodeStyle.modalBackground)
+      .clipShape(RoundedRectangle(cornerRadius: NewEpisodeStyle.modalCornerRadius, style: .continuous))
+      .shadow(color: Color.black.opacity(0.12), radius: 16, x: 0, y: 8)
+      .padding(.horizontal, 32)
+    }
+  }
+
   private var actionBarView: some View {
     VStack(spacing: 0) {
       Rectangle()
@@ -641,7 +821,7 @@ struct NewEpisodeView: View {
         .opacity(isSaveEnabled ? 1 : 0.6)
 
         Button("キャンセル") {
-          dismiss()
+          requestClose()
         }
         .font(NewEpisodeStyle.actionButtonFont)
         .foregroundColor(NewEpisodeStyle.secondaryButtonText)
@@ -683,6 +863,7 @@ struct NewEpisodeView: View {
       emotions: selectedEmotions,
       place: placeValue
     )
+    router.hasUnsavedNewEpisodeChanges = false
     dismiss()
   }
 }
@@ -693,7 +874,7 @@ private enum NewEpisodeStyle {
   static let figmaTopInset: CGFloat = 61
   static let sectionSpacing: CGFloat = 16
   static let fieldSpacing: CGFloat = 8
-  static let detailsSpacing: CGFloat = 24
+  static let detailsSpacing: CGFloat = 30
   static let chipRowSpacing: CGFloat = 8
   static let chipSpacing: CGFloat = 8
   static let inputHeight: CGFloat = 41
@@ -701,20 +882,25 @@ private enum NewEpisodeStyle {
   static let inputCornerRadius: CGFloat = 10
   static let inputBorderWidth: CGFloat = 0.66
   static let detailToggleHeight: CGFloat = 49
+  static let detailToggleTopSpacing: CGFloat = 8
+  static let detailToggleBorderWidth: CGFloat = 1
+  static let detailBottomScrollPadding: CGFloat = 20
   static let chipHeightLarge: CGFloat = 36
-  static let chipHeightSmall: CGFloat = 28
-  static let headerHeight: CGFloat = 48
+  static let chipHeightSmall: CGFloat = 32
+  static let tagGuideActionHeight: CGFloat = 32
+  static let headerHeight: CGFloat = 56
   static let actionButtonHeight: CGFloat = 48
   static let actionButtonWidth: CGFloat = 120
   static let actionBarContentHeight: CGFloat = 72
-  static let selectedChipHeight: CGFloat = 28
+  static let actionBarSeamOverlap: CGFloat = 2
+  static let selectedChipHeight: CGFloat = 32
   static let calendarSheetHeight: CGFloat = 560
   static let calendarSheetSpacing: CGFloat = 10
 
   static let labelText = Color(hex: "4A5565")
   static let requiredText = Color(hex: "FB2C36")
   static let placeholderText = Color.black.opacity(0.5)
-  static let inputText = Color(hex: "0A0A0A")
+  static let inputText = HomeStyle.textInput
   static let inputBorder = Color(hex: "D1D5DC")
   static let chipFill = Color(hex: "F3F4F6")
   static let chipText = Color(hex: "364153")
@@ -722,7 +908,13 @@ private enum NewEpisodeStyle {
   static let emotionPresetSelectedBorder = HomeStyle.fabRed.opacity(0.5)
   static let emotionPresetSelectedText = HomeStyle.fabRed
   static let limitText = Color(hex: "9CA3AF")
-  static let headerText = Color(hex: "2A2525")
+  static let detailToggleFill = Color(hex: "F8FAFC")
+  static let detailToggleBorder = Color(hex: "CBD3DF")
+  static let headerText = HomeStyle.textPrimary
+  static let modalBackground = Color.white
+  static let modalPrimaryFill = HomeStyle.fabRed
+  static let modalButtonBorder = Color(hex: "D1D5DC")
+  static let modalDestructiveText = HomeStyle.destructiveRed
 
   static let primaryButtonFill = HomeStyle.fabRed
   static let primaryButtonText = Color.white
@@ -734,17 +926,22 @@ private enum NewEpisodeStyle {
   static let calendarToolbarButtonText = Color(hex: "1F2937")
   static let calendarToolbarButtonDestructiveText = HomeStyle.destructiveRed
 
-  static let labelFont = Font.system(size: 14, weight: .medium)
-  static let inputFont = Font.system(size: 16, weight: .regular)
+  static let labelFont = AppTypography.bodyEmphasis
+  static let inputFont = AppTypography.body
   static let headerFont = AppTypography.formScreenTitle
-  static let detailToggleFont = Font.system(size: 16, weight: .medium)
-  static let actionButtonFont = Font.system(size: 16, weight: .bold)
-  static let calendarToolbarButtonFont = Font.system(size: 15, weight: .semibold)
-  static let counterFont = Font.system(size: 12, weight: .regular)
-  static let validationFont = Font.system(size: 12, weight: .regular)
-  static let tagGuideFont = Font.system(size: 12, weight: .regular)
+  static let detailToggleFont = AppTypography.bodyEmphasis
+  static let actionButtonFont = AppTypography.bodyEmphasis
+  static let calendarToolbarButtonFont = AppTypography.subtextEmphasis
+  static let modalTitleFont = AppTypography.sectionTitle
+  static let modalBodyFont = AppTypography.body
+  static let modalButtonFont = AppTypography.bodyEmphasis
+  static let counterFont = AppTypography.subtext
+  static let validationFont = AppTypography.subtext
+  static let tagGuideFont = AppTypography.subtext
   static let validationText = HomeStyle.destructiveRed
   static let tagGuideText = Color(hex: "6B7280")
+  static let modalCornerRadius: CGFloat = 16
+  static let modalButtonHeight: CGFloat = 44
 
   static let dateFormatter: DateFormatter = {
     let formatter = DateFormatter()
@@ -975,6 +1172,8 @@ private struct EpisodeDateField: View {
         .padding(.top, 8)
         .padding(.bottom, 8)
         .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar(.visible, for: .navigationBar)
         .toolbar {
           ToolbarItem(placement: .topBarLeading) {
             Button {
@@ -1115,7 +1314,13 @@ struct NewEpisodeView_Previews: PreviewProvider {
   static var previews: some View {
     NewEpisodeView()
       .environmentObject(EpisodeStore())
+      .environmentObject(AppRouter())
   }
+}
+
+private enum NewEpisodePendingAction {
+  case dismiss
+  case switchRootTab(RootTab)
 }
 
 extension View {

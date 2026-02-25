@@ -51,4 +51,32 @@ final class AppRouterTests: XCTestCase {
         router.consumeCommittedRootTabSwitch()
         XCTAssertNil(router.committedRootTabSwitch)
     }
+
+    func testHasUnsavedHomeStackChangesCombinesDetailAndNewEpisodeFlags() {
+        let router = AppRouter()
+        XCTAssertFalse(router.hasUnsavedHomeStackChanges)
+
+        router.hasUnsavedEpisodeDetailChanges = true
+        XCTAssertTrue(router.hasUnsavedHomeStackChanges)
+
+        router.hasUnsavedEpisodeDetailChanges = false
+        router.hasUnsavedNewEpisodeChanges = true
+        XCTAssertTrue(router.hasUnsavedHomeStackChanges)
+
+        router.hasUnsavedEpisodeDetailChanges = true
+        XCTAssertTrue(router.hasUnsavedHomeStackChanges)
+
+        router.hasUnsavedEpisodeDetailChanges = false
+        router.hasUnsavedNewEpisodeChanges = false
+        XCTAssertFalse(router.hasUnsavedHomeStackChanges)
+    }
+
+    func testRequestTagRootResetIncrementsSignal() {
+        let router = AppRouter()
+        let initial = router.tagRootResetSignal
+
+        router.requestTagRootReset()
+
+        XCTAssertEqual(router.tagRootResetSignal, initial + 1)
+    }
 }
