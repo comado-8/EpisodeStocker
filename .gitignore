@@ -1,6 +1,7 @@
 # Xcode user-specific state
 **/xcuserdata/
 **/*.xcuserdatad/
+/build/
 
 # macOS
 .DS_Store

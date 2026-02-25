@@ -26,20 +26,32 @@ struct RegisteredTagSelectionSheet: View {
 
   @State private var query = ""
 
+  private var availableTags: [String] {
+    var seen = Set<String>()
+    var deduplicated: [String] = []
+    for tag in tags where !selectedTags.contains(tag) {
+      let key = normalizedTagKey(tag)
+      guard !key.isEmpty else { continue }
+      guard seen.insert(key).inserted else { continue }
+      deduplicated.append(tag)
+    }
+    return deduplicated
+  }
+
   private var filteredTags: [String] {
-    let trimmed = EpisodePersistence.stripLeadingTagPrefix(
+    let trimmed = normalizedTagKey(query)
+    guard !trimmed.isEmpty else { return availableTags }
+    return availableTags.filter { tag in
+      normalizedTagKey(tag).contains(trimmed)
+    }
+  }
+
+  private func normalizedTagKey(_ value: String) -> String {
+    EpisodePersistence.stripLeadingTagPrefix(
       EpisodePersistence.normalizeTagInputWhileEditing(
-        query.trimmingCharacters(in: .whitespacesAndNewlines)
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
       )
     )
-    let available = tags.filter { !selectedTags.contains($0) }
-    guard !trimmed.isEmpty else { return available }
-    return available.filter { tag in
-      let normalized = EpisodePersistence.stripLeadingTagPrefix(
-        EpisodePersistence.normalizeTagInputWhileEditing(tag)
-      )
-      return normalized.contains(trimmed)
-    }
   }
 
   var body: some View {

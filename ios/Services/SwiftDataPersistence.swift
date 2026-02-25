@@ -150,13 +150,7 @@ extension ModelContext {
     func upsertTag(name: String) -> Tag? {
         guard let info = EpisodePersistence.normalizeTagName(name) else { return nil }
         let normalized = info.normalized
-        let descriptor = FetchDescriptor<Tag>()
-        if let existing = (try? fetch(descriptor))?.first(where: {
-            if $0.nameNormalized == normalized {
-                return true
-            }
-            return EpisodePersistence.normalizeTagName($0.name)?.normalized == normalized
-        }) {
+        let update: (Tag) -> Tag = { existing in
             existing.name = info.name
             existing.nameNormalized = info.normalized
             existing.isSoftDeleted = false
@@ -164,6 +158,22 @@ extension ModelContext {
             existing.updatedAt = Date()
             return existing
         }
+
+        let normalizedDescriptor = FetchDescriptor<Tag>(
+            predicate: #Predicate<Tag> { $0.nameNormalized == normalized }
+        )
+        if let existing = try? fetch(normalizedDescriptor).first {
+            return update(existing)
+        }
+
+        // Legacy fallback for records whose stored normalized value was not canonical.
+        let fallbackDescriptor = FetchDescriptor<Tag>()
+        if let existing = (try? fetch(fallbackDescriptor))?.first(where: {
+            EpisodePersistence.normalizeTagName($0.name)?.normalized == normalized
+        }) {
+            return update(existing)
+        }
+
         let tag = Tag(name: info.name, nameNormalized: info.normalized)
         insert(tag)
         return tag

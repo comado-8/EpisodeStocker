@@ -528,12 +528,12 @@ struct NewEpisodeView: View {
   private var registeredTagSuggestions: [String] {
     allTags
       .sorted { $0.updatedAt > $1.updatedAt }
-      .map(displayTagName)
+      .compactMap(displayTagName)
   }
 
-  private func displayTagName(_ tag: Tag) -> String {
+  private func displayTagName(_ tag: Tag) -> String? {
     guard let normalized = EpisodePersistence.normalizeTagName(tag.name)?.name else {
-      return "#"
+      return nil
     }
     return "#\(normalized)"
   }

@@ -279,18 +279,6 @@ private extension HomeView {
         episode.isUnlocked ? HomeStyle.cardBorder : HomeStyle.lockedCardBorder
     }
 
-    func baseSafeAreaBottom() -> CGFloat {
-        #if canImport(UIKit)
-        let windowScene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first
-        if let window = windowScene?.windows.first(where: { $0.isKeyWindow }) {
-            return window.safeAreaInsets.bottom
-        }
-        #endif
-        return 0
-    }
-
     func hasAnySearchCondition() -> Bool {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty || !searchTokens.isEmpty

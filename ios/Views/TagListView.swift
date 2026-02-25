@@ -23,7 +23,15 @@ struct TagListView: View {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return tags }
     let normalized = normalizedQuery(trimmed)
-    return tags.filter { $0.name.localizedCaseInsensitiveContains(normalized) }
+    guard !normalized.isEmpty else { return tags }
+    return tags.filter { tag in
+      let normalizedTagName =
+        EpisodePersistence.normalizeTagName(tag.name)?.name
+        ?? EpisodePersistence.stripLeadingTagPrefix(
+          EpisodePersistence.normalizeTagInputWhileEditing(tag.name)
+        )
+      return normalizedTagName.localizedCaseInsensitiveContains(normalized)
+    }
   }
 
   private var episodeCountByTagId: [UUID: Int] {
@@ -736,7 +744,11 @@ extension TagListView {
   }
 
   fileprivate func normalizedQuery(_ value: String) -> String {
-    EpisodePersistence.stripLeadingTagPrefix(value)
+    EpisodePersistence.stripLeadingTagPrefix(
+      EpisodePersistence.normalizeTagInputWhileEditing(
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+      )
+    )
   }
 }
 

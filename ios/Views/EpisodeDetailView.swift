@@ -616,7 +616,7 @@ struct EpisodeDetailView: View {
   }
 
   private var registeredTagSuggestions: [String] {
-    allTags.sorted { $0.updatedAt > $1.updatedAt }.map(displayTagName)
+    allTags.sorted { $0.updatedAt > $1.updatedAt }.compactMap(displayTagName)
   }
 
   private var releaseLogCount: Int {
@@ -1111,9 +1111,9 @@ struct EpisodeDetailView: View {
     return "#\(normalized)"
   }
 
-  private func displayTagName(_ tag: Tag) -> String {
+  private func displayTagName(_ tag: Tag) -> String? {
     guard let normalized = EpisodePersistence.normalizeTagName(tag.name)?.name else {
-      return "#"
+      return nil
     }
     return "#\(normalized)"
   }
@@ -1121,9 +1121,9 @@ struct EpisodeDetailView: View {
   private static func orderedTagChips(from tags: [Tag]) -> [String] {
     tags
       .sorted { $0.updatedAt < $1.updatedAt }
-      .map { tag in
+      .compactMap { tag in
         guard let normalized = EpisodePersistence.normalizeTagName(tag.name)?.name else {
-          return "#"
+          return nil
         }
         return "#\(normalized)"
       }

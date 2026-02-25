@@ -60,7 +60,6 @@ struct InlineSuggestionList: View {
           }) {
             HStack(spacing: 4) {
               Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 12, weight: .semibold))
               Text("履歴管理/選択")
             }
             .font(InlineSuggestionStyle.manageFont)
