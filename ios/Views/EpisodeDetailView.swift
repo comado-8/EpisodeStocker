@@ -26,6 +26,12 @@ struct EpisodeDetailView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   let episode: Episode
+  @Query(filter: #Predicate<Person> { $0.isSoftDeleted == false })
+  private var allPersons: [Person]
+  @Query(filter: #Predicate<Project> { $0.isSoftDeleted == false })
+  private var allProjects: [Project]
+  @Query(filter: #Predicate<Place> { $0.isSoftDeleted == false })
+  private var allPlaces: [Place]
   @Query(
     filter: #Predicate<Tag> { $0.isSoftDeleted == false },
     sort: [SortDescriptor(\Tag.nameNormalized)]
@@ -71,6 +77,7 @@ struct EpisodeDetailView: View {
 
   @State private var suggestionManagerField: SuggestionField? = nil
   @State private var showsTagSelectionSheet = false
+  @State private var hasPrimedSuggestions = false
 
   private let maxPersons = 10
   private let maxTags = 10
@@ -154,31 +161,40 @@ struct EpisodeDetailView: View {
         onDelete: deleteReleaseLog,
         onCancel: { showsReleaseLogSheet = false }
       )
-      .presentationDetents([.height(640)])
+      .presentationDetents([.height(DetailStyle.releaseLogSheetHeight)])
       .presentationDragIndicator(.visible)
     }
     .sheet(item: $suggestionManagerField) { field in
       SuggestionManagerView(
         repository: store.suggestionRepository,
         fieldType: field.field,
+        selectedValues: selectedValuesForSuggestionField(field.field),
+        selectionLimit: selectionLimitForSuggestionField(field.field),
         onSelect: { value in
           applySuggestionSelection(fieldType: field.field, value: value)
+        },
+        onDeselect: { value in
+          applySuggestionDeselection(fieldType: field.field, value: value)
         }
       )
         .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-        .presentationBackground(Color.white)
+      .presentationDragIndicator(.visible)
+      .presentationBackground(Color.white)
     }
     .sheet(isPresented: $showsTagSelectionSheet) {
       RegisteredTagSelectionSheet(
         tags: registeredTagSuggestions,
         selectedTags: selectedTags,
+        maxSelectionCount: maxTags,
         onSelect: { value in
           addTag(value)
         },
+        onDeselect: { value in
+          removeTag(value)
+        },
         style: DetailStyle.registeredTagSelectionSheetStyle
       )
-      .presentationDetents([.medium, .large])
+      .presentationDetents([.large])
       .presentationDragIndicator(.visible)
       .presentationBackground(Color.white)
     }
@@ -198,6 +214,7 @@ struct EpisodeDetailView: View {
       handlePendingRootTabSwitch(requestedTab)
     }
     .onAppear {
+      primeSuggestionsIfNeeded()
       syncUnsavedEditStateToRouter()
     }
     .onDisappear {
@@ -466,6 +483,7 @@ struct EpisodeDetailView: View {
     VStack(alignment: .leading, spacing: DetailStyle.detailsSpacing) {
       detailSection(
         title: "企画名",
+        limitText: "最大\(maxProjects)件まで",
         existing: displayProjects,
         showsEditorWhenEditing: true,
         editor: {
@@ -485,6 +503,7 @@ struct EpisodeDetailView: View {
 
       detailSection(
         title: "タグ",
+        limitText: "最大\(maxTags)件まで",
         existing: displayTagChips,
         showsEditorWhenEditing: true,
         editor: {
@@ -504,6 +523,7 @@ struct EpisodeDetailView: View {
 
       detailSection(
         title: "感情",
+        limitText: "最大\(maxEmotions)件まで",
         existing: displayEmotions,
         showsEditorWhenEditing: true,
         editor: {
@@ -513,6 +533,7 @@ struct EpisodeDetailView: View {
 
       detailSection(
         title: "人物",
+        limitText: "最大\(maxPersons)件まで",
         existing: displayPersons,
         showsEditorWhenEditing: true,
         editor: {
@@ -545,6 +566,8 @@ struct EpisodeDetailView: View {
             )
             InlineSuggestionList(
               fieldType: "場所", query: $placeText, maxItems: 3, isActive: placeFieldFocused,
+              selectedValues: selectedPlace.map { [$0] } ?? [],
+              selectionLimit: 1,
               onSelect: { option in
                 commitPlace(option)
               }
@@ -659,12 +682,21 @@ struct EpisodeDetailView: View {
     return logs.sorted { $0.talkedAt > $1.talkedAt }.map { log in
       let outcome = ReleaseLogOutcome(rawValue: log.reaction)
       let chips: [ReleaseLogChip] =
-        outcome.map { [ReleaseLogChip(label: $0.label, style: $0.chipStyle)] } ?? []
+        outcome.map {
+          [
+            ReleaseLogChip(
+              label: $0.label,
+              textColor: $0.iconColor,
+              background: $0.selectedFill
+            )
+          ]
+        } ?? []
 
       return ReleaseLogEntry(
         id: log.id,
         date: log.talkedAt,
         mediaReleaseDate: log.mediaPublicAt,
+        mediaType: log.mediaType,
         projectName: log.projectNameText ?? "",
         outcome: outcome,
         chips: chips,
@@ -950,6 +982,7 @@ struct EpisodeDetailView: View {
     logDraft = ReleaseLogDraft(
       talkedAt: entry.date,
       mediaReleaseDate: entry.mediaReleaseDate,
+      mediaType: entry.mediaType ?? "",
       projectName: entry.projectName,
       outcome: entry.outcome,
       memo: entry.note
@@ -959,6 +992,7 @@ struct EpisodeDetailView: View {
   }
 
   private func saveReleaseLog() {
+    let trimmedMediaType = logDraft.mediaType.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedProject = logDraft.projectName.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedMemo = logDraft.memo.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedProject.isEmpty else { return }
@@ -970,6 +1004,7 @@ struct EpisodeDetailView: View {
           log,
           talkedAt: logDraft.talkedAt,
           mediaPublicAt: logDraft.mediaReleaseDate,
+          mediaType: trimmedMediaType.isEmpty ? nil : trimmedMediaType,
           projectNameText: trimmedProject,
           reaction: reaction,
           memo: trimmedMemo
@@ -980,6 +1015,7 @@ struct EpisodeDetailView: View {
         episode: episode,
         talkedAt: logDraft.talkedAt,
         mediaPublicAt: logDraft.mediaReleaseDate,
+        mediaType: trimmedMediaType.isEmpty ? nil : trimmedMediaType,
         projectNameText: trimmedProject,
         reaction: reaction,
         memo: trimmedMemo
@@ -1001,12 +1037,13 @@ struct EpisodeDetailView: View {
 
   private func detailSection<Editor: View>(
     title: String,
+    limitText: String? = nil,
     existing: [String],
     showsEditorWhenEditing: Bool,
     @ViewBuilder editor: @escaping () -> Editor
   ) -> some View {
     VStack(alignment: .leading, spacing: DetailStyle.fieldSpacing) {
-      DetailFieldLabel(title: title)
+      DetailFieldLabel(title: title, limitText: limitText)
       if isEditing && showsEditorWhenEditing {
         editor()
       } else {
@@ -1097,7 +1134,12 @@ struct EpisodeDetailView: View {
       } else {
         // history-backed fields: show history for empty input, and filtered suggestions for typed input
         InlineSuggestionList(
-          fieldType: fieldType, query: text, maxItems: 3, isActive: isFieldActive(fieldType),
+          fieldType: fieldType,
+          query: text,
+          maxItems: 3,
+          isActive: isFieldActive(fieldType),
+          selectedValues: selectedValuesForSuggestionField(fieldType),
+          selectionLimit: selectionLimitForSuggestionField(fieldType),
           onSelect: onCommit
         )
         .environmentObject(store)
@@ -1271,9 +1313,69 @@ struct EpisodeDetailView: View {
       addPerson(value)
     case "場所":
       commitPlace(value)
+    case "タグ":
+      addTag(value)
     default:
       break
     }
+  }
+
+  private func applySuggestionDeselection(fieldType: String, value: String) {
+    switch fieldType {
+    case "企画名":
+      removeProject(value)
+    case "人物":
+      removePerson(value)
+    case "場所":
+      selectedPlace = nil
+      placeText = ""
+    case "タグ":
+      removeTag(value)
+    default:
+      break
+    }
+  }
+
+  private func selectedValuesForSuggestionField(_ fieldType: String) -> [String] {
+    switch SuggestionFieldType(fieldType) {
+    case .person:
+      return selectedPersons
+    case .project:
+      return selectedProjects
+    case .place:
+      return selectedPlace.map { [$0] } ?? []
+    case .tag:
+      return selectedTags
+    case .emotion, .unknown:
+      return []
+    }
+  }
+
+  private func selectionLimitForSuggestionField(_ fieldType: String) -> Int? {
+    switch SuggestionFieldType(fieldType) {
+    case .person:
+      return maxPersons
+    case .project:
+      return maxProjects
+    case .place:
+      return 1
+    case .tag:
+      return maxTags
+    case .emotion, .unknown:
+      return nil
+    }
+  }
+
+  private func primeSuggestionsIfNeeded() {
+    guard !hasPrimedSuggestions else { return }
+    hasPrimedSuggestions = true
+    SuggestionRepositoryPrimer.primeIfMissing(
+      repository: store.suggestionRepository,
+      persons: allPersons.map(\.name),
+      projects: allProjects.map(\.name),
+      places: allPlaces.map(\.name),
+      tags: allTags.map(\.name)
+    )
   }
 
   private func syncUnsavedEditStateToRouter() {
@@ -1372,9 +1474,20 @@ private enum DetailStyle {
   static let tagGuideActionHeight: CGFloat = 32
   static let detailsSpacing: CGFloat = 30
   static let chipSpacing: CGFloat = 8
+  static let chipRowSpacing: CGFloat = 6
   static let iconButtonSize: CGFloat = 24
   static let calendarSheetHeight: CGFloat = 560
   static let calendarSheetSpacing: CGFloat = 10
+  static let maxVisibleLines = 3
+  static let selectedChipCompactHeight: CGFloat = 28
+  static let selectedChipHorizontalPadding: CGFloat = 10
+  static let selectedChipRemoveIconSize: CGFloat = 9
+  static let selectedChipRemoveTapSize: CGFloat = 14
+  static let multiChipFieldHorizontalPadding: CGFloat = 12
+  static let multiChipFieldMinVisibleHeight: CGFloat = selectedChipCompactHeight
+  static let multiChipFieldMaxVisibleHeight: CGFloat =
+    selectedChipCompactHeight * CGFloat(maxVisibleLines)
+    + chipRowSpacing * CGFloat(maxVisibleLines - 1)
 
   static let labelText = Color(hex: "4A5565")
   static let requiredText = Color(hex: "FB2C36")
@@ -1465,6 +1578,7 @@ private enum DetailStyle {
   static let releaseLogSheetFieldSpacing: CGFloat = 12
   static let releaseLogOutcomeHeight: CGFloat = 36
   static let releaseLogMemoHeight: CGFloat = 80
+  static let releaseLogSheetHeight: CGFloat = 720
 
   static let dateTimeFormatter: DateFormatter = {
     let formatter = DateFormatter()
@@ -1532,6 +1646,7 @@ private struct ReleaseLogEntry: Identifiable {
   let id: UUID
   let date: Date
   let mediaReleaseDate: Date?
+  let mediaType: String?
   let projectName: String
   let outcome: ReleaseLogOutcome?
   let chips: [ReleaseLogChip]
@@ -1546,8 +1661,21 @@ private struct ReleaseLogEntry: Identifiable {
     return DetailStyle.dateFormatter.string(from: mediaReleaseDate)
   }
 
+  var mediaTypeText: String? {
+    let trimmed = mediaType?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  var displayMediaType: String {
+    mediaTypeText ?? "-"
+  }
+
   var displayProjectName: String {
     projectName.isEmpty ? "未設定" : projectName
+  }
+
+  var projectAndMediaText: String {
+    "\(displayProjectName) | \(displayMediaType)"
   }
 
   var displayNote: String {
@@ -1558,6 +1686,7 @@ private struct ReleaseLogEntry: Identifiable {
 private struct ReleaseLogDraft: Equatable {
   var talkedAt: Date = Date()
   var mediaReleaseDate: Date? = nil
+  var mediaType: String = ""
   var projectName: String = ""
   var outcome: ReleaseLogOutcome? = nil
   var memo: String = ""
@@ -1565,41 +1694,11 @@ private struct ReleaseLogDraft: Equatable {
 
 private struct ReleaseLogChip {
   let label: String
-  let style: ReleaseLogChipStyle
-}
-
-private enum ReleaseLogChipStyle {
-  case neutral
-  case success
-
-  var background: Color {
-    switch self {
-    case .neutral:
-      return DetailStyle.chipFill
-    case .success:
-      return Color(hex: "E8F5E9")
-    }
-  }
-
-  var textColor: Color {
-    switch self {
-    case .neutral:
-      return DetailStyle.chipText
-    case .success:
-      return Color(hex: "2E7D32")
-    }
-  }
+  let textColor: Color
+  let background: Color
 }
 
 extension ReleaseLogOutcome {
-  fileprivate var chipStyle: ReleaseLogChipStyle {
-    switch self {
-    case .hit: return .success
-    case .soSo: return .neutral
-    case .shelved: return .neutral
-    }
-  }
-
   fileprivate var iconName: String {
     switch self {
     case .hit: return "circle"
@@ -1636,9 +1735,11 @@ private struct ReleaseLogCard: View {
           Text(entry.dateText)
             .font(DetailStyle.releaseLogDateFont)
             .foregroundColor(DetailStyle.headerText)
-          Text(entry.displayProjectName)
+          Text(entry.projectAndMediaText)
             .font(DetailStyle.releaseLogMetaFont)
             .foregroundColor(DetailStyle.labelText)
+            .lineLimit(1)
+            .truncationMode(.tail)
           if let mediaReleaseText = entry.mediaReleaseText {
             Text("公開日 \(mediaReleaseText)")
               .font(DetailStyle.releaseLogMetaFont)
@@ -1648,27 +1749,24 @@ private struct ReleaseLogCard: View {
 
         Spacer()
 
-        Button {
-          onEdit()
-        } label: {
-          Image(systemName: "square.and.pencil")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundColor(DetailStyle.labelText)
-            .frame(width: 24, height: 24)
-        }
-        .buttonStyle(.plain)
-      }
+        VStack(alignment: .trailing, spacing: 8) {
+          Button {
+            onEdit()
+          } label: {
+            Image(systemName: "square.and.pencil")
+              .font(.system(size: 18, weight: .semibold))
+              .foregroundColor(DetailStyle.labelText)
+              .frame(width: 32, height: 32)
+          }
+          .buttonStyle(.plain)
 
-      if !entry.chips.isEmpty {
-        FlowLayout(spacing: DetailStyle.chipSpacing) {
-          ForEach(entry.chips.indices, id: \.self) { index in
-            let chip = entry.chips[index]
+          if let chip = entry.chips.first {
             Text(chip.label)
               .font(DetailStyle.chipFont)
-              .foregroundColor(chip.style.textColor)
+              .foregroundColor(chip.textColor)
               .padding(.horizontal, 12)
               .frame(height: DetailStyle.chipHeight)
-              .background(chip.style.background)
+              .background(chip.background)
               .clipShape(Capsule())
           }
         }
@@ -1679,7 +1777,8 @@ private struct ReleaseLogCard: View {
         .foregroundColor(DetailStyle.releaseLogNoteColor)
         .lineSpacing(2)
     }
-    .padding(12)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 10)
     .background(
       RoundedRectangle(cornerRadius: DetailStyle.inputCornerRadius)
         .stroke(DetailStyle.inputBorder, lineWidth: DetailStyle.releaseLogCardBorderWidth)
@@ -1709,6 +1808,14 @@ private struct ReleaseLogSheet: View {
     !draft.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
+  private var mediaTypePresetCandidates: [String] {
+    ReleaseLogMediaPreset.allCases.map(\.rawValue)
+  }
+
+  private var selectedMediaType: String {
+    draft.mediaType.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   var body: some View {
     ZStack {
       ScrollView(.vertical, showsIndicators: true) {
@@ -1735,6 +1842,21 @@ private struct ReleaseLogSheet: View {
           VStack(alignment: .leading, spacing: DetailStyle.releaseLogSheetFieldSpacing) {
             ReleaseLogDateRow(title: "話した日", date: $draft.talkedAt, required: true)
             ReleaseLogOptionalDateRow(title: "メディア公開日", date: $draft.mediaReleaseDate)
+
+            VStack(alignment: .leading, spacing: 6) {
+              DetailFieldLabel(title: "媒体")
+              FlowLayout(spacing: DetailStyle.chipSpacing) {
+                ForEach(mediaTypePresetCandidates, id: \.self) { value in
+                  let isSelected = selectedMediaType == value
+                  Button {
+                    draft.mediaType = isSelected ? "" : value
+                  } label: {
+                    EmotionPresetDetailChip(title: value, isSelected: isSelected)
+                  }
+                  .buttonStyle(.plain)
+                }
+              }
+            }
 
             VStack(alignment: .leading, spacing: 6) {
               DetailFieldLabel(title: "企画名", required: true)
@@ -2120,6 +2242,7 @@ private struct DetailStatusBadge: View {
 private struct DetailFieldLabel: View {
   let title: String
   var required: Bool = false
+  var limitText: String? = nil
 
   var body: some View {
     HStack(spacing: 2) {
@@ -2130,6 +2253,11 @@ private struct DetailFieldLabel: View {
         Text("*")
           .font(DetailStyle.labelFont)
           .foregroundColor(DetailStyle.requiredText)
+      }
+      if let limitText {
+        Text("（\(limitText)）")
+          .font(DetailStyle.counterFont)
+          .foregroundColor(DetailStyle.counterText)
       }
     }
   }
@@ -2523,38 +2651,80 @@ private struct DetailMultiChipInputField: View {
   var isFocused: Binding<Bool>? = nil
 
   @FocusState private var focused: Bool
+  @State private var chipContentHeight: CGFloat = DetailStyle.multiChipFieldMinVisibleHeight
+
+  private var visibleChipContentHeight: CGFloat {
+    min(
+      max(chipContentHeight, DetailStyle.multiChipFieldMinVisibleHeight),
+      DetailStyle.multiChipFieldMaxVisibleHeight
+    )
+  }
+
+  private var fieldHeight: CGFloat {
+    max(
+      DetailStyle.inputHeight,
+      visibleChipContentHeight + DetailStyle.multiChipInputTopPadding
+        + DetailStyle.multiChipInputBottomPadding
+    )
+  }
 
   var body: some View {
     let isAtLimit = selections.count >= maxSelections
     let promptText = selections.isEmpty ? placeholder : ""
 
-    FlowLayout(spacing: 6) {
-      ForEach(selections, id: \.self) { item in
-        DetailSelectedChip(title: item) {
-          onRemove(item)
+    GeometryReader { proxy in
+      let flowWidth = max(
+        0, proxy.size.width - DetailStyle.multiChipFieldHorizontalPadding * 2)
+      ScrollView(
+        .vertical,
+        showsIndicators: chipContentHeight > DetailStyle.multiChipFieldMaxVisibleHeight + 0.5
+      ) {
+        FlowLayout(spacing: DetailStyle.chipRowSpacing) {
+          ForEach(selections, id: \.self) { item in
+            DetailSelectedChip(title: item) {
+              onRemove(item)
+            }
+          }
+          if !isAtLimit {
+            TextField(
+              "", text: $text, prompt: Text(promptText).foregroundColor(DetailStyle.labelText))
+              .font(DetailStyle.inputFont)
+              .foregroundColor(DetailStyle.inputText)
+              .frame(minWidth: 80, alignment: .leading)
+              .focused($focused)
+              .onChange(of: focused) { _, newValue in
+                isFocused?.wrappedValue = newValue
+              }
+              .onSubmit {
+                onCommit()
+                focused = false
+                isFocused?.wrappedValue = false
+              }
+          }
+        }
+        .frame(width: flowWidth, alignment: .leading)
+        .background(
+          GeometryReader { geometry in
+            Color.clear.preference(
+              key: DetailChipFlowHeightPreferenceKey.self,
+              value: geometry.size.height
+            )
+          }
+        )
+      }
+      .scrollDisabled(chipContentHeight <= DetailStyle.multiChipFieldMaxVisibleHeight + 0.5)
+      .frame(height: visibleChipContentHeight, alignment: .top)
+      .padding(.horizontal, DetailStyle.multiChipFieldHorizontalPadding)
+      .padding(.top, DetailStyle.multiChipInputTopPadding)
+      .padding(.bottom, DetailStyle.multiChipInputBottomPadding)
+      .onPreferenceChange(DetailChipFlowHeightPreferenceKey.self) { newHeight in
+        let normalized = max(newHeight, DetailStyle.multiChipFieldMinVisibleHeight)
+        if abs(chipContentHeight - normalized) > 0.5 {
+          chipContentHeight = normalized
         }
       }
-      if !isAtLimit {
-        TextField("", text: $text, prompt: Text(promptText).foregroundColor(DetailStyle.labelText))
-          .font(DetailStyle.inputFont)
-          .foregroundColor(DetailStyle.inputText)
-          .frame(minWidth: 80, alignment: .leading)
-          .focused($focused)
-          .onChange(of: focused) { _, newValue in
-            isFocused?.wrappedValue = newValue
-          }
-          .onSubmit {
-            onCommit()
-            focused = false
-            isFocused?.wrappedValue = false
-          }
-      }
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.horizontal, 12)
-    .padding(.top, DetailStyle.multiChipInputTopPadding)
-    .padding(.bottom, DetailStyle.multiChipInputBottomPadding)
-    .frame(minHeight: DetailStyle.inputHeight, alignment: .topLeading)
+    .frame(height: fieldHeight, alignment: .topLeading)
     .background(
       RoundedRectangle(cornerRadius: DetailStyle.inputCornerRadius)
         .fill(Color.white)
@@ -2571,23 +2741,36 @@ private struct DetailSelectedChip: View {
   let onRemove: () -> Void
 
   var body: some View {
-    HStack(spacing: 6) {
+    HStack(spacing: 4) {
       Text(title)
-        .font(DetailStyle.labelFont)
+        .font(DetailStyle.chipFont)
         .foregroundColor(DetailStyle.chipText)
+        .lineLimit(1)
+        .truncationMode(.tail)
       Button(action: onRemove) {
         Image(systemName: "xmark")
-          .font(.system(size: 10, weight: .bold))
+          .font(.system(size: DetailStyle.selectedChipRemoveIconSize, weight: .bold))
           .foregroundColor(DetailStyle.chipText)
-          .frame(width: 16, height: 16)
+          .frame(
+            width: DetailStyle.selectedChipRemoveTapSize,
+            height: DetailStyle.selectedChipRemoveTapSize
+          )
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
     }
-    .padding(.horizontal, 12)
-    .frame(height: DetailStyle.chipHeight)
+    .padding(.horizontal, DetailStyle.selectedChipHorizontalPadding)
+    .frame(height: DetailStyle.selectedChipCompactHeight)
     .background(DetailStyle.chipFill)
     .clipShape(Capsule())
+  }
+}
+
+private struct DetailChipFlowHeightPreferenceKey: PreferenceKey {
+  static var defaultValue: CGFloat = 0
+
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    value = max(value, nextValue())
   }
 }
 

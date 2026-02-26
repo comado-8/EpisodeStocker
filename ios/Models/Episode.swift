@@ -75,6 +75,7 @@ final class UnlockLog {
     @Attribute(.unique) var id: UUID
     var talkedAt: Date
     var mediaPublicAt: Date?
+    var mediaType: String?
     var projectNameText: String?
     var reaction: String
     var memo: String
@@ -89,6 +90,7 @@ final class UnlockLog {
         id: UUID = UUID(),
         talkedAt: Date,
         mediaPublicAt: Date? = nil,
+        mediaType: String? = nil,
         projectNameText: String? = nil,
         reaction: String,
         memo: String,
@@ -101,6 +103,7 @@ final class UnlockLog {
         self.id = id
         self.talkedAt = talkedAt
         self.mediaPublicAt = mediaPublicAt
+        self.mediaType = mediaType
         self.projectNameText = projectNameText
         self.reaction = reaction
         self.memo = memo
@@ -269,6 +272,36 @@ enum ReleaseLogOutcome: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var label: String { rawValue }
+}
+
+enum ReleaseLogMediaPreset: String, CaseIterable, Identifiable {
+    case tv = "テレビ"
+    case streaming = "配信"
+    case radio = "ラジオ"
+    case magazine = "雑誌"
+    case event = "イベント"
+    case sns = "SNS"
+    case other = "その他"
+
+    var id: String { rawValue }
+}
+
+extension Episode {
+    var activeUnlockLogs: [UnlockLog] {
+        unlockLogs.filter { !$0.isSoftDeleted }
+    }
+
+    var talkedCount: Int {
+        activeUnlockLogs.count
+    }
+
+    var latestTalkedAt: Date? {
+        activeUnlockLogs.map(\.talkedAt).max()
+    }
+
+    func reactionCount(_ outcome: ReleaseLogOutcome) -> Int {
+        activeUnlockLogs.filter { $0.reaction == outcome.rawValue }.count
+    }
 }
 
 struct SubscriptionStatus: Codable, Equatable {

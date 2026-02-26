@@ -13,11 +13,16 @@ struct HomeView: View {
     @State private var searchTokens: [HomeSearchFilterToken] = []
     @State private var activeSearchField: HomeSearchField?
     @State private var statusFilter: HomeStatusFilter = .ok
+    @State private var sortOption: HomeEpisodeSortOption = .createdAtDescending
     @State private var isSearchCommitted = false
+    @State private var showsAdvancedFilterSheet = false
+    @State private var advancedFilterDraft = HomeAdvancedFilterDraft()
     @State private var isSelectionMode = false
     @State private var selectedEpisodeIDs: Set<UUID> = []
     @State private var showsDeleteAlert = false
     @State private var suppressNextNavigation = false
+    @State private var scrollContentHeight: CGFloat = 0
+    @State private var scrollViewportHeight: CGFloat = 0
     @FocusState private var isSearchFocused: Bool
 
     private var currentSearchState: HomeSearchQueryState {
@@ -78,6 +83,15 @@ struct HomeView: View {
         filteredEpisodes.map(\.id)
     }
 
+    private var isAdvancedFilterEnabled: Bool {
+        // Keep this switch for future subscription gating.
+        true
+    }
+
+    private var hasAdvancedHistoryFilterToken: Bool {
+        searchTokens.contains { HomeAdvancedFilterDraft.isHistoryField($0.field) }
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
@@ -85,11 +99,15 @@ struct HomeView: View {
             let bottomInset = baseSafeAreaBottom()
             let topPadding = max(0, HomeStyle.figmaTopInset - proxy.safeAreaInsets.top)
             let fabBottomPadding = HomeStyle.tabBarHeight + HomeStyle.fabBottomOffset
+            let desiredListBottomPadding = HomeStyle.tabBarHeight + 16 + bottomInset
+            let listBottomPadding: CGFloat = scrollContentHeight > (scrollViewportHeight + 1)
+                ? desiredListBottomPadding
+                : 0
             let committedHasConditions = committedSearchState.hasAnyCondition
             let isSearchEmpty = committedHasConditions && filteredEpisodes.isEmpty && isSearchCommitted
             let showsSearchBack = isSearchCommitted && committedHasConditions && !isSearchFocused
             let isShowingSearchResults = isSearchCommitted && committedHasConditions
-            let visibleEpisodes = filteredEpisodes
+            let visibleEpisodes = sortedEpisodes(filteredEpisodes)
             let suggestionItems: [HomeSearchSuggestionItem] = {
                 guard isSearchFocused else { return [] }
                 return HomeSearchQueryEngine.suggestions(
@@ -107,7 +125,10 @@ struct HomeView: View {
                             text: $query,
                             width: contentWidth,
                             isFocused: $isSearchFocused,
-                            showsBack: showsSearchBack
+                            showsBack: showsSearchBack,
+                            accessory: isAdvancedFilterEnabled
+                                ? .advancedFilter(isActive: hasAdvancedHistoryFilterToken)
+                                : .legacyMagnifier
                         ) {
                             let committedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
                             if let activeSearchField,
@@ -130,6 +151,9 @@ struct HomeView: View {
                             if !isSearchFocused {
                                 isSearchCommitted = hasAnySearchCondition()
                             }
+                        } onAccessoryTap: {
+                            guard isAdvancedFilterEnabled else { return }
+                            openAdvancedFilterSheet()
                         }
                         .onChange(of: query) { _, _ in
                             if isSearchFocused {
@@ -187,6 +211,7 @@ struct HomeView: View {
                         } else {
                             HomeStatusSegmentedControl(selection: $statusFilter, width: segmentedWidth)
                                 .frame(width: contentWidth, height: HomeStyle.statusRowHeight)
+                            HomeEpisodeSortControl(selection: $sortOption, width: contentWidth)
                         }
                     }
                     .frame(width: contentWidth, alignment: .top)
@@ -232,8 +257,24 @@ struct HomeView: View {
                             }
                         }
                         .frame(width: contentWidth, alignment: .topLeading)
-                        .padding(.bottom, HomeStyle.tabBarHeight + 16 + bottomInset)
+                        .background(
+                            GeometryReader { geometry in
+                                Color.clear.preference(
+                                    key: HomeScrollContentHeightPreferenceKey.self,
+                                    value: geometry.size.height
+                                )
+                            }
+                        )
+                        .padding(.bottom, listBottomPadding)
                     }
+                    .background(
+                        GeometryReader { geometry in
+                            Color.clear.preference(
+                                key: HomeScrollViewportHeightPreferenceKey.self,
+                                value: geometry.size.height
+                            )
+                        }
+                    )
                 }
                 .simultaneousGesture(
                     TapGesture().onEnded {
@@ -264,6 +305,12 @@ struct HomeView: View {
                 isSelectionMode = false
             }
         }
+        .onPreferenceChange(HomeScrollContentHeightPreferenceKey.self) { height in
+            scrollContentHeight = height
+        }
+        .onPreferenceChange(HomeScrollViewportHeightPreferenceKey.self) { height in
+            scrollViewportHeight = height
+        }
         .alert("選択したエピソードを削除しますか？", isPresented: $showsDeleteAlert) {
             Button("削除", role: .destructive) {
                 deleteSelectedEpisodes()
@@ -272,6 +319,37 @@ struct HomeView: View {
         } message: {
             Text("\(selectedEpisodeIDs.count)件を削除します。")
         }
+        .sheet(isPresented: $showsAdvancedFilterSheet) {
+            HomeAdvancedFilterSheet(
+                draft: $advancedFilterDraft,
+                onApply: {
+                    applyAdvancedFilterDraft()
+                    showsAdvancedFilterSheet = false
+                },
+                onClear: {
+                    clearAdvancedHistoryFilters()
+                    showsAdvancedFilterSheet = false
+                }
+            )
+            .presentationDetents([.height(HomeStyle.advancedFilterSheetHeight)])
+            .presentationDragIndicator(.visible)
+        }
+    }
+}
+
+private struct HomeScrollContentHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct HomeScrollViewportHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
@@ -289,6 +367,7 @@ private extension HomeView {
         query = ""
         searchTokens.removeAll()
         activeSearchField = nil
+        advancedFilterDraft.clearHistoryConditions()
     }
 
     func appendSearchToken(field: HomeSearchField, value: String) {
@@ -312,6 +391,26 @@ private extension HomeView {
         isSearchFocused = true
     }
 
+    func openAdvancedFilterSheet() {
+        advancedFilterDraft = HomeAdvancedFilterDraft(tokens: searchTokens)
+        activeSearchField = nil
+        isSearchFocused = false
+        hideKeyboard()
+        showsAdvancedFilterSheet = true
+    }
+
+    func applyAdvancedFilterDraft() {
+        let baseTokens = HomeAdvancedFilterDraft.removingHistoryTokens(from: searchTokens)
+        searchTokens = baseTokens + advancedFilterDraft.toHistoryTokens()
+        isSearchCommitted = hasAnySearchCondition()
+    }
+
+    func clearAdvancedHistoryFilters() {
+        searchTokens = HomeAdvancedFilterDraft.removingHistoryTokens(from: searchTokens)
+        advancedFilterDraft.clearHistoryConditions()
+        isSearchCommitted = hasAnySearchCondition()
+    }
+
     func buildSearchSummaryText() -> String {
         let freeText = committedSearchState.trimmedFreeText
         let tokenCount = committedSearchState.tokens.count
@@ -333,6 +432,13 @@ private extension HomeView {
         let rowView = EpisodeCardRow(
             title: episode.title,
             subtitle: subtitle,
+            talkedCount: episode.talkedCount,
+            latestTalkedAt: episode.latestTalkedAt,
+            reactionCounts: EpisodeCardReactionCounts(
+                hit: episode.reactionCount(.hit),
+                soSo: episode.reactionCount(.soSo),
+                shelved: episode.reactionCount(.shelved)
+            ),
             date: episode.date,
             isUnlocked: episode.isUnlocked,
             width: width,
@@ -395,6 +501,63 @@ private extension HomeView {
             modelContext.softDeleteEpisode(episode)
         }
         endSelection()
+    }
+
+    func sortedEpisodes(_ items: [Episode]) -> [Episode] {
+        items.sorted { lhs, rhs in
+            switch sortOption {
+            case .createdAtDescending:
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt > rhs.createdAt
+                }
+            case .createdAtAscending:
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt < rhs.createdAt
+                }
+            case .recentlyTalked:
+                let lhsLatest = lhs.latestTalkedAt ?? .distantPast
+                let rhsLatest = rhs.latestTalkedAt ?? .distantPast
+                if lhsLatest != rhsLatest {
+                    return lhsLatest > rhsLatest
+                }
+                if lhs.talkedCount != rhs.talkedCount {
+                    return lhs.talkedCount > rhs.talkedCount
+                }
+            case .longTimeNoTalk:
+                let lhsNeverTalked = lhs.latestTalkedAt == nil
+                let rhsNeverTalked = rhs.latestTalkedAt == nil
+                if lhsNeverTalked != rhsNeverTalked {
+                    return lhsNeverTalked
+                }
+                let lhsLatest = lhs.latestTalkedAt ?? .distantFuture
+                let rhsLatest = rhs.latestTalkedAt ?? .distantFuture
+                if lhsLatest != rhsLatest {
+                    return lhsLatest < rhsLatest
+                }
+            case .talkedCountDescending:
+                if lhs.talkedCount != rhs.talkedCount {
+                    return lhs.talkedCount > rhs.talkedCount
+                }
+                let lhsLatest = lhs.latestTalkedAt ?? .distantPast
+                let rhsLatest = rhs.latestTalkedAt ?? .distantPast
+                if lhsLatest != rhsLatest {
+                    return lhsLatest > rhsLatest
+                }
+            case .talkedCountAscending:
+                if lhs.talkedCount != rhs.talkedCount {
+                    return lhs.talkedCount < rhs.talkedCount
+                }
+                let lhsLatest = lhs.latestTalkedAt ?? .distantPast
+                let rhsLatest = rhs.latestTalkedAt ?? .distantPast
+                if lhsLatest != rhsLatest {
+                    return lhsLatest < rhsLatest
+                }
+            }
+            if lhs.updatedAt != rhs.updatedAt {
+                return lhs.updatedAt > rhs.updatedAt
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
     }
 }
 
@@ -460,6 +623,84 @@ private struct HomeSelectionStatusRow: View {
                         .stroke(HomeStyle.selectionStatusRowBorder, lineWidth: 1)
                 )
         )
+    }
+}
+
+private enum HomeEpisodeSortOption: String, CaseIterable, Identifiable {
+    case createdAtDescending = "登録日(新しい順)"
+    case createdAtAscending = "登録日(古い順)"
+    case recentlyTalked = "最近話した順"
+    case longTimeNoTalk = "最近話していない順"
+    case talkedCountDescending = "話した回数(降順)"
+    case talkedCountAscending = "話した回数(昇順)"
+
+    var id: String { rawValue }
+}
+
+private struct HomeEpisodeSortControl: View {
+    @Binding var selection: HomeEpisodeSortOption
+    let width: CGFloat
+
+    private var widestLabel: String {
+        HomeEpisodeSortOption.allCases
+            .map(\.rawValue)
+            .max(by: { $0.count < $1.count }) ?? selection.rawValue
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("並び替え")
+                .font(HomeFont.bodyMedium())
+                .foregroundColor(HomeStyle.subtitle)
+            Spacer(minLength: 0)
+            Menu {
+                ForEach(HomeEpisodeSortOption.allCases) { option in
+                    Button {
+                        selection = option
+                    } label: {
+                        if selection == option {
+                            Label(option.rawValue, systemImage: "checkmark")
+                        } else {
+                            Text(option.rawValue)
+                        }
+                    }
+                }
+            } label: {
+                ZStack(alignment: .leading) {
+                    // Keep width stable by reserving space for the longest sort label.
+                    HStack(spacing: 6) {
+                        Text(widestLabel)
+                            .font(AppTypography.subtextEmphasis)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .opacity(0)
+                    .accessibilityHidden(true)
+
+                    HStack(spacing: 6) {
+                        Text(selection.rawValue)
+                            .font(AppTypography.subtextEmphasis)
+                            .foregroundColor(HomeStyle.searchChipText)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .layoutPriority(1)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(HomeStyle.searchChipText.opacity(0.8))
+                    }
+                }
+                .padding(.horizontal, 10)
+                .frame(height: HomeStyle.searchChipHeight)
+                .background(HomeStyle.searchChipFill)
+                .overlay(
+                    Capsule()
+                        .stroke(HomeStyle.searchChipBorder, lineWidth: 1)
+                )
+                .clipShape(Capsule())
+            }
+        }
+        .frame(width: width, alignment: .leading)
     }
 }
 

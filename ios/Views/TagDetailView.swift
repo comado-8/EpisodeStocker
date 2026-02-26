@@ -97,6 +97,13 @@ private struct TagDetailEpisodeRow: View {
       EpisodeCardRow(
         title: episode.title,
         subtitle: episode.body ?? "",
+        talkedCount: episode.talkedCount,
+        latestTalkedAt: episode.latestTalkedAt,
+        reactionCounts: EpisodeCardReactionCounts(
+          hit: episode.reactionCount(.hit),
+          soSo: episode.reactionCount(.soSo),
+          shelved: episode.reactionCount(.shelved)
+        ),
         date: episode.date,
         isUnlocked: episode.isUnlocked,
         width: width,

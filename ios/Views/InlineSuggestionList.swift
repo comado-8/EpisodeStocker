@@ -7,6 +7,8 @@ struct InlineSuggestionList: View {
   let maxItems: Int
   let isActive: Bool
   let showWhenQueryEmpty: Bool
+  let selectedValues: [String]
+  let selectionLimit: Int?
   let onSelect: (String) -> Void
 
   @State private var suggestions: [Suggestion] = []
@@ -17,6 +19,8 @@ struct InlineSuggestionList: View {
     maxItems: Int,
     isActive: Bool,
     showWhenQueryEmpty: Bool = true,
+    selectedValues: [String] = [],
+    selectionLimit: Int? = nil,
     onSelect: @escaping (String) -> Void
   ) {
     self.fieldType = fieldType
@@ -24,7 +28,34 @@ struct InlineSuggestionList: View {
     self.maxItems = maxItems
     self.isActive = isActive
     self.showWhenQueryEmpty = showWhenQueryEmpty
+    self.selectedValues = selectedValues
+    self.selectionLimit = selectionLimit
     self.onSelect = onSelect
+  }
+
+  private var resolvedFieldType: SuggestionFieldType {
+    SuggestionFieldType(fieldType)
+  }
+
+  private var normalizedSelectedValues: Set<String> {
+    Set(
+      selectedValues.compactMap {
+        SuggestionRepositoryPrimer.normalizedValue($0, fieldType: resolvedFieldType)
+      })
+  }
+
+  private var isAtSelectionLimit: Bool {
+    guard let selectionLimit else { return false }
+    return normalizedSelectedValues.count >= selectionLimit
+  }
+
+  private func isSelectedSuggestion(_ value: String) -> Bool {
+    guard let normalized = SuggestionRepositoryPrimer.normalizedValue(
+      value, fieldType: resolvedFieldType)
+    else {
+      return false
+    }
+    return normalizedSelectedValues.contains(normalized)
   }
 
   private func reload() {
@@ -40,6 +71,10 @@ struct InlineSuggestionList: View {
     } else {
       result = store.suggestionRepository.fetch(
         fieldType: fieldType, query: trimmedQuery, includeDeleted: false)
+    }
+    result = result.filter { !isSelectedSuggestion($0.value) }
+    if isAtSelectionLimit {
+      result = []
     }
     if result.count > maxItems { result = Array(result.prefix(maxItems)) }
     suggestions = result
@@ -105,6 +140,8 @@ struct InlineSuggestionList: View {
     .onAppear { reload() }
     .onChange(of: query) { _, _ in reload() }
     .onChange(of: isActive) { _, _ in reload() }
+    .onChange(of: selectedValues) { _, _ in reload() }
+    .onChange(of: selectionLimit) { _, _ in reload() }
     .onReceive(NotificationCenter.default.publisher(for: .suggestionManagerSheetDidDismiss)) {
       note in
       guard let dismissedFieldType = note.object as? String, dismissedFieldType == fieldType else {

@@ -109,7 +109,7 @@ struct TagListView: View {
             }
           )
           .padding(.top, topPadding)
-          .padding(.bottom, HomeStyle.tabBarHeight + TagStyle.listBottomPadding)
+          .padding(.bottom, TagStyle.listBottomPadding)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
           HomeFloatingButton(iconStyle: .tagPlus) {
