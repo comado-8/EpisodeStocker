@@ -132,8 +132,11 @@ private extension HomeAdvancedFilterDraftTests {
     }
 
     func makeDate(_ year: Int, _ month: Int, _ day: Int) -> Date {
-        let calendar = Calendar(identifier: .gregorian)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
         var components = DateComponents()
+        components.calendar = calendar
+        components.timeZone = .current
         components.year = year
         components.month = month
         components.day = day

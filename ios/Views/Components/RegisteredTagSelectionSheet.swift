@@ -58,7 +58,11 @@ struct RegisteredTagSelectionSheet: View {
   }
 
   private var isAtLimit: Bool {
-    selectedTags.count >= maxSelectionCount
+    selectedTags.count >= safeMaxSelectionCount
+  }
+
+  private var safeMaxSelectionCount: Int {
+    max(0, maxSelectionCount)
   }
 
   var body: some View {
@@ -85,7 +89,7 @@ struct RegisteredTagSelectionSheet: View {
             HStack(spacing: 6) {
               Image(systemName: "exclamationmark.circle.fill")
                 .font(.system(size: 13, weight: .semibold))
-              Text("最大\(maxSelectionCount)件に到達しています")
+              Text("最大\(safeMaxSelectionCount)件に到達しています")
                 .font(style.closeButtonFont)
             }
             .foregroundColor(HomeStyle.fabRed)
@@ -100,7 +104,7 @@ struct RegisteredTagSelectionSheet: View {
                 let canTap = selected || canSelect
                 Button {
                   if selected {
-                    onDeselect(tag)
+                    onDeselect(normalizedTagKey(tag))
                   } else if canSelect {
                     onSelect(tag)
                   }
@@ -131,7 +135,7 @@ struct RegisteredTagSelectionSheet: View {
         }
         .padding(16)
       }
-      .navigationTitle("登録タグ選択（最大\(maxSelectionCount)件）")
+      .navigationTitle("登録タグ選択（最大\(safeMaxSelectionCount)件）")
       .navigationBarTitleDisplayMode(.large)
       .toolbar(.visible, for: .navigationBar)
       .toolbar {

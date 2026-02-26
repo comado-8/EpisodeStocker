@@ -98,11 +98,11 @@ struct SuggestionManagerView: View {
               )
                 .contentShape(Rectangle())
                 .onTapGesture {
-                  guard !suggestion.isDeleted else { return }
                   if isSelected {
                     onDeselect?(suggestion.value)
                     return
                   }
+                  guard !suggestion.isDeleted else { return }
                   guard !isSelectionBlocked else { return }
                   onSelect?(suggestion.value)
                 }

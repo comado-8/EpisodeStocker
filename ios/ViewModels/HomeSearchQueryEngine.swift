@@ -634,7 +634,7 @@ enum HomeSearchQueryEngine {
     }
 
     private static func parseTalkCountCriteria(_ value: String) -> TalkCountCriteria? {
-        var normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        var normalized = normalizeFullWidthNumerics(value).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return nil }
         normalized = normalized.replacingOccurrences(of: "回", with: "")
 
@@ -656,13 +656,14 @@ enum HomeSearchQueryEngine {
 
     private static func normalizeLastTalkedAtToken(_ value: String) -> String {
         guard let criteria = parseLastTalkedAtCriteria(value) else {
-            return value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalizeFullWidthNumerics(value).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return criteria.displayText
     }
 
     private static func parseLastTalkedAtCriteria(_ value: String) -> LastTalkedAtCriteria? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = normalizeFullWidthNumerics(value)
+        let trimmed = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
         switch trimmed.lowercased() {
@@ -683,54 +684,16 @@ enum HomeSearchQueryEngine {
     }
 
     private static func parseDateRange(_ value: String) -> (start: Date?, end: Date?)? {
-        let separators = ["~", "〜", ".."]
-        for separator in separators where value.contains(separator) {
-            let parts = value.components(separatedBy: separator)
-            guard parts.count == 2 else { continue }
-            let lhs = parseDate(parts[0])
-            let rhs = parseDate(parts[1])
-            if lhs == nil && rhs == nil {
-                continue
-            }
-
-            if let lhs, let rhs {
-                let start = min(lhs, rhs)
-                let end = max(lhs, rhs)
-                return (start: start, end: end)
-            }
-            return (start: lhs, end: rhs)
-        }
-
-        if let exact = parseDate(value) {
-            return (start: exact, end: exact)
-        }
-
-        return nil
+        HomeDateRangeParser.parseDateRange(value)
     }
 
     private static func parseDate(_ value: String) -> Date? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        for formatter in dateInputFormatters {
-            if let date = formatter.date(from: trimmed) {
-                return date
-            }
-        }
-        return nil
+        HomeDateRangeParser.parseDate(value)
     }
 
-    private static let dateInputFormatters: [DateFormatter] = {
-        let formats = ["yyyy/MM/dd", "yyyy-M-d", "yyyy-MM-dd"]
-        return formats.map { format in
-            let formatter = DateFormatter()
-            formatter.calendar = Calendar(identifier: .gregorian)
-            formatter.locale = Locale(identifier: "ja_JP")
-            formatter.timeZone = TimeZone.current
-            formatter.dateFormat = format
-            return formatter
-        }
-    }()
+    private static func normalizeFullWidthNumerics(_ value: String) -> String {
+        value.applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? value
+    }
 
     private static func normalizeMediaTypeToken(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -812,6 +775,9 @@ private enum LastTalkedAtCriteria {
         case .thisYear:
             return "今年"
         case .range(let start, let end):
+            if let start, let end, start == end {
+                return Self.formatDate(start)
+            }
             let startText = start.map(Self.formatDate) ?? ""
             let endText = end.map(Self.formatDate) ?? ""
             return "\(startText)~\(endText)"

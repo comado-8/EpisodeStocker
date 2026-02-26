@@ -9,13 +9,10 @@ struct EpisodeCardReactionCounts: Equatable {
 struct EpisodeCardBadgeModel: Equatable {
     let talkedCountText: String
     let latestTalkedAtText: String
-    let showsReactionBadge: Bool
-    let reactionCounts: EpisodeCardReactionCounts
 
     static func make(
         talkedCount: Int,
-        latestTalkedAt: Date?,
-        reactionCounts: EpisodeCardReactionCounts
+        latestTalkedAt: Date?
     ) -> EpisodeCardBadgeModel {
         let latestTalkedAtText: String
         if let latestTalkedAt {
@@ -26,9 +23,7 @@ struct EpisodeCardBadgeModel: Equatable {
 
         return EpisodeCardBadgeModel(
             talkedCountText: "\(max(0, talkedCount))回",
-            latestTalkedAtText: latestTalkedAtText,
-            showsReactionBadge: talkedCount > 0,
-            reactionCounts: reactionCounts
+            latestTalkedAtText: latestTalkedAtText
         )
     }
 
@@ -57,8 +52,7 @@ struct EpisodeCardRow: View {
     private var badgeModel: EpisodeCardBadgeModel {
         EpisodeCardBadgeModel.make(
             talkedCount: talkedCount,
-            latestTalkedAt: latestTalkedAt,
-            reactionCounts: reactionCounts
+            latestTalkedAt: latestTalkedAt
         )
     }
 

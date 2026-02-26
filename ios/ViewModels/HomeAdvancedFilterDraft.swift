@@ -154,35 +154,11 @@ struct HomeAdvancedFilterDraft: Equatable {
     }
 
     private static func parseDateRange(_ raw: String) -> (start: Date?, end: Date?)? {
-        let separators = ["~", "〜", ".."]
-        for separator in separators where raw.contains(separator) {
-            let parts = raw.components(separatedBy: separator)
-            guard parts.count == 2 else { continue }
-            let lhs = parseDate(parts[0])
-            let rhs = parseDate(parts[1])
-            if lhs == nil && rhs == nil {
-                continue
-            }
-            if let lhs, let rhs {
-                return (start: min(lhs, rhs), end: max(lhs, rhs))
-            }
-            return (start: lhs, end: rhs)
-        }
-        if let exact = parseDate(raw) {
-            return (start: exact, end: exact)
-        }
-        return nil
+        HomeDateRangeParser.parseDateRange(raw)
     }
 
     private static func parseDate(_ raw: String) -> Date? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        for formatter in dateInputFormatters {
-            if let date = formatter.date(from: trimmed) {
-                return date
-            }
-        }
-        return nil
+        HomeDateRangeParser.parseDate(raw)
     }
 
     private static let historyFields: Set<HomeSearchField> = [
@@ -202,18 +178,6 @@ struct HomeAdvancedFilterDraft: Equatable {
         guard let end else { return nil }
         return "~\(dateFormatter.string(from: end))"
     }
-
-    private static let dateInputFormatters: [DateFormatter] = {
-        let formats = ["yyyy/MM/dd", "yyyy-M-d", "yyyy-MM-dd"]
-        return formats.map { format in
-            let formatter = DateFormatter()
-            formatter.calendar = Calendar(identifier: .gregorian)
-            formatter.locale = Locale(identifier: "ja_JP")
-            formatter.timeZone = TimeZone.current
-            formatter.dateFormat = format
-            return formatter
-        }
-    }()
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()

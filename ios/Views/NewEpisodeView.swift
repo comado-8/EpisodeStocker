@@ -980,7 +980,7 @@ private enum NewEpisodeStyle {
   static let selectedChipCompactHeight: CGFloat = 28
   static let selectedChipHorizontalPadding: CGFloat = 10
   static let selectedChipRemoveIconSize: CGFloat = 9
-  static let selectedChipRemoveTapSize: CGFloat = 14
+  static let selectedChipRemoveTapSize: CGFloat = 24
   static let multiChipFieldHorizontalPadding: CGFloat = 12
   static let multiChipInputTopPadding: CGFloat = 6
   static let multiChipInputBottomPadding: CGFloat = 6

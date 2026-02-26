@@ -542,6 +542,68 @@ final class HomeSearchQueryEngineTests: XCTestCase {
         let result = filter(search: search, statusFilter: .all)
         XCTAssertEqual(result.map(\.id), [matched.id])
     }
+
+    func testTalkCountFilterAcceptsFullWidthDigits() {
+        let matched = makeEpisode(title: "一致", body: "")
+        let unmatched = makeEpisode(title: "不一致", body: "")
+        for dayOffset in [1, 2, 3] {
+            _ = addUnlockLog(
+                to: matched,
+                talkedAt: Date().addingTimeInterval(TimeInterval(-86_400 * dayOffset)),
+                mediaType: ReleaseLogMediaPreset.tv.rawValue,
+                reaction: ReleaseLogOutcome.hit.rawValue
+            )
+        }
+        for dayOffset in [1, 2] {
+            _ = addUnlockLog(
+                to: unmatched,
+                talkedAt: Date().addingTimeInterval(TimeInterval(-86_400 * dayOffset)),
+                mediaType: ReleaseLogMediaPreset.tv.rawValue,
+                reaction: ReleaseLogOutcome.hit.rawValue
+            )
+        }
+
+        let token = HomeSearchFilterToken(field: .talkCount, value: "３回以上")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+
+        let result = filter(search: search, statusFilter: .all)
+        XCTAssertEqual(result.map(\.id), [matched.id])
+    }
+
+    func testLastTalkedAtFilterAcceptsFullWidthDigits() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date()
+        let matched = makeEpisode(title: "一致", body: "")
+        let unmatched = makeEpisode(title: "不一致", body: "")
+
+        _ = addUnlockLog(
+            to: matched,
+            talkedAt: calendar.date(byAdding: .day, value: -10, to: now)!,
+            mediaType: ReleaseLogMediaPreset.radio.rawValue,
+            reaction: ReleaseLogOutcome.soSo.rawValue
+        )
+        _ = addUnlockLog(
+            to: unmatched,
+            talkedAt: calendar.date(byAdding: .day, value: -45, to: now)!,
+            mediaType: ReleaseLogMediaPreset.radio.rawValue,
+            reaction: ReleaseLogOutcome.soSo.rawValue
+        )
+
+        let token = HomeSearchFilterToken(field: .lastTalkedAt, value: "３０日以内")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+
+        let result = filter(search: search, statusFilter: .all)
+        XCTAssertEqual(result.map(\.id), [matched.id])
+    }
+
+    func testNormalizeDateRangeTokenUsesSingleDateForSameDayRange() {
+        let normalized = HomeSearchQueryEngine.normalizeTokenValue(
+            "２０２６/０２/０１~２０２６/０２/０１",
+            field: .lastTalkedAt
+        )
+
+        XCTAssertEqual(normalized, "2026/02/01")
+    }
 }
 
 @MainActor

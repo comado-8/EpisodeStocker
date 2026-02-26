@@ -264,6 +264,13 @@ private struct TagListCardView: View {
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
           }
+
+          // Keep a small scrollable tail so the last row does not look clipped at the bottom edge.
+          Color.clear
+            .frame(height: TagStyle.listEndScrollPadding)
+            .listRowInsets(.init(top: 0, leading: 0, bottom: 0, trailing: 0))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -659,6 +666,7 @@ private enum TagStyle {
 
   static let fabBottomOffset: CGFloat = 8
   static let listBottomPadding: CGFloat = 0
+  static let listEndScrollPadding: CGFloat = 28
 
   static let headerFont = AppTypography.screenTitle
   static let cardHeaderFont = AppTypography.sectionTitle
