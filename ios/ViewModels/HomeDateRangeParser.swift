@@ -44,7 +44,7 @@ enum HomeDateRangeParser {
     }
 
     private static let dateInputFormatters: [DateFormatter] = {
-        let formats = ["yyyy/MM/dd", "yyyy-M-d", "yyyy-MM-dd"]
+        let formats = ["yyyy/MM/dd", "yyyy/M/d", "yyyy-M-d", "yyyy-MM-dd"]
         return formats.map { format in
             let formatter = DateFormatter()
             formatter.calendar = Calendar(identifier: .gregorian)

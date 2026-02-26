@@ -104,7 +104,7 @@ struct RegisteredTagSelectionSheet: View {
                 let canTap = selected || canSelect
                 Button {
                   if selected {
-                    onDeselect(normalizedTagKey(tag))
+                    onDeselect(tag)
                   } else if canSelect {
                     onSelect(tag)
                   }

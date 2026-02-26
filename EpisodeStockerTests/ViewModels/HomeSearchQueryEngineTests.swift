@@ -486,17 +486,17 @@ final class HomeSearchQueryEngineTests: XCTestCase {
         let now = Date()
         let episode = makeEpisode(title: "複数ログ", body: "")
 
-        let olderInRange = calendar.date(byAdding: .day, value: -3, to: now)!
-        let latestOutOfRange = calendar.date(byAdding: .day, value: -20, to: now)!
+        let recentInRange = calendar.date(byAdding: .day, value: -3, to: now)!
+        let olderOutOfRange = calendar.date(byAdding: .day, value: -20, to: now)!
         _ = addUnlockLog(
             to: episode,
-            talkedAt: olderInRange,
+            talkedAt: recentInRange,
             mediaType: ReleaseLogMediaPreset.sns.rawValue,
             reaction: ReleaseLogOutcome.hit.rawValue
         )
         _ = addUnlockLog(
             to: episode,
-            talkedAt: latestOutOfRange,
+            talkedAt: olderOutOfRange,
             mediaType: ReleaseLogMediaPreset.sns.rawValue,
             reaction: ReleaseLogOutcome.soSo.rawValue
         )

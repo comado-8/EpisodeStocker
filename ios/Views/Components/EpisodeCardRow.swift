@@ -1,11 +1,5 @@
 import SwiftUI
 
-struct EpisodeCardReactionCounts: Equatable {
-    let hit: Int
-    let soSo: Int
-    let shelved: Int
-}
-
 struct EpisodeCardBadgeModel: Equatable {
     let talkedCountText: String
     let latestTalkedAtText: String
@@ -41,7 +35,6 @@ struct EpisodeCardRow: View {
     let subtitle: String
     let talkedCount: Int
     let latestTalkedAt: Date?
-    let reactionCounts: EpisodeCardReactionCounts
     let date: Date
     let isUnlocked: Bool
     let width: CGFloat
@@ -178,7 +171,6 @@ struct EpisodeCardRow_Previews: PreviewProvider {
             subtitle: "Subhead",
             talkedCount: 3,
             latestTalkedAt: Date(),
-            reactionCounts: EpisodeCardReactionCounts(hit: 1, soSo: 1, shelved: 1),
             date: Date(),
             isUnlocked: true,
             width: 360,
