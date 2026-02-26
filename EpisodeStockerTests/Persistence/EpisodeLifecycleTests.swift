@@ -109,6 +109,7 @@ final class EpisodeLifecycleTests: XCTestCase {
             episode: episode,
             talkedAt: Date(),
             mediaPublicAt: nil,
+            mediaType: nil,
             projectNameText: "番組",
             reaction: ReleaseLogOutcome.hit.rawValue,
             memo: "良かった"

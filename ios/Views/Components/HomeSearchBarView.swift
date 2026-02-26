@@ -1,14 +1,21 @@
 import SwiftUI
 
+enum HomeSearchBarAccessory: Equatable {
+    case legacyMagnifier
+    case advancedFilter(isActive: Bool)
+}
+
 struct HomeSearchBarView: View {
     @Binding var text: String
     let width: CGFloat
     let isFocused: FocusState<Bool>.Binding
     var placeholder: String = "エピソードを検索"
     var showsBack: Bool = false
+    var accessory: HomeSearchBarAccessory = .legacyMagnifier
     var onSubmit: (() -> Void)? = nil
     var onCancel: (() -> Void)? = nil
     var onClearText: (() -> Void)? = nil
+    var onAccessoryTap: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -52,22 +59,25 @@ struct HomeSearchBarView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("検索入力を閉じる")
-            } else if !text.isEmpty {
-                Button {
-                    if let onClearText {
-                        onClearText()
-                    } else {
-                        text = ""
-                    }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(HomeStyle.segmentText.opacity(0.7))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("入力をクリア")
             } else {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(HomeStyle.segmentText)
+                HStack(spacing: 10) {
+                    if !text.isEmpty {
+                        Button {
+                            if let onClearText {
+                                onClearText()
+                            } else {
+                                text = ""
+                            }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(HomeStyle.segmentText.opacity(0.7))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("入力をクリア")
+                    }
+
+                    accessoryIcon
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -84,6 +94,47 @@ struct HomeSearchBarView: View {
         .contentShape(Capsule())
         .onTapGesture {
             isFocused.wrappedValue = true
+        }
+    }
+
+    @ViewBuilder
+    private var accessoryIcon: some View {
+        switch accessory {
+        case .legacyMagnifier:
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(HomeStyle.segmentText)
+        case .advancedFilter(let isActive):
+            Group {
+                if let onAccessoryTap {
+                    Button {
+                        onAccessoryTap()
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(
+                                isActive ? HomeStyle.advancedFilterAccessoryActiveIcon
+                                    : HomeStyle.segmentText
+                            )
+                            .padding(6)
+                            .background(
+                                Capsule()
+                                    .fill(
+                                        isActive ? HomeStyle.advancedFilterAccessoryActiveFill
+                                            : .clear
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("詳細検索")
+                } else {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(
+                            isActive ? HomeStyle.advancedFilterAccessoryActiveIcon
+                                : HomeStyle.segmentText
+                        )
+                }
+            }
         }
     }
 }

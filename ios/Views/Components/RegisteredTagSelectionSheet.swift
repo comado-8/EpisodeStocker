@@ -21,7 +21,9 @@ struct RegisteredTagSelectionSheet: View {
 
   let tags: [String]
   let selectedTags: [String]
+  let maxSelectionCount: Int
   let onSelect: (String) -> Void
+  let onDeselect: (String) -> Void
   let style: RegisteredTagSelectionSheetStyle
 
   @State private var query = ""
@@ -55,6 +57,14 @@ struct RegisteredTagSelectionSheet: View {
     return selectedTags.contains { normalizedTagKey($0) == key }
   }
 
+  private var isAtLimit: Bool {
+    selectedTags.count >= safeMaxSelectionCount
+  }
+
+  private var safeMaxSelectionCount: Int {
+    max(0, maxSelectionCount)
+  }
+
   var body: some View {
     NavigationStack {
       ZStack {
@@ -75,24 +85,48 @@ struct RegisteredTagSelectionSheet: View {
               .stroke(style.inputBorder, lineWidth: style.inputBorderWidth)
           )
 
+          if isAtLimit {
+            HStack(spacing: 6) {
+              Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 13, weight: .semibold))
+              Text("最大\(safeMaxSelectionCount)件に到達しています")
+                .font(style.closeButtonFont)
+            }
+            .foregroundColor(HomeStyle.fabRed)
+            .frame(maxWidth: .infinity, alignment: .leading)
+          }
+
           ScrollView {
             FlowLayout(spacing: style.chipSpacing) {
               ForEach(filteredTags, id: \.self) { tag in
                 let selected = isSelected(tag)
+                let canSelect = !selected && !isAtLimit
+                let canTap = selected || canSelect
                 Button {
-                  guard !selected else { return }
-                  onSelect(tag)
-                  dismiss()
+                  if selected {
+                    onDeselect(tag)
+                  } else if canSelect {
+                    onSelect(tag)
+                  }
                 } label: {
-                  Text(tag)
-                    .font(style.chipFont)
-                    .foregroundColor(selected ? style.chipText.opacity(0.6) : style.chipText)
-                    .padding(.horizontal, 12)
-                    .frame(height: style.chipHeight)
-                    .background(selected ? style.chipFill.opacity(0.6) : style.chipFill)
-                    .clipShape(Capsule())
+                  HStack(spacing: 6) {
+                    Text(tag)
+                      .lineLimit(1)
+                    if selected {
+                      Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .semibold))
+                    }
+                  }
+                  .font(style.chipFont)
+                  .foregroundColor(selected ? style.chipText.opacity(0.8) : style.chipText)
+                  .padding(.horizontal, 12)
+                  .frame(height: style.chipHeight)
+                  .background(selected ? style.chipFill.opacity(0.72) : style.chipFill)
+                  .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .disabled(!canTap)
+                .opacity(canTap ? 1 : 0.5)
               }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -101,7 +135,7 @@ struct RegisteredTagSelectionSheet: View {
         }
         .padding(16)
       }
-      .navigationTitle("登録タグ選択")
+      .navigationTitle("登録タグ選択（最大\(safeMaxSelectionCount)件）")
       .navigationBarTitleDisplayMode(.large)
       .toolbar(.visible, for: .navigationBar)
       .toolbar {

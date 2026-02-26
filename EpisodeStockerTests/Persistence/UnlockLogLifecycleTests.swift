@@ -37,6 +37,7 @@ final class UnlockLogLifecycleTests: XCTestCase {
             episode: episode,
             talkedAt: Date(timeIntervalSince1970: 500),
             mediaPublicAt: Date(timeIntervalSince1970: 800),
+            mediaType: ReleaseLogMediaPreset.tv.rawValue,
             projectNameText: "朝番組",
             reaction: ReleaseLogOutcome.soSo.rawValue,
             memo: "メモ"
@@ -44,6 +45,7 @@ final class UnlockLogLifecycleTests: XCTestCase {
 
         XCTAssertEqual(log.episode.id, episode.id)
         XCTAssertTrue(episode.unlockLogs.contains(where: { $0.id == log.id }))
+        XCTAssertEqual(log.mediaType, ReleaseLogMediaPreset.tv.rawValue)
 
         let fetched = try context.fetch(FetchDescriptor<UnlockLog>())
         XCTAssertEqual(fetched.count, 1)
@@ -67,6 +69,7 @@ final class UnlockLogLifecycleTests: XCTestCase {
             episode: episode,
             talkedAt: Date(timeIntervalSince1970: 100),
             mediaPublicAt: nil,
+            mediaType: nil,
             projectNameText: "Old",
             reaction: ReleaseLogOutcome.hit.rawValue,
             memo: "Old memo"
@@ -78,6 +81,7 @@ final class UnlockLogLifecycleTests: XCTestCase {
             log,
             talkedAt: Date(timeIntervalSince1970: 200),
             mediaPublicAt: Date(timeIntervalSince1970: 300),
+            mediaType: ReleaseLogMediaPreset.streaming.rawValue,
             projectNameText: "New",
             reaction: ReleaseLogOutcome.shelved.rawValue,
             memo: "New memo"
@@ -85,6 +89,7 @@ final class UnlockLogLifecycleTests: XCTestCase {
 
         XCTAssertEqual(log.talkedAt, Date(timeIntervalSince1970: 200))
         XCTAssertEqual(log.mediaPublicAt, Date(timeIntervalSince1970: 300))
+        XCTAssertEqual(log.mediaType, ReleaseLogMediaPreset.streaming.rawValue)
         XCTAssertEqual(log.projectNameText, "New")
         XCTAssertEqual(log.reaction, ReleaseLogOutcome.shelved.rawValue)
         XCTAssertEqual(log.memo, "New memo")
@@ -109,6 +114,7 @@ final class UnlockLogLifecycleTests: XCTestCase {
             episode: episode,
             talkedAt: Date(),
             mediaPublicAt: nil,
+            mediaType: nil,
             projectNameText: "番組",
             reaction: ReleaseLogOutcome.hit.rawValue,
             memo: "memo"
