@@ -20,6 +20,10 @@ enum HomeStyle {
     static let searchChipHeight: CGFloat = 32
     static let searchSuggestionRowHeight: CGFloat = 60
     static let dividerHeight: CGFloat = 1
+    static let advancedFilterSheetHeight: CGFloat = 740
+    static let advancedFilterSectionSpacing: CGFloat = 14
+    static let advancedFilterChipHorizontalPadding: CGFloat = 12
+    static let advancedFilterChipHeight: CGFloat = 34
 
     static let statusRowHeight: CGFloat = 52
     static let segmentedControlWidth: CGFloat = 272
@@ -29,10 +33,19 @@ enum HomeStyle {
     static let filterButtonSize: CGFloat = 36
     static let filterButtonsWidth: CGFloat = 80
 
-    static let cardHeight: CGFloat = 92
+    static let cardHeight: CGFloat = 106
     static let cardCornerRadius: CGFloat = 14
     static let cardContentSpacing: CGFloat = 12
     static let dateBadgeSize: CGFloat = 58
+    static let cardHorizontalPadding: CGFloat = 12
+    static let cardContentTopPadding: CGFloat = 3
+    static let cardContentBottomPadding: CGFloat = 0
+    static let cardMetaDividerHeight: CGFloat = 1
+    static let cardMetaVerticalSpacing: CGFloat = 6
+    static let cardMetaBadgeSpacing: CGFloat = 6
+    static let cardMetaBadgeInnerSpacing: CGFloat = 4
+    static let cardMetaBadgeHorizontalPadding: CGFloat = 8
+    static let cardMetaBadgeHeight: CGFloat = 24
 
     static let emptyStateCircleSize: CGFloat = 206
     static let emptyStateIconSize: CGFloat = 150
@@ -68,6 +81,19 @@ enum HomeStyle {
     static let searchSuggestionTitle = textPrimary
     static let searchSuggestionSubtitle = Color(hex: "667085")
     static let searchSuggestionIcon = Color(hex: "364153")
+    static let advancedFilterAccessoryActiveFill = Color(hex: "FDECEC")
+    static let advancedFilterAccessoryActiveIcon = Color(hex: "8D110E")
+    static let advancedFilterSectionTitle = textPrimary
+    static let advancedFilterHelperText = textSecondary
+    static let advancedFilterChipSelectedFill = Color(hex: "FDECEC")
+    static let advancedFilterChipSelectedBorder = Color(hex: "F3B4B4")
+    static let advancedFilterChipSelectedText = Color(hex: "8D110E")
+    static let advancedFilterReactionHitFill = Color(hex: "FAD2D1")
+    static let advancedFilterReactionHitText = Color(hex: "8D110E")
+    static let advancedFilterReactionSoSoFill = Color(hex: "D6EFE3")
+    static let advancedFilterReactionSoSoText = Color(hex: "1F6F4A")
+    static let advancedFilterReactionShelvedFill = Color(hex: "E5D7F2")
+    static let advancedFilterReactionShelvedText = Color(hex: "5B2C83")
 
     static let segmentSelectedFill = Color(hex: "FCCECE")
     static let segmentSelectedText = textPrimary
@@ -83,6 +109,13 @@ enum HomeStyle {
     static let cardBackgroundLocked = Color(hex: "FBFAFF")
 
     static let cardBorder = Color(hex: "FA9695")
+    static let cardMetaDivider = Color(hex: "E5E7EB")
+    static let cardMetaBadgeFill = Color.white
+    static let cardMetaBadgeBorder = Color(hex: "D1D5DC")
+    static let cardMetaBadgeText = Color(hex: "4A5565")
+    static let cardMetaBadgeIcon = Color(hex: "4A5565")
+    static let cardReactionSoSo = Color(hex: "1F6F4A")
+    static let cardReactionShelved = Color(hex: "5B2C83")
     static let destructiveRed = Color(hex: "DC2626")
     static let selectionIndicatorBorder = Color(hex: "CAC4D0")
     static let selectionIndicatorFill = Color(hex: "3C7DFA")

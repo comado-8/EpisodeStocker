@@ -97,6 +97,8 @@ private struct TagDetailEpisodeRow: View {
       EpisodeCardRow(
         title: episode.title,
         subtitle: episode.body ?? "",
+        talkedCount: episode.talkedCount,
+        latestTalkedAt: episode.latestTalkedAt,
         date: episode.date,
         isUnlocked: episode.isUnlocked,
         width: width,

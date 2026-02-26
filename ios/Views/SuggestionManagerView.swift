@@ -18,14 +18,20 @@ struct SuggestionManagerView: View {
   @StateObject private var vm: SuggestionManagerViewModel
   @State private var showsUndoToast = false
   @State private var undoToastTask: Task<Void, Never>?
+  private let selectedValues: [String]
+  private let selectionLimit: Int?
   private let onSelect: ((String) -> Void)?
+  private let onDeselect: ((String) -> Void)?
   private let repository: SuggestionRepository
   private let fieldType: SuggestionFieldType
 
   init(
     repository: SuggestionRepository,
     fieldType: String,
-    onSelect: ((String) -> Void)? = nil
+    selectedValues: [String] = [],
+    selectionLimit: Int? = nil,
+    onSelect: ((String) -> Void)? = nil,
+    onDeselect: ((String) -> Void)? = nil
   ) {
     self.repository = repository
     let resolvedFieldType = SuggestionFieldType(fieldType)
@@ -33,7 +39,31 @@ struct SuggestionManagerView: View {
     _vm = StateObject(
       wrappedValue: SuggestionManagerViewModel(repository: repository, fieldType: resolvedFieldType)
     )
+    self.selectedValues = selectedValues
+    self.selectionLimit = selectionLimit
     self.onSelect = onSelect
+    self.onDeselect = onDeselect
+  }
+
+  private var normalizedSelectedValues: Set<String> {
+    Set(
+      selectedValues.compactMap {
+        SuggestionRepositoryPrimer.normalizedValue($0, fieldType: fieldType)
+      })
+  }
+
+  private var selectedCount: Int {
+    normalizedSelectedValues.count
+  }
+
+  private var isAtSelectionLimit: Bool {
+    guard let selectionLimit else { return false }
+    return selectedCount >= selectionLimit
+  }
+
+  private var selectionLimitText: String {
+    guard let selectionLimit else { return "" }
+    return "（最大\(selectionLimit)件）"
   }
 
   var body: some View {
@@ -52,16 +82,29 @@ struct SuggestionManagerView: View {
                 suggestion: suggestion,
                 activeUsageCount: activeCount
               )
+              let normalized = SuggestionRepositoryPrimer.normalizedValue(
+                suggestion.value,
+                fieldType: fieldType
+              )
+              let isSelected =
+                normalized.map { normalizedSelectedValues.contains($0) } ?? false
+              let isSelectionBlocked = !isSelected && isAtSelectionLimit
               SuggestionRow(
                 suggestion: suggestion,
                 isDeletionProtected: isDeletionProtected,
-                protectedUsageCount: activeCount
+                protectedUsageCount: activeCount,
+                isSelected: isSelected,
+                isSelectionBlocked: isSelectionBlocked
               )
                 .contentShape(Rectangle())
                 .onTapGesture {
-                  guard let onSelect, !suggestion.isDeleted else { return }
-                  onSelect(suggestion.value)
-                  dismiss()
+                  if isSelected {
+                    onDeselect?(suggestion.value)
+                    return
+                  }
+                  guard !suggestion.isDeleted else { return }
+                  guard !isSelectionBlocked else { return }
+                  onSelect?(suggestion.value)
                 }
                 .listRowSeparator(.hidden)
                 .listRowInsets(.init(top: 0, leading: 0, bottom: 0, trailing: 0))
@@ -189,9 +232,19 @@ struct SuggestionManagerView: View {
 
   private var controlsCard: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("対象: \(vm.title)")
+      Text("対象: \(vm.title)\(selectionLimitText)")
         .font(SuggestionManagerStyle.subheaderFont)
         .foregroundColor(SuggestionManagerStyle.subheaderText)
+
+      if isAtSelectionLimit, let selectionLimit {
+        HStack(spacing: 6) {
+          Image(systemName: "exclamationmark.circle.fill")
+            .font(.system(size: 13, weight: .semibold))
+          Text("最大\(selectionLimit)件に到達しています")
+            .font(SuggestionManagerStyle.warningFont)
+        }
+        .foregroundColor(SuggestionManagerStyle.warningText)
+      }
 
       HStack(spacing: 8) {
         Image(systemName: "magnifyingglass")
@@ -211,20 +264,8 @@ struct SuggestionManagerView: View {
               .stroke(
                 SuggestionManagerStyle.inputBorder,
                 lineWidth: SuggestionManagerStyle.inputBorderWidth)
-          )
+            )
       )
-
-      Toggle(isOn: $vm.includeDeleted) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("削除済みを表示")
-            .font(SuggestionManagerStyle.toggleTitleFont)
-            .foregroundColor(SuggestionManagerStyle.toggleTitleText)
-          Text("ONにすると削除済み候補を表示し、復元できます")
-            .font(SuggestionManagerStyle.toggleBodyFont)
-            .foregroundColor(SuggestionManagerStyle.toggleBodyText)
-        }
-      }
-      .toggleStyle(SwitchToggleStyle(tint: SuggestionManagerStyle.toggleTint))
     }
     .padding(12)
     .background(
@@ -238,20 +279,11 @@ struct SuggestionManagerView: View {
   }
 
   private func primeRepositoryFromEpisodeData() {
-    let existing = existingValuesForField().map {
-      $0.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    .filter { !$0.isEmpty }
-    guard !existing.isEmpty else { return }
-
-    var current = repository.fetch(fieldType: fieldType.label, query: nil, includeDeleted: true).map(\.value)
-    for value in existing {
-      let exists = current.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
-      if !exists {
-        repository.upsert(fieldType: fieldType.label, value: value)
-        current.append(value)
-      }
-    }
+    SuggestionRepositoryPrimer.prime(
+      repository: repository,
+      fieldType: fieldType,
+      values: existingValuesForField()
+    )
   }
 
   private func existingValuesForField() -> [String] {
@@ -353,6 +385,8 @@ private struct SuggestionRow: View {
   let suggestion: Suggestion
   let isDeletionProtected: Bool
   let protectedUsageCount: Int
+  let isSelected: Bool
+  let isSelectionBlocked: Bool
 
   var body: some View {
     HStack(alignment: .center, spacing: 12) {
@@ -364,7 +398,21 @@ private struct SuggestionRow: View {
               ? SuggestionManagerStyle.deletedText : SuggestionManagerStyle.rowTitleText)
       }
       Spacer(minLength: 0)
-      if suggestion.isDeleted {
+      if isSelected {
+        Label("入力済み", systemImage: "checkmark")
+          .font(SuggestionManagerStyle.selectedBadgeFont)
+          .foregroundColor(SuggestionManagerStyle.selectedBadgeText)
+          .padding(.horizontal, 8)
+          .frame(height: 20)
+          .background(
+            Capsule()
+              .fill(SuggestionManagerStyle.selectedBadgeFill)
+              .overlay(
+                Capsule()
+                  .stroke(SuggestionManagerStyle.selectedBadgeBorder, lineWidth: 1)
+              )
+          )
+      } else if suggestion.isDeleted {
         Text("削除済み")
           .font(SuggestionManagerStyle.deletedBadgeFont)
           .foregroundColor(SuggestionManagerStyle.deletedBadgeText)
@@ -399,12 +447,16 @@ private struct SuggestionRow: View {
     .frame(height: SuggestionManagerStyle.rowHeight)
     .background(
       RoundedRectangle(cornerRadius: SuggestionManagerStyle.rowCornerRadius, style: .continuous)
-        .fill(SuggestionManagerStyle.rowFill)
+        .fill(isSelected ? SuggestionManagerStyle.selectedRowFill : SuggestionManagerStyle.rowFill)
         .overlay(
           RoundedRectangle(cornerRadius: SuggestionManagerStyle.rowCornerRadius, style: .continuous)
-            .stroke(SuggestionManagerStyle.rowBorder, lineWidth: 1)
+            .stroke(
+              isSelected ? SuggestionManagerStyle.selectedRowBorder : SuggestionManagerStyle.rowBorder,
+              lineWidth: 1
+            )
         )
     )
+    .opacity(isSelectionBlocked ? 0.52 : 1)
   }
 }
 
@@ -448,6 +500,12 @@ private enum SuggestionManagerStyle {
   static let inUseBadgeFill = Color(hex: "FEF3C7")
   static let inUseBadgeBorder = Color(hex: "F59E0B")
   static let inUseBadgeText = Color(hex: "92400E")
+  static let selectedBadgeFill = Color(hex: "E5E7EB")
+  static let selectedBadgeBorder = Color(hex: "CBD3DF")
+  static let selectedBadgeText = Color(hex: "4A5565")
+  static let selectedRowFill = Color(hex: "F7F8FA")
+  static let selectedRowBorder = Color(hex: "D7DDE6")
+  static let warningText = HomeStyle.fabRed
 
   static let toastFill = Color(hex: "FFF4F4")
   static let toastBorder = HomeStyle.fabRed.opacity(0.32)
@@ -463,9 +521,11 @@ private enum SuggestionManagerStyle {
   static let rowTitleFont = AppTypography.bodyEmphasis
   static let deletedBadgeFont = AppTypography.meta
   static let inUseBadgeFont = AppTypography.meta
+  static let selectedBadgeFont = AppTypography.meta
   static let swipeActionFont = AppTypography.subtextEmphasis
   static let toastFont = AppTypography.subtextEmphasis
   static let toastButtonFont = AppTypography.subtextEmphasis
+  static let warningFont = AppTypography.subtextEmphasis
 
   static let toastHeight: CGFloat = 60
   static let toastCornerRadius: CGFloat = 14

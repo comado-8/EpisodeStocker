@@ -430,10 +430,12 @@ extension ModelContext {
     }
 
     @MainActor
+    @discardableResult
     func createUnlockLog(
         episode: Episode,
         talkedAt: Date,
         mediaPublicAt: Date?,
+        mediaType: String?,
         projectNameText: String?,
         reaction: String,
         memo: String
@@ -442,6 +444,7 @@ extension ModelContext {
         let log = UnlockLog(
             talkedAt: talkedAt,
             mediaPublicAt: mediaPublicAt,
+            mediaType: mediaType,
             projectNameText: projectNameText,
             reaction: reaction,
             memo: memo,
@@ -462,12 +465,14 @@ extension ModelContext {
         _ log: UnlockLog,
         talkedAt: Date,
         mediaPublicAt: Date?,
+        mediaType: String?,
         projectNameText: String?,
         reaction: String,
         memo: String
     ) {
         log.talkedAt = talkedAt
         log.mediaPublicAt = mediaPublicAt
+        log.mediaType = mediaType
         log.projectNameText = projectNameText
         log.reaction = reaction
         log.memo = memo

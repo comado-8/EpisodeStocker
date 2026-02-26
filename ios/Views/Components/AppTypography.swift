@@ -14,6 +14,7 @@ enum AppTypography {
   static let subtext = Font.system(size: 15, weight: .regular)
   static let subtextEmphasis = Font.system(size: 15, weight: .semibold)
   static let meta = Font.system(size: 13, weight: .regular)
+  static let metaEmphasis = Font.system(size: 13, weight: .semibold)
   static let caption = Font.system(size: 12, weight: .regular)
 
   // タブバー

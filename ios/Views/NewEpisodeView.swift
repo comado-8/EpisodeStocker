@@ -6,6 +6,12 @@ struct NewEpisodeView: View {
   @EnvironmentObject private var router: AppRouter
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Query(filter: #Predicate<Person> { $0.isSoftDeleted == false })
+  private var allPersons: [Person]
+  @Query(filter: #Predicate<Project> { $0.isSoftDeleted == false })
+  private var allProjects: [Project]
+  @Query(filter: #Predicate<Place> { $0.isSoftDeleted == false })
+  private var allPlaces: [Place]
   @Query(filter: #Predicate<Tag> { $0.isSoftDeleted == false })
   private var allTags: [Tag]
 
@@ -30,6 +36,7 @@ struct NewEpisodeView: View {
   @State private var initialSelectedDate: Date?
   @State private var initialReleaseDate: Date?
   @State private var hasCapturedInitialDraftState = false
+  @State private var hasPrimedSuggestions = false
 
   // focus states to control inline suggestion visibility
   @State private var personFieldFocused = false
@@ -181,24 +188,33 @@ struct NewEpisodeView: View {
       SuggestionManagerView(
         repository: store.suggestionRepository,
         fieldType: field.field,
+        selectedValues: selectedValuesForSuggestionField(field.field),
+        selectionLimit: selectionLimitForSuggestionField(field.field),
         onSelect: { value in
           applySuggestionSelection(fieldType: field.field, value: value)
+        },
+        onDeselect: { value in
+          applySuggestionDeselection(fieldType: field.field, value: value)
         }
       )
         .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-        .presentationBackground(Color.white)
+      .presentationDragIndicator(.visible)
+      .presentationBackground(Color.white)
     }
     .sheet(isPresented: $showsTagSelectionSheet) {
       RegisteredTagSelectionSheet(
         tags: registeredTagSuggestions,
         selectedTags: selectedTags,
+        maxSelectionCount: maxTags,
         onSelect: { value in
           addTag(value)
         },
+        onDeselect: { value in
+          removeTag(value)
+        },
         style: NewEpisodeStyle.registeredTagSelectionSheetStyle
       )
-      .presentationDetents([.medium, .large])
+      .presentationDetents([.large])
       .presentationDragIndicator(.visible)
       .presentationBackground(Color.white)
     }
@@ -227,6 +243,7 @@ struct NewEpisodeView: View {
         handlePendingRootTabSwitch(requestedTab)
       }
       .onAppear {
+        primeSuggestionsIfNeeded()
         if !hasCapturedInitialDraftState {
           initialSelectedDate = selectedDate
           initialReleaseDate = selectedReleaseDate
@@ -352,7 +369,7 @@ struct NewEpisodeView: View {
   private var detailSection: some View {
     VStack(alignment: .leading, spacing: NewEpisodeStyle.detailsSpacing) {
       VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
-        FieldLabel(title: "企画名", limitText: "最大\(maxProjects)")
+        FieldLabel(title: "企画名", limitText: "最大\(maxProjects)件まで")
         EpisodeMultiChipInputField(
           placeholder: "企画名を入力してEnter",
           text: $projectText,
@@ -364,6 +381,8 @@ struct NewEpisodeView: View {
         )
         InlineSuggestionList(
           fieldType: "企画名", query: $projectText, maxItems: 3, isActive: projectFieldFocused,
+          selectedValues: selectedProjects,
+          selectionLimit: maxProjects,
           onSelect: { option in
             addProject(option)
             store.suggestionRepository.upsert(fieldType: "企画名", value: option)
@@ -384,7 +403,7 @@ struct NewEpisodeView: View {
       }
 
       VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
-        FieldLabel(title: "タグ", limitText: "最大\(maxTags)")
+        FieldLabel(title: "タグ", limitText: "最大\(maxTags)件まで")
         EpisodeMultiChipInputField(
           placeholder: "タグを入力してEnter",
           text: $tagText,
@@ -449,12 +468,12 @@ struct NewEpisodeView: View {
       }
 
       VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
-        FieldLabel(title: "感情", limitText: "最大\(maxEmotions)")
+        FieldLabel(title: "感情", limitText: "最大\(maxEmotions)件まで")
         emotionPresetSelector
       }
 
       VStack(alignment: .leading, spacing: NewEpisodeStyle.fieldSpacing) {
-        FieldLabel(title: "人物", limitText: "最大\(maxPersons)")
+        FieldLabel(title: "人物", limitText: "最大\(maxPersons)件まで")
         EpisodeMultiChipInputField(
           placeholder: "人物名を入力してEnter",
           text: $personText,
@@ -466,6 +485,8 @@ struct NewEpisodeView: View {
         )
         InlineSuggestionList(
           fieldType: "人物", query: $personText, maxItems: 3, isActive: personFieldFocused,
+          selectedValues: selectedPersons,
+          selectionLimit: maxPersons,
           onSelect: { option in
             addPerson(option)
             store.suggestionRepository.upsert(fieldType: "人物", value: option)
@@ -496,6 +517,8 @@ struct NewEpisodeView: View {
         )
         InlineSuggestionList(
           fieldType: "場所", query: $placeText, maxItems: 3, isActive: placeFieldFocused,
+          selectedValues: selectedPlaceChip.map { [$0] } ?? [],
+          selectionLimit: 1,
           onSelect: { option in
             commitPlace(option)
           }
@@ -696,9 +719,69 @@ struct NewEpisodeView: View {
       addPerson(value)
     case "場所":
       commitPlace(value)
+    case "タグ":
+      addTag(value)
     default:
       break
     }
+  }
+
+  private func applySuggestionDeselection(fieldType: String, value: String) {
+    switch fieldType {
+    case "企画名":
+      removeProject(value)
+    case "人物":
+      removePerson(value)
+    case "場所":
+      selectedPlaceChip = nil
+      placeText = ""
+    case "タグ":
+      removeTag(value)
+    default:
+      break
+    }
+  }
+
+  private func selectedValuesForSuggestionField(_ fieldType: String) -> [String] {
+    switch SuggestionFieldType(fieldType) {
+    case .person:
+      return selectedPersons
+    case .project:
+      return selectedProjects
+    case .place:
+      return selectedPlaceChip.map { [$0] } ?? []
+    case .tag:
+      return selectedTags
+    case .emotion, .unknown:
+      return []
+    }
+  }
+
+  private func selectionLimitForSuggestionField(_ fieldType: String) -> Int? {
+    switch SuggestionFieldType(fieldType) {
+    case .person:
+      return maxPersons
+    case .project:
+      return maxProjects
+    case .place:
+      return 1
+    case .tag:
+      return maxTags
+    case .emotion, .unknown:
+      return nil
+    }
+  }
+
+  private func primeSuggestionsIfNeeded() {
+    guard !hasPrimedSuggestions else { return }
+    hasPrimedSuggestions = true
+    SuggestionRepositoryPrimer.primeIfMissing(
+      repository: store.suggestionRepository,
+      persons: allPersons.map(\.name),
+      projects: allProjects.map(\.name),
+      places: allPlaces.map(\.name),
+      tags: allTags.map(\.name)
+    )
   }
 
   private func requestClose() {
@@ -875,7 +958,7 @@ private enum NewEpisodeStyle {
   static let sectionSpacing: CGFloat = 16
   static let fieldSpacing: CGFloat = 8
   static let detailsSpacing: CGFloat = 30
-  static let chipRowSpacing: CGFloat = 8
+  static let chipRowSpacing: CGFloat = 6
   static let chipSpacing: CGFloat = 8
   static let inputHeight: CGFloat = 41
   static let textAreaHeight: CGFloat = 200
@@ -893,7 +976,18 @@ private enum NewEpisodeStyle {
   static let actionButtonWidth: CGFloat = 120
   static let actionBarContentHeight: CGFloat = 72
   static let actionBarSeamOverlap: CGFloat = 2
-  static let selectedChipHeight: CGFloat = 32
+  static let maxVisibleLines = 3
+  static let selectedChipCompactHeight: CGFloat = 28
+  static let selectedChipHorizontalPadding: CGFloat = 10
+  static let selectedChipRemoveIconSize: CGFloat = 9
+  static let selectedChipRemoveTapSize: CGFloat = 24
+  static let multiChipFieldHorizontalPadding: CGFloat = 12
+  static let multiChipInputTopPadding: CGFloat = 6
+  static let multiChipInputBottomPadding: CGFloat = 6
+  static let multiChipFieldMinVisibleHeight: CGFloat = selectedChipCompactHeight
+  static let multiChipFieldMaxVisibleHeight: CGFloat =
+    selectedChipCompactHeight * CGFloat(maxVisibleLines)
+    + chipRowSpacing * CGFloat(maxVisibleLines - 1)
   static let calendarSheetHeight: CGFloat = 560
   static let calendarSheetSpacing: CGFloat = 10
 
@@ -1068,39 +1162,82 @@ private struct EpisodeMultiChipInputField: View {
   var isFocused: Binding<Bool>? = nil
 
   @FocusState private var focused: Bool
+  @State private var chipContentHeight: CGFloat = NewEpisodeStyle.multiChipFieldMinVisibleHeight
+
+  private var visibleChipContentHeight: CGFloat {
+    min(
+      max(chipContentHeight, NewEpisodeStyle.multiChipFieldMinVisibleHeight),
+      NewEpisodeStyle.multiChipFieldMaxVisibleHeight
+    )
+  }
+
+  private var fieldHeight: CGFloat {
+    max(
+      NewEpisodeStyle.inputHeight,
+      visibleChipContentHeight + NewEpisodeStyle.multiChipInputTopPadding
+        + NewEpisodeStyle.multiChipInputBottomPadding
+    )
+  }
 
   var body: some View {
     let isAtLimit = selections.count >= maxSelections
     let promptText = selections.isEmpty ? placeholder : ""
 
-    FlowLayout(spacing: 6) {
-      ForEach(selections, id: \.self) { item in
-        SelectedChip(title: item) {
-          onRemove(item)
+    GeometryReader { proxy in
+      let flowWidth = max(
+        0, proxy.size.width - NewEpisodeStyle.multiChipFieldHorizontalPadding * 2)
+      ScrollView(
+        .vertical,
+        showsIndicators: chipContentHeight > NewEpisodeStyle.multiChipFieldMaxVisibleHeight + 0.5
+      ) {
+        FlowLayout(spacing: NewEpisodeStyle.chipRowSpacing) {
+          ForEach(selections, id: \.self) { item in
+            SelectedChip(title: item) {
+              onRemove(item)
+            }
+          }
+          if !isAtLimit {
+            TextField(
+              "", text: $text,
+              prompt: Text(promptText).foregroundColor(NewEpisodeStyle.placeholderText)
+            )
+            .font(NewEpisodeStyle.inputFont)
+            .foregroundColor(NewEpisodeStyle.inputText)
+            .frame(minWidth: 80, alignment: .leading)
+            .focused($focused)
+            .onChange(of: focused) { _, newValue in
+              isFocused?.wrappedValue = newValue
+            }
+            .onSubmit {
+              onCommit()
+              focused = false
+              isFocused?.wrappedValue = false
+            }
+          }
         }
-      }
-      if !isAtLimit {
-        TextField(
-          "", text: $text, prompt: Text(promptText).foregroundColor(NewEpisodeStyle.placeholderText)
+        .frame(width: flowWidth, alignment: .leading)
+        .background(
+          GeometryReader { geometry in
+            Color.clear.preference(
+              key: EpisodeChipFlowHeightPreferenceKey.self,
+              value: geometry.size.height
+            )
+          }
         )
-        .font(NewEpisodeStyle.inputFont)
-        .foregroundColor(NewEpisodeStyle.inputText)
-        .frame(minWidth: 80, alignment: .leading)
-        .focused($focused)
-        .onChange(of: focused) { _, newValue in
-          isFocused?.wrappedValue = newValue
-        }
-        .onSubmit {
-          onCommit()
-          focused = false
-          isFocused?.wrappedValue = false
+      }
+      .scrollDisabled(chipContentHeight <= NewEpisodeStyle.multiChipFieldMaxVisibleHeight + 0.5)
+      .frame(height: visibleChipContentHeight, alignment: .top)
+      .padding(.horizontal, NewEpisodeStyle.multiChipFieldHorizontalPadding)
+      .padding(.top, NewEpisodeStyle.multiChipInputTopPadding)
+      .padding(.bottom, NewEpisodeStyle.multiChipInputBottomPadding)
+      .onPreferenceChange(EpisodeChipFlowHeightPreferenceKey.self) { newHeight in
+        let normalized = max(newHeight, NewEpisodeStyle.multiChipFieldMinVisibleHeight)
+        if abs(chipContentHeight - normalized) > 0.5 {
+          chipContentHeight = normalized
         }
       }
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.horizontal, 12)
-    .padding(.vertical, 8)
-    .frame(minHeight: NewEpisodeStyle.inputHeight, alignment: .topLeading)
+    .frame(height: fieldHeight, alignment: .topLeading)
     .background(
       RoundedRectangle(cornerRadius: NewEpisodeStyle.inputCornerRadius)
         .stroke(NewEpisodeStyle.inputBorder, lineWidth: NewEpisodeStyle.inputBorderWidth)
@@ -1290,23 +1427,36 @@ private struct SelectedChip: View {
   let onRemove: () -> Void
 
   var body: some View {
-    HStack(spacing: 6) {
+    HStack(spacing: 4) {
       Text(title)
-        .font(NewEpisodeStyle.labelFont)
+        .font(NewEpisodeStyle.tagGuideFont)
         .foregroundColor(NewEpisodeStyle.chipText)
+        .lineLimit(1)
+        .truncationMode(.tail)
       Button(action: onRemove) {
         Image(systemName: "xmark")
-          .font(.system(size: 10, weight: .bold))
+          .font(.system(size: NewEpisodeStyle.selectedChipRemoveIconSize, weight: .bold))
           .foregroundColor(NewEpisodeStyle.chipText)
-          .frame(width: 16, height: 16)
+          .frame(
+            width: NewEpisodeStyle.selectedChipRemoveTapSize,
+            height: NewEpisodeStyle.selectedChipRemoveTapSize
+          )
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
     }
-    .padding(.horizontal, 12)
-    .frame(height: NewEpisodeStyle.selectedChipHeight)
+    .padding(.horizontal, NewEpisodeStyle.selectedChipHorizontalPadding)
+    .frame(height: NewEpisodeStyle.selectedChipCompactHeight)
     .background(NewEpisodeStyle.chipFill)
     .clipShape(Capsule())
+  }
+}
+
+private struct EpisodeChipFlowHeightPreferenceKey: PreferenceKey {
+  static var defaultValue: CGFloat = 0
+
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    value = max(value, nextValue())
   }
 }
 

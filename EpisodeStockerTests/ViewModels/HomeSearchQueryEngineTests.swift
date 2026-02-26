@@ -356,6 +356,254 @@ final class HomeSearchQueryEngineTests: XCTestCase {
 
         XCTAssertEqual(result.map(\.id), [tagged.id])
     }
+
+    func testHistoryFiltersMatchTalkCountMediaTypeAndReaction() {
+        let target = makeEpisode(title: "対象", body: "")
+        let other = makeEpisode(title: "他", body: "")
+
+        _ = addUnlockLog(
+            to: target,
+            talkedAt: Date().addingTimeInterval(-60 * 60 * 24),
+            mediaType: ReleaseLogMediaPreset.tv.rawValue,
+            reaction: ReleaseLogOutcome.hit.rawValue
+        )
+        _ = addUnlockLog(
+            to: target,
+            talkedAt: Date().addingTimeInterval(-60 * 30),
+            mediaType: ReleaseLogMediaPreset.streaming.rawValue,
+            reaction: ReleaseLogOutcome.soSo.rawValue
+        )
+        _ = addUnlockLog(
+            to: other,
+            talkedAt: Date().addingTimeInterval(-60 * 60 * 3),
+            mediaType: ReleaseLogMediaPreset.radio.rawValue,
+            reaction: ReleaseLogOutcome.shelved.rawValue
+        )
+
+        let tokens = [
+            HomeSearchFilterToken(field: .talkCount, value: "1回以上")!,
+            HomeSearchFilterToken(field: .mediaType, value: "テレビ")!,
+            HomeSearchFilterToken(field: .reaction, value: "○")!
+        ]
+        let search = HomeSearchQueryState(freeText: "", tokens: tokens, activeField: nil)
+        let result = filter(search: search, statusFilter: .all)
+
+        XCTAssertEqual(result.map(\.id), [target.id])
+    }
+
+    func testLastTalkedDateRangeFilterMatchesExpectedEpisode() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date()
+        let inRange = makeEpisode(title: "範囲内", body: "")
+        let outOfRange = makeEpisode(title: "範囲外", body: "")
+
+        let inRangeDate = calendar.date(byAdding: .day, value: -3, to: now)!
+        let outOfRangeDate = calendar.date(byAdding: .day, value: -35, to: now)!
+        _ = addUnlockLog(
+            to: inRange,
+            talkedAt: inRangeDate,
+            mediaType: ReleaseLogMediaPreset.sns.rawValue,
+            reaction: ReleaseLogOutcome.hit.rawValue
+        )
+        _ = addUnlockLog(
+            to: outOfRange,
+            talkedAt: outOfRangeDate,
+            mediaType: ReleaseLogMediaPreset.tv.rawValue,
+            reaction: ReleaseLogOutcome.soSo.rawValue
+        )
+
+        let start = HomeSearchQueryEngineTests.dateString(
+            calendar.date(byAdding: .day, value: -7, to: now)!
+        )
+        let end = HomeSearchQueryEngineTests.dateString(now)
+        let token = HomeSearchFilterToken(field: .lastTalkedAt, value: "\(start)~\(end)")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+
+        let result = filter(search: search, statusFilter: .all)
+        XCTAssertEqual(result.map(\.id), [inRange.id])
+    }
+
+    func testLastTalkedDateRangeStartOnlyFilterMatchesExpectedEpisode() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date()
+        let matched = makeEpisode(title: "一致", body: "")
+        let unmatched = makeEpisode(title: "不一致", body: "")
+
+        let matchedDate = calendar.date(byAdding: .day, value: -2, to: now)!
+        let unmatchedDate = calendar.date(byAdding: .day, value: -20, to: now)!
+        _ = addUnlockLog(
+            to: matched,
+            talkedAt: matchedDate,
+            mediaType: ReleaseLogMediaPreset.tv.rawValue,
+            reaction: ReleaseLogOutcome.hit.rawValue
+        )
+        _ = addUnlockLog(
+            to: unmatched,
+            talkedAt: unmatchedDate,
+            mediaType: ReleaseLogMediaPreset.tv.rawValue,
+            reaction: ReleaseLogOutcome.hit.rawValue
+        )
+
+        let start = HomeSearchQueryEngineTests.dateString(calendar.date(byAdding: .day, value: -7, to: now)!)
+        let token = HomeSearchFilterToken(field: .lastTalkedAt, value: "\(start)~")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+
+        let result = filter(search: search, statusFilter: .all)
+        XCTAssertEqual(result.map(\.id), [matched.id])
+    }
+
+    func testLastTalkedDateRangeEndOnlyFilterMatchesExpectedEpisode() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date()
+        let matched = makeEpisode(title: "一致", body: "")
+        let unmatched = makeEpisode(title: "不一致", body: "")
+
+        let matchedDate = calendar.date(byAdding: .day, value: -20, to: now)!
+        let unmatchedDate = calendar.date(byAdding: .day, value: -1, to: now)!
+        _ = addUnlockLog(
+            to: matched,
+            talkedAt: matchedDate,
+            mediaType: ReleaseLogMediaPreset.radio.rawValue,
+            reaction: ReleaseLogOutcome.soSo.rawValue
+        )
+        _ = addUnlockLog(
+            to: unmatched,
+            talkedAt: unmatchedDate,
+            mediaType: ReleaseLogMediaPreset.radio.rawValue,
+            reaction: ReleaseLogOutcome.soSo.rawValue
+        )
+
+        let end = HomeSearchQueryEngineTests.dateString(calendar.date(byAdding: .day, value: -7, to: now)!)
+        let token = HomeSearchFilterToken(field: .lastTalkedAt, value: "~\(end)")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+
+        let result = filter(search: search, statusFilter: .all)
+        XCTAssertEqual(result.map(\.id), [matched.id])
+    }
+
+    func testLastTalkedDateFilterMatchesWhenAnyUnlockLogIsInRange() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date()
+        let episode = makeEpisode(title: "複数ログ", body: "")
+
+        let recentInRange = calendar.date(byAdding: .day, value: -3, to: now)!
+        let olderOutOfRange = calendar.date(byAdding: .day, value: -20, to: now)!
+        _ = addUnlockLog(
+            to: episode,
+            talkedAt: recentInRange,
+            mediaType: ReleaseLogMediaPreset.sns.rawValue,
+            reaction: ReleaseLogOutcome.hit.rawValue
+        )
+        _ = addUnlockLog(
+            to: episode,
+            talkedAt: olderOutOfRange,
+            mediaType: ReleaseLogMediaPreset.sns.rawValue,
+            reaction: ReleaseLogOutcome.soSo.rawValue
+        )
+
+        let start = HomeSearchQueryEngineTests.dateString(calendar.date(byAdding: .day, value: -7, to: now)!)
+        let end = HomeSearchQueryEngineTests.dateString(now)
+        let token = HomeSearchFilterToken(field: .lastTalkedAt, value: "\(start)~\(end)")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+
+        let result = filter(search: search, statusFilter: .all)
+        XCTAssertEqual(result.map(\.id), [episode.id])
+    }
+
+    func testRegisteredDateRangeFilterMatchesEpisodeDate() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date()
+        let inRangeDate = calendar.date(byAdding: .day, value: -5, to: now)!
+        let outOfRangeDate = calendar.date(byAdding: .day, value: -40, to: now)!
+        let inRange = makeEpisode(title: "範囲内", body: "", date: inRangeDate)
+        _ = makeEpisode(title: "範囲外", body: "", date: outOfRangeDate)
+
+        let start = HomeSearchQueryEngineTests.dateString(calendar.date(byAdding: .day, value: -7, to: now)!)
+        let end = HomeSearchQueryEngineTests.dateString(now)
+        let token = HomeSearchFilterToken(field: .registeredDate, value: "\(start)~\(end)")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+
+        let result = filter(search: search, statusFilter: .all)
+        XCTAssertEqual(result.map(\.id), [inRange.id])
+    }
+
+    func testRegisteredDateRangeSingleSidedFilterMatchesEpisodeDate() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date()
+        let matchedDate = calendar.date(byAdding: .day, value: -2, to: now)!
+        let unmatchedDate = calendar.date(byAdding: .day, value: -15, to: now)!
+        let matched = makeEpisode(title: "一致", body: "", date: matchedDate)
+        _ = makeEpisode(title: "不一致", body: "", date: unmatchedDate)
+
+        let start = HomeSearchQueryEngineTests.dateString(calendar.date(byAdding: .day, value: -7, to: now)!)
+        let token = HomeSearchFilterToken(field: .registeredDate, value: "\(start)~")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+
+        let result = filter(search: search, statusFilter: .all)
+        XCTAssertEqual(result.map(\.id), [matched.id])
+    }
+
+    func testTalkCountFilterAcceptsFullWidthDigits() {
+        let matched = makeEpisode(title: "一致", body: "")
+        let unmatched = makeEpisode(title: "不一致", body: "")
+        for dayOffset in [1, 2, 3] {
+            _ = addUnlockLog(
+                to: matched,
+                talkedAt: Date().addingTimeInterval(TimeInterval(-86_400 * dayOffset)),
+                mediaType: ReleaseLogMediaPreset.tv.rawValue,
+                reaction: ReleaseLogOutcome.hit.rawValue
+            )
+        }
+        for dayOffset in [1, 2] {
+            _ = addUnlockLog(
+                to: unmatched,
+                talkedAt: Date().addingTimeInterval(TimeInterval(-86_400 * dayOffset)),
+                mediaType: ReleaseLogMediaPreset.tv.rawValue,
+                reaction: ReleaseLogOutcome.hit.rawValue
+            )
+        }
+
+        let token = HomeSearchFilterToken(field: .talkCount, value: "３回以上")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+
+        let result = filter(search: search, statusFilter: .all)
+        XCTAssertEqual(result.map(\.id), [matched.id])
+    }
+
+    func testLastTalkedAtFilterAcceptsFullWidthDigits() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date()
+        let matched = makeEpisode(title: "一致", body: "")
+        let unmatched = makeEpisode(title: "不一致", body: "")
+
+        _ = addUnlockLog(
+            to: matched,
+            talkedAt: calendar.date(byAdding: .day, value: -10, to: now)!,
+            mediaType: ReleaseLogMediaPreset.radio.rawValue,
+            reaction: ReleaseLogOutcome.soSo.rawValue
+        )
+        _ = addUnlockLog(
+            to: unmatched,
+            talkedAt: calendar.date(byAdding: .day, value: -45, to: now)!,
+            mediaType: ReleaseLogMediaPreset.radio.rawValue,
+            reaction: ReleaseLogOutcome.soSo.rawValue
+        )
+
+        let token = HomeSearchFilterToken(field: .lastTalkedAt, value: "３０日以内")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+
+        let result = filter(search: search, statusFilter: .all)
+        XCTAssertEqual(result.map(\.id), [matched.id])
+    }
+
+    func testNormalizeDateRangeTokenUsesSingleDateForSameDayRange() {
+        let normalized = HomeSearchQueryEngine.normalizeTokenValue(
+            "２０２６/０２/０１~２０２６/０２/０１",
+            field: .lastTalkedAt
+        )
+
+        XCTAssertEqual(normalized, "2026/02/01")
+    }
 }
 
 @MainActor
@@ -363,6 +611,7 @@ private extension HomeSearchQueryEngineTests {
     func makeEpisode(
         title: String,
         body: String,
+        date: Date = Date(),
         unlockDate: Date? = nil,
         tags: [String] = [],
         persons: [String] = [],
@@ -373,7 +622,7 @@ private extension HomeSearchQueryEngineTests {
         context.createEpisode(
             title: title,
             body: body,
-            date: Date(),
+            date: date,
             unlockDate: unlockDate,
             type: nil,
             tags: tags,
@@ -399,5 +648,31 @@ private extension HomeSearchQueryEngineTests {
                 search: search
             )
         }
+    }
+
+    @discardableResult
+    func addUnlockLog(
+        to episode: Episode,
+        talkedAt: Date,
+        mediaType: String?,
+        reaction: String
+    ) -> UnlockLog {
+        context.createUnlockLog(
+            episode: episode,
+            talkedAt: talkedAt,
+            mediaPublicAt: nil,
+            mediaType: mediaType,
+            projectNameText: "番組",
+            reaction: reaction,
+            memo: ""
+        )
+    }
+
+    static func dateString(_ value: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "yyyy/MM/dd"
+        return formatter.string(from: value)
     }
 }
