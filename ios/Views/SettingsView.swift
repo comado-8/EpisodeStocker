@@ -1,9 +1,12 @@
 import SwiftUI
+#if canImport(RevenueCatUI)
+import RevenueCatUI
+#endif
 
 struct SettingsView: View {
     private let items: [SettingsItemData] = [
         .init(title: "サブスクリプション", detail: "プラン/更新日/試用残日数", systemImage: "creditcard", destination: .subscription),
-        .init(title: "バックアップ", detail: "クラウド/手動バックアップ", systemImage: "icloud", destination: .backup),
+        .init(title: "同期・バックアップ", detail: "クラウド同期の状態管理", systemImage: "icloud", destination: .backup),
         .init(title: "セキュリティ", detail: "パスコード/生体認証", systemImage: "lock", destination: .security),
         .init(title: "表示", detail: "テーマ・フォントサイズ・一覧表示", systemImage: "textformat.size", destination: .display),
         .init(title: "法務", detail: "利用規約・プライバシー", systemImage: "doc.text", destination: .legal)
@@ -16,7 +19,7 @@ struct SettingsView: View {
             let topPadding = max(0, SettingsStyle.figmaTopInset - proxy.safeAreaInsets.top)
 
             ZStack {
-                HomeStyle.background.ignoresSafeArea()
+                HomeStyle.screenBackground.ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: SettingsStyle.sectionSpacing) {
@@ -234,26 +237,37 @@ private struct SettingsDetailHeader: View {
     }
 }
 
-private struct SettingsSectionCard<Content: View>: View {
+private struct SettingsSectionCard<Content: View, HeaderAccessory: View>: View {
     let title: String
     let subtitle: String
     let content: Content
+    let headerAccessory: HeaderAccessory
 
-    init(title: String, subtitle: String, @ViewBuilder content: () -> Content) {
+    init(
+        title: String,
+        subtitle: String,
+        @ViewBuilder headerAccessory: () -> HeaderAccessory = { EmptyView() },
+        @ViewBuilder content: () -> Content
+    ) {
         self.title = title
         self.subtitle = subtitle
+        self.headerAccessory = headerAccessory()
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(SettingsDetailStyle.sectionTitleFont)
-                    .foregroundColor(SettingsDetailStyle.sectionTitleText)
-                Text(subtitle)
-                    .font(SettingsDetailStyle.sectionSubtitleFont)
-                    .foregroundColor(SettingsDetailStyle.sectionSubtitleText)
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(SettingsDetailStyle.sectionTitleFont)
+                        .foregroundColor(SettingsDetailStyle.sectionTitleText)
+                    Text(subtitle)
+                        .font(SettingsDetailStyle.sectionSubtitleFont)
+                        .foregroundColor(SettingsDetailStyle.sectionSubtitleText)
+                }
+                Spacer(minLength: 0)
+                headerAccessory
             }
             content
         }
@@ -318,13 +332,32 @@ private struct SettingsActionButton: View {
     }
 }
 
+private struct ProFeatureBadge: View {
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 10, weight: .bold))
+            Text("Pro")
+                .font(.system(size: 11, weight: .bold))
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(HomeStyle.fabRed)
+        .clipShape(Capsule())
+        .accessibilityLabel("Pro機能")
+    }
+}
+
 @MainActor
 private struct SubscriptionSettingsView: View {
     @StateObject private var viewModel: SubscriptionSettingsViewModel
+    @State private var showsRevenueCatPaywall = false
+    @State private var showsCustomerCenter = false
 
     init(viewModel: SubscriptionSettingsViewModel? = nil) {
         _viewModel = StateObject(
-            wrappedValue: viewModel ?? SubscriptionSettingsViewModel(service: StoreKitSubscriptionService())
+            wrappedValue: viewModel ?? SubscriptionSettingsViewModel(service: SubscriptionServiceFactory.makeService())
         )
     }
 
@@ -390,6 +423,16 @@ private struct SubscriptionSettingsView: View {
                         Task { await viewModel.restorePurchases() }
                     }
                     .disabled(viewModel.isLoading)
+                    #if canImport(RevenueCatUI)
+                    SettingsActionButton(title: "RevenueCat Paywallを開く", isPrimary: false) {
+                        showsRevenueCatPaywall = true
+                    }
+                    .disabled(viewModel.isLoading)
+                    SettingsActionButton(title: "Customer Centerを開く", isPrimary: false) {
+                        showsCustomerCenter = true
+                    }
+                    .disabled(viewModel.isLoading)
+                    #endif
                 }
             }
 
@@ -404,36 +447,115 @@ private struct SubscriptionSettingsView: View {
         .task {
             await viewModel.load()
         }
+        #if canImport(RevenueCatUI)
+        .sheet(isPresented: $showsRevenueCatPaywall) {
+            RevenueCatPaywallContainer()
+        }
+        .sheet(isPresented: $showsCustomerCenter) {
+            RevenueCatCustomerCenterContainer()
+        }
+        #endif
     }
 }
 
 @MainActor
 private struct BackupSettingsView: View {
+    @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
     @StateObject private var viewModel: BackupSettingsViewModel
     private let subscriptionService: SubscriptionService
 
+    private static var isBackupPaywallEnabled: Bool {
+        if let rawFlag = ProcessInfo.processInfo.environment["ENABLE_BACKUP_PAYWALL"],
+           let parsedFlag = parseEnvironmentBoolean(rawFlag)
+        {
+            return parsedFlag
+        }
+        // TODO(TAX-COMPLIANCE): 税務情報フォーム対応後にこのDEBUGバイパスを削除する。
+        // 一時対応: 分析タブ/エクスポートと同様、Debugのみバックアップ課金ゲートを無効化する。
+        // 課金テスト再開時は、このフラグを削除するか DEBUG でも true を返して復帰する。
+        #if DEBUG
+        return false
+        #else
+        return true
+        #endif
+    }
+
+    private static func parseEnvironmentBoolean(_ raw: String) -> Bool? {
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "true", "yes", "on":
+            return true
+        case "0", "false", "no", "off":
+            return false
+        default:
+            return nil
+        }
+    }
+
     init(
         viewModel: BackupSettingsViewModel? = nil,
-        subscriptionService: SubscriptionService = StoreKitSubscriptionService()
+        subscriptionService: SubscriptionService = SubscriptionServiceFactory.makeService()
     ) {
         self.subscriptionService = subscriptionService
         _viewModel = StateObject(
-            wrappedValue: viewModel ?? BackupSettingsViewModel(cloudBackupService: CloudKitBackupService())
+            wrappedValue: viewModel ?? BackupSettingsViewModel(
+                cloudBackupService: CloudKitBackupService(),
+                isEntitlementCheckEnabled: Self.isBackupPaywallEnabled
+            )
         )
     }
 
     private var backupBinding: Binding<Bool> {
         Binding(
             get: { viewModel.isBackupEnabled },
-            set: { viewModel.setBackupEnabled($0) }
+            set: { setBackupEnabledWithPaywallGate($0) }
         )
     }
 
     private var lastBackupText: String {
-        guard let lastBackupAt = viewModel.lastBackupAt else {
+        guard let lastBackupAt = viewModel.lastSyncAt else {
             return "未実行"
         }
         return Self.backupDateFormatter.string(from: lastBackupAt)
+    }
+
+    private var syncStateText: String {
+        guard viewModel.isBackupEnabled else {
+            return "オフ"
+        }
+        return viewModel.isSyncing ? "同期中" : "待機中"
+    }
+
+    private var iCloudStatusText: String {
+        switch viewModel.availability {
+        case .available:
+            return "利用可能"
+        case .unavailable(let reason):
+            if reason == "iCloudにサインインしてください。" {
+                return "未サインイン"
+            }
+            return "利用できません"
+        }
+    }
+
+    private var iCloudStatusHelpText: String? {
+        switch viewModel.availability {
+        case .available:
+            return nil
+        case .unavailable(let reason):
+            if reason == "iCloudにサインインしてください。" {
+                return "iPhoneの『設定』アプリ > 画面上部のApple Account からサインインしてください。"
+            }
+            return reason
+        }
+    }
+
+    private var visibleErrorMessage: String? {
+        guard let errorMessage = viewModel.errorMessage else { return nil }
+        if case .unavailable(let reason) = viewModel.availability, reason == errorMessage {
+            return nil
+        }
+        return errorMessage
     }
 
     private static let backupDateFormatter: DateFormatter = {
@@ -445,54 +567,94 @@ private struct BackupSettingsView: View {
 
     var body: some View {
         SettingsDetailContainerView(
-            title: "バックアップ",
-            subtitle: "クラウドと手動バックアップ"
+            title: "同期・バックアップ",
+            subtitle: "クラウド同期の状態管理"
         ) {
-            SettingsSectionCard(title: "クラウドバックアップ", subtitle: "自動バックアップの状態") {
+            SettingsSectionCard(
+                title: "クラウド同期",
+                subtitle: "同期の有効化と状態",
+                headerAccessory: { ProFeatureBadge() }
+            ) {
                 Toggle(isOn: backupBinding) {
                     Text("クラウド同期を有効にする")
                         .font(SettingsDetailStyle.rowTitleFont)
                         .foregroundColor(SettingsDetailStyle.rowTitleText)
                 }
                 .toggleStyle(SwitchToggleStyle(tint: SettingsDetailStyle.toggleTint))
-                .disabled(viewModel.isRunningBackup)
 
-                SettingsKeyValueRow(title: "可用性", value: viewModel.availabilityMessage)
+                SettingsKeyValueRow(title: "iCloudの状態", value: iCloudStatusText)
+                if let iCloudStatusHelpText {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(HomeStyle.fabRed)
+                            .padding(.top, 1)
+                        Text(iCloudStatusHelpText)
+                            .font(SettingsDetailStyle.rowMetaFont)
+                            .foregroundColor(SettingsDetailStyle.rowMetaText)
+                    }
+                    .padding(.top, 4)
+                }
+
+                SettingsKeyValueRow(title: "同期状態", value: syncStateText)
 
                 VStack(spacing: 10) {
-                    SettingsKeyValueRow(title: "最終バックアップ", value: lastBackupText)
-                    SettingsKeyValueRow(title: "保存容量", value: "18.4 MB")
+                    SettingsKeyValueRow(title: "最終同期日時", value: lastBackupText)
                 }
                 .padding(.top, 4)
-            }
 
-            SettingsSectionCard(title: "手動バックアップ", subtitle: "必要なタイミングで保存") {
-                VStack(spacing: 10) {
-                    SettingsActionButton(
-                        title: viewModel.isRunningBackup ? "バックアップ実行中..." : "今すぐバックアップ",
-                        isPrimary: true
-                    ) {
-                        Task { await viewModel.runManualBackup() }
-                    }
-                    .disabled(viewModel.isRunningBackup)
-                    SettingsActionButton(title: "バックアップ履歴を見る", isPrimary: false) {}
-                }
-            }
-
-            if let errorMessage = viewModel.errorMessage {
-                SettingsSectionCard(title: "バックアップ状態", subtitle: "実行結果") {
-                    Text(errorMessage)
+                if let visibleErrorMessage {
+                    Text(visibleErrorMessage)
                         .font(SettingsDetailStyle.rowMetaFont)
                         .foregroundColor(.red)
+                        .padding(.top, 2)
                 }
             }
+
+            if viewModel.requiresAppRestartNotice {
+                SettingsSectionCard(title: "反映メッセージ", subtitle: "切替の反映タイミング") {
+                    Text("設定変更は再起動後に反映されます。")
+                        .font(SettingsDetailStyle.rowMetaFont)
+                        .foregroundColor(SettingsDetailStyle.rowMetaText)
+                }
+            }
+
         }
         .task {
             await viewModel.load()
             await viewModel.refreshSubscriptionStatus(using: subscriptionService)
         }
     }
+
+    private func setBackupEnabledWithPaywallGate(_ enabled: Bool) {
+        guard enabled else {
+            viewModel.setBackupEnabled(false)
+            return
+        }
+
+        guard !Self.isBackupPaywallEnabled || premiumAccess.hasAccess(to: .backup) else {
+            router.presentPaywall(.backup)
+            return
+        }
+        viewModel.setBackupEnabled(true)
+    }
 }
+
+#if canImport(RevenueCatUI)
+private struct RevenueCatPaywallContainer: View {
+    var body: some View {
+        PaywallView(displayCloseButton: true)
+    }
+}
+
+private struct RevenueCatCustomerCenterContainer: View {
+    var body: some View {
+        NavigationStack {
+            CustomerCenterView()
+        }
+    }
+}
+#endif
 
 private struct SecuritySettingsView: View {
     @State private var passcodeEnabled = true
@@ -648,7 +810,7 @@ private struct SettingsDetailContainerView<Content: View>: View {
             let topPadding = max(0, SettingsStyle.figmaTopInset - proxy.safeAreaInsets.top)
 
             ZStack {
-                HomeStyle.background.ignoresSafeArea()
+                HomeStyle.screenBackground.ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: SettingsDetailStyle.sectionSpacing) {
@@ -737,5 +899,7 @@ private enum SettingsDetailStyle {
 struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
         SettingsView()
+            .environmentObject(AppRouter())
+            .environmentObject(PremiumAccessViewModel())
     }
 }

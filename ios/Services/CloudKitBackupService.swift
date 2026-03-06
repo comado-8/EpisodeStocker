@@ -13,18 +13,27 @@ struct NoopCloudBackupJobRunner: CloudBackupJobRunner {
 
 final class CloudKitBackupService: CloudBackupService {
     private let cloudKitClient: CloudKitClient
-    private let settingsRepository: SettingsRepository
+    private let preferenceRepository: CloudSyncPreferenceRepository
+    private let cloudSyncModeResolver: CloudSyncModeResolving
     private let backupJobRunner: CloudBackupJobRunner
     private let now: () -> Date
 
     init(
         cloudKitClient: CloudKitClient = DefaultCloudKitClient(),
         settingsRepository: SettingsRepository = UserDefaultsSettingsRepository(),
+        cloudSyncModeResolver: CloudSyncModeResolving? = nil,
         backupJobRunner: CloudBackupJobRunner = NoopCloudBackupJobRunner(),
         now: @escaping () -> Date = Date.init
     ) {
+        let preferenceRepository = UserDefaultsCloudSyncPreferenceRepository(settingsRepository: settingsRepository)
+        let entitlementCache = UserDefaultsSubscriptionEntitlementCache(settingsRepository: settingsRepository)
         self.cloudKitClient = cloudKitClient
-        self.settingsRepository = settingsRepository
+        self.preferenceRepository = preferenceRepository
+        self.cloudSyncModeResolver = cloudSyncModeResolver
+            ?? DefaultCloudSyncModeResolver(
+                preferenceRepository: preferenceRepository,
+                entitlementCache: entitlementCache
+            )
         self.backupJobRunner = backupJobRunner
         self.now = now
     }
@@ -52,15 +61,18 @@ final class CloudKitBackupService: CloudBackupService {
     }
 
     func isBackupEnabled() -> Bool {
-        settingsRepository.bool(for: .cloudBackupEnabled)
+        preferenceRepository.isCloudSyncRequested()
     }
 
     func setBackupEnabled(_ enabled: Bool) throws {
-        settingsRepository.set(enabled, for: .cloudBackupEnabled)
+        preferenceRepository.setCloudSyncRequested(enabled)
     }
 
     func runManualBackup() async throws -> Date {
-        guard isBackupEnabled() else {
+        guard cloudSyncModeResolver.resolveEffectiveCloudSyncEnabled() else {
+            if isBackupEnabled() {
+                throw CloudBackupError.notEntitled
+            }
             throw CloudBackupError.backupDisabled
         }
 
@@ -75,7 +87,6 @@ final class CloudKitBackupService: CloudBackupService {
         do {
             try await backupJobRunner.runBackupRequest()
             let executedAt = now()
-            settingsRepository.set(executedAt, for: .cloudBackupLastRunAt)
             return executedAt
         } catch let error as CloudBackupError {
             throw error
@@ -85,6 +96,6 @@ final class CloudKitBackupService: CloudBackupService {
     }
 
     func lastBackupAt() -> Date? {
-        settingsRepository.date(for: .cloudBackupLastRunAt)
+        preferenceRepository.lastSyncAt()
     }
 }

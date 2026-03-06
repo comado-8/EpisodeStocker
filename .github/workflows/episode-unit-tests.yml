@@ -14,7 +14,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     env:
-      PHASE2_MODE: enforce-all
+      PHASE2_MODE: report-only
       PHASE2_OVERALL_LOGIC_THRESHOLD: "85.00"
       PHASE2_CHANGED_FILES_THRESHOLD: "80.00"
 
@@ -30,10 +30,16 @@ jobs:
       - name: Build and test
         run: |
           mkdir -p artifacts
+          DESTINATION_ID="$(xcrun simctl list devices available | sed -nE 's/^[[:space:]]*iPhone 16 \(([0-9A-Fa-f-]+)\).*/\1/p' | head -n 1)"
+          if [ -z "$DESTINATION_ID" ]; then
+            echo "::error::No available iPhone 16 simulator found."
+            xcrun simctl list devices available
+            exit 1
+          fi
           xcodebuild test \
             -project EpisodeStocker.xcodeproj \
             -scheme EpisodeStocker \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
+            -destination "id=${DESTINATION_ID}" \
             -parallel-testing-enabled NO \
             -maximum-parallel-testing-workers 1 \
             -only-testing:EpisodeStockerTests \

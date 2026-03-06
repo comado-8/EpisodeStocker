@@ -23,20 +23,33 @@ final class UserDefaultsSettingsRepositoryTests: XCTestCase {
     }
 
     func testBoolRoundTrip() {
-        XCTAssertFalse(repository.bool(for: .cloudBackupEnabled))
+        XCTAssertFalse(repository.bool(for: .cloudSyncRequested))
 
-        repository.set(true, for: .cloudBackupEnabled)
+        repository.set(true, for: .cloudSyncRequested)
 
-        XCTAssertTrue(repository.bool(for: .cloudBackupEnabled))
+        XCTAssertTrue(repository.bool(for: .cloudSyncRequested))
     }
 
     func testDateRoundTripAndClear() {
         let expected = Date(timeIntervalSince1970: 1_234_567)
-        repository.set(expected, for: .cloudBackupLastRunAt)
+        repository.set(expected, for: .cloudSyncLastSuccessAt)
 
-        XCTAssertEqual(repository.date(for: .cloudBackupLastRunAt), expected)
+        XCTAssertEqual(repository.date(for: .cloudSyncLastSuccessAt), expected)
 
-        repository.set(nil, for: .cloudBackupLastRunAt)
-        XCTAssertNil(repository.date(for: .cloudBackupLastRunAt))
+        repository.set(nil, for: .cloudSyncLastSuccessAt)
+        XCTAssertNil(repository.date(for: .cloudSyncLastSuccessAt))
+    }
+
+    func testPremiumCacheRoundTrip() {
+        XCTAssertNil(repository.optionalBool(for: .hasPremiumAccessCached))
+
+        repository.setOptionalBool(true, for: .hasPremiumAccessCached)
+        XCTAssertEqual(repository.optionalBool(for: .hasPremiumAccessCached), true)
+
+        repository.setOptionalBool(false, for: .hasPremiumAccessCached)
+        XCTAssertEqual(repository.optionalBool(for: .hasPremiumAccessCached), false)
+
+        repository.setOptionalBool(nil, for: .hasPremiumAccessCached)
+        XCTAssertNil(repository.optionalBool(for: .hasPremiumAccessCached))
     }
 }

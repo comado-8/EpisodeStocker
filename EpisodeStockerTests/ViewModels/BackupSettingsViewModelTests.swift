@@ -3,14 +3,17 @@ import XCTest
 
 @MainActor
 final class BackupSettingsViewModelTests: XCTestCase {
-    func testFreePlanCannotEnableBackup() async {
+    func testFreePlanCannotEnableCloudSync() async {
         let service = FakeCloudBackupService(
             availabilityValue: .available,
             enabled: false,
-            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
+            lastSyncAt: nil
         )
+        let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
             cloudBackupService: service,
+            cloudSyncStatusMonitor: monitor,
             subscriptionStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil)
         )
         await vm.load()
@@ -18,17 +21,20 @@ final class BackupSettingsViewModelTests: XCTestCase {
         vm.setBackupEnabled(true)
 
         XCTAssertFalse(vm.isBackupEnabled)
-        XCTAssertEqual(vm.errorMessage, "バックアップ機能はサブスクリプション登録で利用できます。")
+        XCTAssertEqual(vm.errorMessage, "クラウド同期機能はサブスクリプション登録で利用できます。")
     }
 
-    func testPremiumPlanCanEnableBackup() async {
+    func testPremiumPlanCanEnableCloudSyncAndRequiresRestartNotice() async {
         let service = FakeCloudBackupService(
             availabilityValue: .available,
             enabled: false,
-            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
+            lastSyncAt: nil
         )
+        let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
             cloudBackupService: service,
+            cloudSyncStatusMonitor: monitor,
             subscriptionStatus: .init(plan: .yearly, expiryDate: nil, trialEndDate: nil)
         )
         await vm.load()
@@ -36,34 +42,21 @@ final class BackupSettingsViewModelTests: XCTestCase {
         vm.setBackupEnabled(true)
 
         XCTAssertTrue(vm.isBackupEnabled)
+        XCTAssertTrue(vm.requiresAppRestartNotice)
         XCTAssertNil(vm.errorMessage)
-    }
-
-    func testUnavailableCloudKitPreventsManualBackup() async {
-        let service = FakeCloudBackupService(
-            availabilityValue: .unavailable(reason: "iCloud未ログイン"),
-            enabled: true,
-            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
-        )
-        let vm = BackupSettingsViewModel(
-            cloudBackupService: service,
-            subscriptionStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
-        )
-        await vm.load()
-
-        await vm.runManualBackup()
-
-        XCTAssertEqual(vm.errorMessage, "iCloud未ログイン")
     }
 
     func testUnavailableCloudKitPreventsEnableToggle() async {
         let service = FakeCloudBackupService(
             availabilityValue: .unavailable(reason: "iCloud未ログイン"),
             enabled: false,
-            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
+            lastSyncAt: nil
         )
+        let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
             cloudBackupService: service,
+            cloudSyncStatusMonitor: monitor,
             subscriptionStatus: .init(plan: .yearly, expiryDate: nil, trialEndDate: nil)
         )
         await vm.load()
@@ -74,103 +67,105 @@ final class BackupSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(vm.errorMessage, "iCloud未ログイン")
     }
 
-    func testManualBackupSuccessUpdatesLastBackupAt() async {
-        let expectedDate = Date(timeIntervalSince1970: 12345)
+    func testDowngradeDisablesCloudSyncAndRequiresRestartNotice() async {
         let service = FakeCloudBackupService(
             availabilityValue: .available,
             enabled: true,
-            manualBackupResult: .success(expectedDate)
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
+            lastSyncAt: nil
         )
+        let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
             cloudBackupService: service,
-            subscriptionStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
+            cloudSyncStatusMonitor: monitor,
+            subscriptionStatus: .init(plan: .yearly, expiryDate: nil, trialEndDate: nil)
         )
         await vm.load()
 
-        await vm.runManualBackup()
-
-        XCTAssertEqual(vm.lastBackupAt, expectedDate)
-        XCTAssertNil(vm.errorMessage)
-    }
-
-    func testDisableBackupClearsErrorAndTurnsOffFlag() async {
-        let service = FakeCloudBackupService(
-            availabilityValue: .available,
-            enabled: true,
-            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
-        )
-        let vm = BackupSettingsViewModel(
-            cloudBackupService: service,
-            subscriptionStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
-        )
-        await vm.load()
-        vm.setBackupEnabled(true)
-
-        vm.setBackupEnabled(false)
+        vm.updateSubscriptionStatus(.init(plan: .free, expiryDate: nil, trialEndDate: nil))
 
         XCTAssertFalse(vm.isBackupEnabled)
-        XCTAssertNil(vm.errorMessage)
+        XCTAssertTrue(vm.requiresAppRestartNotice)
     }
 
-    func testRunManualBackupWithFreePlanSetsNotEntitledError() async {
+    func testMonitorSnapshotUpdatesSyncStateAndLastSyncAt() async {
         let service = FakeCloudBackupService(
             availabilityValue: .available,
             enabled: true,
-            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
+            lastSyncAt: nil
         )
+        let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
             cloudBackupService: service,
-            subscriptionStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil)
+            cloudSyncStatusMonitor: monitor,
+            subscriptionStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
         )
         await vm.load()
+        let expectedDate = Date(timeIntervalSince1970: 12345)
 
-        await vm.runManualBackup()
+        monitor.send(.init(isSyncing: true, lastSyncAt: nil, lastErrorMessage: nil))
+        XCTAssertTrue(vm.isSyncing)
+        monitor.send(.init(isSyncing: false, lastSyncAt: expectedDate, lastErrorMessage: nil))
 
-        XCTAssertEqual(vm.errorMessage, "バックアップ機能はサブスクリプション登録で利用できます。")
+        XCTAssertFalse(vm.isSyncing)
+        XCTAssertEqual(vm.lastSyncAt, expectedDate)
     }
 
-    func testRunManualBackupWhenDisabledSetsBackupDisabledError() async {
+    func testMonitorSnapshotClearsErrorWhenRecoverySnapshotArrives() async {
         let service = FakeCloudBackupService(
             availabilityValue: .available,
-            enabled: false,
-            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+            enabled: true,
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
+            lastSyncAt: nil
         )
+        let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
             cloudBackupService: service,
+            cloudSyncStatusMonitor: monitor,
             subscriptionStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
         )
         await vm.load()
 
-        await vm.runManualBackup()
+        monitor.send(.init(isSyncing: false, lastSyncAt: nil, lastErrorMessage: "sync failed"))
+        XCTAssertEqual(vm.errorMessage, "sync failed")
+        monitor.send(.init(isSyncing: false, lastSyncAt: nil, lastErrorMessage: nil))
 
-        XCTAssertEqual(vm.errorMessage, "クラウドバックアップを有効にしてください。")
+        XCTAssertNil(vm.errorMessage)
     }
 
-    func testUpdateSubscriptionStatusEnablesTrialAccess() {
+    func testLoadAppliesDowngradePolicyForFreePlan() async {
         let service = FakeCloudBackupService(
             availabilityValue: .available,
-            enabled: false,
-            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+            enabled: true,
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
+            lastSyncAt: nil
         )
+        let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
             cloudBackupService: service,
+            cloudSyncStatusMonitor: monitor,
             subscriptionStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil)
         )
 
-        XCTAssertFalse(vm.canUseBackup)
-        vm.updateSubscriptionStatus(
-            .init(plan: .free, expiryDate: nil, trialEndDate: Date().addingTimeInterval(10_000))
-        )
-        XCTAssertTrue(vm.canUseBackup)
+        await vm.load()
+
+        XCTAssertFalse(vm.isBackupEnabled)
+        XCTAssertTrue(vm.requiresAppRestartNotice)
     }
 
     func testAvailabilityMessageForAvailableState() async {
         let service = FakeCloudBackupService(
             availabilityValue: .available,
             enabled: false,
-            manualBackupResult: .success(Date(timeIntervalSince1970: 1))
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
+            lastSyncAt: nil
         )
-        let vm = BackupSettingsViewModel(cloudBackupService: service)
+        let monitor = FakeCloudSyncStatusMonitor()
+        let vm = BackupSettingsViewModel(
+            cloudBackupService: service,
+            cloudSyncStatusMonitor: monitor
+        )
 
         await vm.load()
 
@@ -184,11 +179,16 @@ private final class FakeCloudBackupService: CloudBackupService {
     private let manualBackupResult: Result<Date, Error>
     private var latestBackupAt: Date?
 
-    init(availabilityValue: CloudBackupAvailability, enabled: Bool, manualBackupResult: Result<Date, Error>) {
+    init(
+        availabilityValue: CloudBackupAvailability,
+        enabled: Bool,
+        manualBackupResult: Result<Date, Error>,
+        lastSyncAt: Date?
+    ) {
         self.availabilityValue = availabilityValue
         self.enabled = enabled
         self.manualBackupResult = manualBackupResult
-        self.latestBackupAt = nil
+        self.latestBackupAt = lastSyncAt
     }
 
     func availability() async -> CloudBackupAvailability {
@@ -211,5 +211,23 @@ private final class FakeCloudBackupService: CloudBackupService {
 
     func lastBackupAt() -> Date? {
         latestBackupAt
+    }
+}
+
+private final class FakeCloudSyncStatusMonitor: CloudSyncStatusMonitoring {
+    var onChange: ((CloudSyncStatusSnapshot) -> Void)?
+    private(set) var startCallCount = 0
+    private(set) var stopCallCount = 0
+
+    func start() {
+        startCallCount += 1
+    }
+
+    func stop() {
+        stopCallCount += 1
+    }
+
+    func send(_ snapshot: CloudSyncStatusSnapshot) {
+        onChange?(snapshot)
     }
 }
