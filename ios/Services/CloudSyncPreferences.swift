@@ -87,7 +87,25 @@ final class UserDefaultsSubscriptionEntitlementCache: SubscriptionEntitlementCac
 }
 
 protocol CloudSyncModeResolving {
+    func resolveEffectiveCloudSyncMode() -> CloudSyncMode
     func resolveEffectiveCloudSyncEnabled() -> Bool
+}
+
+extension CloudSyncModeResolving {
+    func resolveEffectiveCloudSyncEnabled() -> Bool {
+        resolveEffectiveCloudSyncMode().allowsSync
+    }
+}
+
+enum CloudSyncMode: Equatable {
+    case disabled
+    case enabled
+    case denied
+    case unknown
+
+    var allowsSync: Bool {
+        self == .enabled
+    }
 }
 
 struct DefaultCloudSyncModeResolver: CloudSyncModeResolving {
@@ -102,13 +120,15 @@ struct DefaultCloudSyncModeResolver: CloudSyncModeResolving {
         self.entitlementCache = entitlementCache
     }
 
-    func resolveEffectiveCloudSyncEnabled() -> Bool {
-        guard preferenceRepository.isCloudSyncRequested() else { return false }
+    func resolveEffectiveCloudSyncMode() -> CloudSyncMode {
+        guard preferenceRepository.isCloudSyncRequested() else { return .disabled }
         switch entitlementCache.premiumAccessCachedState() {
         case .granted:
-            return true
-        case .unknown, .denied:
-            return false
+            return .enabled
+        case .denied:
+            return .denied
+        case .unknown:
+            return .unknown
         }
     }
 }

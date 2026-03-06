@@ -80,21 +80,33 @@ struct HomeSearchSuggestionPanel: View {
 
     private var lockBadge: some View {
         PremiumLockBadge()
-        .shadow(color: Color.black.opacity(0.14), radius: 3, x: 0, y: 1)
+            .shadow(color: Color.black.opacity(0.14), radius: 3, x: 0, y: 1)
     }
 }
 
 struct HomeSearchSuggestionPanel_Previews: PreviewProvider {
     static var previews: some View {
-        HomeSearchSuggestionPanel(
-            width: 360,
-            items: [
-                HomeSearchSuggestionItem(kind: .value(field: .tag, value: "仕事")),
-                HomeSearchSuggestionItem(kind: .value(field: .person, value: "佐藤さん"))
-            ],
-            onSelect: { _ in }
-        )
-        .padding()
-        .previewLayout(.sizeThatFits)
+        VStack(spacing: 16) {
+            HomeSearchSuggestionPanel(
+                width: 360,
+                items: [
+                    HomeSearchSuggestionItem(kind: .value(field: .tag, value: "仕事")),
+                    HomeSearchSuggestionItem(kind: .value(field: .person, value: "佐藤さん"))
+                ],
+                onSelect: { _ in }
+            )
+
+            HomeSearchSuggestionPanel(
+                width: 360,
+                items: [
+                    HomeSearchSuggestionItem(kind: .value(field: .talkCount, value: "3回以上")),
+                    HomeSearchSuggestionItem(kind: .value(field: .tag, value: "趣味"))
+                ],
+                isItemLocked: { $0.kind.field.isPremiumAdvancedSearchField },
+                onSelect: { _ in }
+            )
+        }
+            .padding()
+            .previewLayout(.sizeThatFits)
     }
 }

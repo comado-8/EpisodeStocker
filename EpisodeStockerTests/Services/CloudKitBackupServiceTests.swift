@@ -207,6 +207,25 @@ final class CloudKitBackupServiceTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    func testRunManualBackupThrowsBackupDisabledWhenRequestedButPremiumUnknown() async {
+        let settings = InMemorySettingsRepository()
+        settings.set(true, for: .cloudBackupEnabled)
+        let service = CloudKitBackupService(
+            cloudKitClient: FakeCloudKitClient(result: .success(.available)),
+            settingsRepository: settings,
+            backupJobRunner: FakeBackupJobRunner(result: .success(()))
+        )
+
+        do {
+            _ = try await service.runManualBackup()
+            XCTFail("Expected error")
+        } catch let error as CloudBackupError {
+            XCTAssertEqual(error, .backupDisabled)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
 }
 
 private enum TestError: Error {

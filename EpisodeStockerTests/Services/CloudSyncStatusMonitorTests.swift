@@ -14,6 +14,25 @@ final class CloudSyncStatusMonitorTests: XCTestCase {
         XCTAssertEqual(snapshots.last?.isSyncing, true)
     }
 
+    func testOverlappingEventsKeepSyncingTrueUntilAllFinished() {
+        let preferences = StubCloudSyncPreferencesForMonitor(lastSyncAt: nil)
+        let monitor = CloudSyncStatusMonitor(preferenceRepository: preferences)
+        var snapshots: [CloudSyncStatusSnapshot] = []
+        monitor.onChange = { snapshots.append($0) }
+        let firstID = UUID()
+        let secondID = UUID()
+
+        monitor.handle(event: .init(id: firstID, kind: .import, endDate: nil, errorDescription: nil))
+        monitor.handle(event: .init(id: secondID, kind: .export, endDate: nil, errorDescription: nil))
+        monitor.handle(event: .init(id: firstID, kind: .import, endDate: Date(), errorDescription: nil))
+
+        XCTAssertEqual(snapshots.last?.isSyncing, true)
+
+        monitor.handle(event: .init(id: secondID, kind: .export, endDate: Date(), errorDescription: nil))
+
+        XCTAssertEqual(snapshots.last?.isSyncing, false)
+    }
+
     func testExportSuccessStoresLastSyncAtAndStopsSyncing() {
         let preferences = StubCloudSyncPreferencesForMonitor(lastSyncAt: nil)
         let monitor = CloudSyncStatusMonitor(preferenceRepository: preferences)

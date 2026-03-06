@@ -69,10 +69,12 @@ final class CloudKitBackupService: CloudBackupService {
     }
 
     func runManualBackup() async throws -> Date {
-        guard cloudSyncModeResolver.resolveEffectiveCloudSyncEnabled() else {
-            if isBackupEnabled() {
-                throw CloudBackupError.notEntitled
-            }
+        switch cloudSyncModeResolver.resolveEffectiveCloudSyncMode() {
+        case .enabled:
+            break
+        case .denied:
+            throw CloudBackupError.notEntitled
+        case .unknown, .disabled:
             throw CloudBackupError.backupDisabled
         }
 

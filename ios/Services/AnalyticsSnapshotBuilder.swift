@@ -90,6 +90,7 @@ enum AnalyticsSnapshotBuilder {
     static let minimumTalkCountForRate = 3
     static let suggestionLimit = 5
     static let rankingLimit = 5
+    static let hitRateComparisonEpsilon = 0.000_000_1
 
     private struct EpisodeStats {
         let episodeID: UUID
@@ -125,8 +126,6 @@ enum AnalyticsSnapshotBuilder {
         var tagHitCounts: [String: Int] = [:]
 
         for episode in episodes {
-            guard !Task.isCancelled else { return emptySnapshot() }
-
             let talkCount = episode.logs.count
             var hitCount = 0
             var recent30DayTalkCount = 0
@@ -238,8 +237,9 @@ enum AnalyticsSnapshotBuilder {
         let strongEpisodes = stats
             .filter { $0.talkCount >= minimumTalkCountForRate }
             .sorted { lhs, rhs in
-                if lhs.hitRate != rhs.hitRate {
-                    return lhs.hitRate > rhs.hitRate
+                let hitRateDiff = lhs.hitRate - rhs.hitRate
+                if abs(hitRateDiff) > hitRateComparisonEpsilon {
+                    return hitRateDiff > 0
                 }
                 if lhs.talkCount != rhs.talkCount {
                     return lhs.talkCount > rhs.talkCount

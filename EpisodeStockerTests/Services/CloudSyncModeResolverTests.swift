@@ -24,6 +24,7 @@ final class CloudSyncModeResolverTests: XCTestCase {
         )
 
         XCTAssertFalse(resolver.resolveEffectiveCloudSyncEnabled())
+        XCTAssertEqual(resolver.resolveEffectiveCloudSyncMode(), .denied)
     }
 
     func testResolveReturnsFalseWhenNotRequested() {
@@ -36,6 +37,7 @@ final class CloudSyncModeResolverTests: XCTestCase {
         )
 
         XCTAssertFalse(resolver.resolveEffectiveCloudSyncEnabled())
+        XCTAssertEqual(resolver.resolveEffectiveCloudSyncMode(), .disabled)
     }
 
     func testResolveReturnsFalseWhenRequestedButCacheUnknown() {
@@ -48,6 +50,7 @@ final class CloudSyncModeResolverTests: XCTestCase {
         )
 
         XCTAssertFalse(resolver.resolveEffectiveCloudSyncEnabled())
+        XCTAssertEqual(resolver.resolveEffectiveCloudSyncMode(), .unknown)
     }
 }
 

@@ -84,6 +84,7 @@ struct EpisodeDetailView: View {
   @State private var shareItems: [Any] = []
   @State private var showsExportErrorAlert = false
   @State private var exportErrorMessage = ""
+  @State private var isExporting = false
 
   private let maxPersons = 10
   private let maxTags = 10
@@ -372,8 +373,8 @@ struct EpisodeDetailView: View {
             x: 0,
             y: DetailStyle.headerActionButtonShadowYOffset
           )
-          .disabled(isEditing)
-          .opacity(isEditing ? 0.45 : 1)
+          .disabled(isEditing || isExporting)
+          .opacity((isEditing || isExporting) ? 0.45 : 1)
           .confirmationDialog(
             "エクスポート",
             isPresented: $showsExportFormatDialog,
@@ -841,14 +842,32 @@ struct EpisodeDetailView: View {
   }
 
   private func exportEpisode(as format: EpisodeExportFormat) {
-    do {
-      let fileURL = try exportService.export(format: format, episode: episode)
-      shareItems = [fileURL]
-      showsShareSheet = true
-    } catch {
-      exportErrorMessage = error.localizedDescription
-      showsExportErrorAlert = true
-      NSLog("Episode export failed (\(format.fileExtension)): \(error.localizedDescription)")
+    guard !isExporting else { return }
+    isExporting = true
+
+    DispatchQueue.global(qos: .userInitiated).async {
+      do {
+        let fileURL = try exportService.export(format: format, episode: episode)
+        DispatchQueue.main.async {
+          self.shareItems = [fileURL]
+          self.showsShareSheet = true
+          self.isExporting = false
+        }
+      } catch {
+        let nsError = error as NSError
+        NSLog(
+          "Episode export failed (%@): type=%@ domain=%@ code=%ld",
+          format.fileExtension,
+          String(describing: type(of: error)),
+          nsError.domain,
+          nsError.code
+        )
+        DispatchQueue.main.async {
+          self.exportErrorMessage = error.localizedDescription
+          self.showsExportErrorAlert = true
+          self.isExporting = false
+        }
+      }
     }
   }
 

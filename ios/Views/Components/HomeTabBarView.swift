@@ -33,27 +33,7 @@ struct HomeTabBarView: View {
     var body: some View {
         HStack {
             ForEach(RootTab.allCases, id: \.self) { tab in
-                Button {
-                    if showsAnalyticsLock, tab == .analytics {
-                        onTabTap?(.analytics)
-                        return
-                    }
-                    if let onTabTap {
-                        onTabTap(tab)
-                    } else {
-                        selection = tab
-                    }
-                } label: {
-                    VStack(spacing: 4) {
-                        tabIcon(for: tab)
-                        Text(tab.title)
-                            .font(HomeFont.tabLabel())
-                            .tracking(0.1)
-                    }
-                    .foregroundColor(selection == tab ? HomeStyle.tabSelected : HomeStyle.tabUnselected)
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.plain)
+                tabButton(for: tab)
             }
         }
         .frame(height: HomeStyle.tabBarHeight)
@@ -65,6 +45,37 @@ struct HomeTabBarView: View {
             }
             .ignoresSafeArea(edges: .bottom)
         )
+    }
+
+    private func tabButton(for tab: RootTab) -> some View {
+        let isLockedAnalyticsTab = tab == .analytics && showsAnalyticsLock
+        return Button {
+            if showsAnalyticsLock, tab == .analytics {
+                onTabTap?(.analytics)
+                return
+            }
+            if let onTabTap {
+                onTabTap(tab)
+            } else {
+                selection = tab
+            }
+        } label: {
+            VStack(spacing: 4) {
+                tabIcon(for: tab)
+                Text(tab.title)
+                    .font(HomeFont.tabLabel())
+                    .tracking(0.1)
+            }
+            .foregroundColor(selection == tab ? HomeStyle.tabSelected : HomeStyle.tabUnselected)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(tab.title))
+        .accessibilityValue(Text(isLockedAnalyticsTab ? "ロック中" : ""))
+        .accessibilityHint(
+            Text(isLockedAnalyticsTab ? "Premium機能です。アップグレードが必要です。" : "タブを開きます")
+        )
+        .accessibilityRespondsToUserInteraction(!isLockedAnalyticsTab)
     }
 
     @ViewBuilder

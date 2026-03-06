@@ -4,7 +4,7 @@ enum RevenueCatConfig {
     static let apiKeyEnvironmentVariable = "REVENUECAT_API_KEY"
     static let apiKeyInfoPlistKey = "REVENUECAT_API_KEY"
 
-    static var publicAPIKey: String {
+    static let publicAPIKey: String = {
         if let environmentAPIKey = sanitizedAPIKey(
             ProcessInfo.processInfo.environment[apiKeyEnvironmentVariable]
         ) {
@@ -18,7 +18,7 @@ enum RevenueCatConfig {
         }
 
         return ""
-    }
+    }()
 
     static var hasPublicAPIKey: Bool {
         !publicAPIKey.isEmpty

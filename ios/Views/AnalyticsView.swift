@@ -29,7 +29,6 @@ struct AnalyticsView: View {
                 hasher.combine(log.updatedAt.timeIntervalSince1970)
                 hasher.combine(log.talkedAt.timeIntervalSince1970)
                 hasher.combine(log.reaction)
-                hasher.combine(log.isSoftDeleted)
             }
         }
         return hasher.finalize()

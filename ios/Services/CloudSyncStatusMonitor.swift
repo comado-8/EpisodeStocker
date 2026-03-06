@@ -15,9 +15,22 @@ struct CloudSyncEvent: Equatable {
         case other
     }
 
+    let id: UUID
     let kind: Kind
     let endDate: Date?
     let errorDescription: String?
+
+    init(
+        id: UUID = UUID(),
+        kind: Kind,
+        endDate: Date?,
+        errorDescription: String?
+    ) {
+        self.id = id
+        self.kind = kind
+        self.endDate = endDate
+        self.errorDescription = errorDescription
+    }
 
     var isSyncOperation: Bool {
         kind == .import || kind == .export
@@ -38,6 +51,7 @@ final class CloudSyncStatusMonitor: CloudSyncStatusMonitoring {
 
     private var observer: NSObjectProtocol?
     private var snapshot: CloudSyncStatusSnapshot
+    private var activeSyncEventIDs: Set<UUID> = []
 
     init(
         notificationCenter: NotificationCenter = .default,
@@ -80,19 +94,23 @@ final class CloudSyncStatusMonitor: CloudSyncStatusMonitoring {
         guard let observer else { return }
         notificationCenter.removeObserver(observer)
         self.observer = nil
+        activeSyncEventIDs.removeAll()
+        snapshot.isSyncing = false
     }
 
     func handle(event: CloudSyncEvent) {
         guard event.isSyncOperation else { return }
 
         if event.endDate == nil {
-            snapshot.isSyncing = true
+            activeSyncEventIDs.insert(event.id)
+            snapshot.isSyncing = !activeSyncEventIDs.isEmpty
             snapshot.lastErrorMessage = nil
             onChange?(snapshot)
             return
         }
 
-        snapshot.isSyncing = false
+        activeSyncEventIDs.remove(event.id)
+        snapshot.isSyncing = !activeSyncEventIDs.isEmpty
 
         if let errorDescription = event.errorDescription {
             snapshot.lastErrorMessage = errorDescription
@@ -128,6 +146,7 @@ final class CloudSyncStatusMonitor: CloudSyncStatusMonitoring {
         }
 
         return CloudSyncEvent(
+            id: event.identifier,
             kind: kind,
             endDate: event.endDate,
             errorDescription: event.error?.localizedDescription

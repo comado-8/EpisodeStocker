@@ -8,7 +8,7 @@ struct EpisodeStockerApp: App {
     @StateObject private var premiumAccess = PremiumAccessViewModel()
     private let modelContainer: ModelContainer
     private let seedProfile: SeedData.Profile
-    private let effectiveCloudSyncEnabled: Bool
+    private var effectiveCloudSyncEnabled: Bool
 
     init() {
         RevenueCatBootstrap.configureIfNeeded()
@@ -16,7 +16,8 @@ struct EpisodeStockerApp: App {
         let environment = ProcessInfo.processInfo.environment
         let isRunningTests = environment["XCTestConfigurationFilePath"] != nil
         let cloudSyncModeResolver = DefaultCloudSyncModeResolver()
-        effectiveCloudSyncEnabled = !isRunningTests && cloudSyncModeResolver.resolveEffectiveCloudSyncEnabled()
+        var resolvedEffectiveCloudSyncEnabled =
+            !isRunningTests && cloudSyncModeResolver.resolveEffectiveCloudSyncEnabled()
         #if DEBUG
         #if targetEnvironment(simulator)
         if isRunningTests {
@@ -31,10 +32,11 @@ struct EpisodeStockerApp: App {
         seedProfile = .minimal
         #endif
 
+        let resolvedModelContainer: ModelContainer
         do {
-            modelContainer = try Self.makeContainer(
+            resolvedModelContainer = try Self.makeContainer(
                 isStoredInMemoryOnly: isRunningTests,
-                effectiveCloudSyncEnabled: effectiveCloudSyncEnabled
+                effectiveCloudSyncEnabled: resolvedEffectiveCloudSyncEnabled
             )
         } catch {
             #if DEBUG
@@ -44,19 +46,26 @@ struct EpisodeStockerApp: App {
                     "Persistent ModelContainer load failed on simulator. Falling back to in-memory: \(String(describing: error))"
                 )
                 do {
-                    modelContainer = try Self.makeContainer(
+                    resolvedModelContainer = try Self.makeContainer(
                         isStoredInMemoryOnly: true,
                         effectiveCloudSyncEnabled: false
                     )
-                    return
+                    resolvedEffectiveCloudSyncEnabled = false
                 } catch {
                     fatalError("Failed to create fallback in-memory ModelContainer: \(error)")
                 }
+            } else {
+                fatalError("Failed to create ModelContainer: \(error)")
             }
-            #endif
-            #endif
+            #else
             fatalError("Failed to create ModelContainer: \(error)")
+            #endif
+            #else
+            fatalError("Failed to create ModelContainer: \(error)")
+            #endif
         }
+        self.modelContainer = resolvedModelContainer
+        self.effectiveCloudSyncEnabled = resolvedEffectiveCloudSyncEnabled
     }
 
     private static func makeContainer(

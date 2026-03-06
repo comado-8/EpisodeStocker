@@ -66,6 +66,10 @@ struct NewEpisodeView: View {
       && !isPlaceNameOverLimit
   }
 
+  private var isRegisterButtonEnabled: Bool {
+    isSaveEnabled && premiumAccess.hasLoadedStatus
+  }
+
   private var bodyCharacterCountText: String {
     "\(bodyText.count) / \(EpisodePersistence.bodyCharacterLimit)"
   }
@@ -906,8 +910,8 @@ struct NewEpisodeView: View {
         .frame(width: NewEpisodeStyle.actionButtonWidth, height: NewEpisodeStyle.actionButtonHeight)
         .background(NewEpisodeStyle.primaryButtonFill)
         .clipShape(Capsule())
-        .disabled(!isSaveEnabled)
-        .opacity(isSaveEnabled ? 1 : 0.6)
+        .disabled(!isRegisterButtonEnabled)
+        .opacity(isRegisterButtonEnabled ? 1 : 0.6)
 
         Button("キャンセル") {
           requestClose()
@@ -928,6 +932,7 @@ struct NewEpisodeView: View {
   }
 
   private func save() {
+    guard premiumAccess.hasLoadedStatus else { return }
     let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard

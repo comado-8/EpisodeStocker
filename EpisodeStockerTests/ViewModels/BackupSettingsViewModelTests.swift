@@ -152,6 +152,31 @@ final class BackupSettingsViewModelTests: XCTestCase {
 
         XCTAssertFalse(vm.isBackupEnabled)
         XCTAssertTrue(vm.requiresAppRestartNotice)
+        XCTAssertEqual(monitor.startCallCount, 1)
+    }
+
+    func testDeinitStopsCloudSyncStatusMonitor() async {
+        let service = FakeCloudBackupService(
+            availabilityValue: .available,
+            enabled: false,
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
+            lastSyncAt: nil
+        )
+        let monitor = FakeCloudSyncStatusMonitor()
+        var vm: BackupSettingsViewModel? = BackupSettingsViewModel(
+            cloudBackupService: service,
+            cloudSyncStatusMonitor: monitor,
+            subscriptionStatus: .init(plan: .yearly, expiryDate: nil, trialEndDate: nil)
+        )
+        weak var weakVM = vm
+
+        await vm?.load()
+        XCTAssertEqual(monitor.startCallCount, 1)
+
+        vm = nil
+
+        XCTAssertNil(weakVM)
+        XCTAssertEqual(monitor.stopCallCount, 1)
     }
 
     func testAvailabilityMessageForAvailableState() async {

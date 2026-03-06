@@ -141,6 +141,9 @@ struct HomeAdvancedFilterSheet: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .onAppear {
+                    assert(onUpgrade != nil, "onUpgrade must be provided in preview mode")
+                }
             }
         }
     }

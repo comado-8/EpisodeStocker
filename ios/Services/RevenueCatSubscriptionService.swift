@@ -173,7 +173,16 @@ final class RevenueCatSubscriptionService: SubscriptionService {
             return SubscriptionStatus(plan: .free, expiryDate: nil, trialEndDate: nil)
         }
 
-        let plan = SubscriptionCatalog.plan(for: entitlement.productIdentifier) ?? .monthly
+        let resolvedPlan = SubscriptionCatalog.plan(for: entitlement.productIdentifier)
+        if resolvedPlan == nil {
+            NSLog(
+                "RevenueCat plan mapping fallback: unresolved productIdentifier=%@ entitlement=%@ expiration=%@",
+                entitlement.productIdentifier,
+                RevenueCatConfig.proEntitlementID,
+                String(describing: entitlement.expirationDate)
+            )
+        }
+        let plan = resolvedPlan ?? .monthly
         return SubscriptionStatus(
             plan: plan,
             expiryDate: entitlement.expirationDate,
@@ -195,7 +204,7 @@ final class RevenueCatSubscriptionService: SubscriptionService {
                     return
                 }
                 if let error {
-                    if (error as NSError).asErrorCode == .paymentPendingError {
+                    if self.isPaymentPendingError(error) {
                         continuation.resume(returning: .pending)
                         return
                     }
@@ -209,6 +218,17 @@ final class RevenueCatSubscriptionService: SubscriptionService {
                 continuation.resume(returning: .purchased(customerInfo))
             }
         }
+    }
+
+    private func isPaymentPendingError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        guard nsError.domain == ErrorCode.errorDomain else {
+            return false
+        }
+        guard let code = ErrorCode(rawValue: nsError.code) else {
+            return false
+        }
+        return code == .paymentPendingError
     }
 }
 #endif

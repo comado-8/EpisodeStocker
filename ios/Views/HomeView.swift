@@ -465,7 +465,6 @@ private extension HomeView {
 
         guard didSanitize else { return }
         advancedFilterDraft = HomeAdvancedFilterDraft(tokens: searchTokens)
-        advancedFilterDraft.clearHistoryConditions()
         isSearchCommitted = hasAnySearchCondition()
     }
 
