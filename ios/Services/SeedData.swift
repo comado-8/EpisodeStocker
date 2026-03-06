@@ -8,7 +8,13 @@ enum SeedData {
         case simulatorComprehensive
     }
 
-    static func seedIfNeeded(context: ModelContext, profile: Profile = .minimal) {
+    static func seedIfNeeded(
+        context: ModelContext,
+        profile: Profile = .minimal,
+        isCloudSyncEnabled: Bool = false
+    ) {
+        guard !isCloudSyncEnabled else { return }
+
         let descriptor = FetchDescriptor<Episode>()
         let existing = (try? context.fetch(descriptor)) ?? []
         guard existing.isEmpty else { return }

@@ -28,11 +28,16 @@ enum RootTab: String, CaseIterable {
 struct HomeTabBarView: View {
     @Binding var selection: RootTab
     var onTabTap: ((RootTab) -> Void)? = nil
+    var showsAnalyticsLock = false
 
     var body: some View {
         HStack {
             ForEach(RootTab.allCases, id: \.self) { tab in
                 Button {
+                    if showsAnalyticsLock, tab == .analytics {
+                        onTabTap?(.analytics)
+                        return
+                    }
                     if let onTabTap {
                         onTabTap(tab)
                     } else {
@@ -40,8 +45,7 @@ struct HomeTabBarView: View {
                     }
                 } label: {
                     VStack(spacing: 4) {
-                        Image(systemName: tab.systemImage)
-                            .font(.system(size: 17, weight: .semibold))
+                        tabIcon(for: tab)
                         Text(tab.title)
                             .font(HomeFont.tabLabel())
                             .tracking(0.1)
@@ -61,5 +65,22 @@ struct HomeTabBarView: View {
             }
             .ignoresSafeArea(edges: .bottom)
         )
+    }
+
+    @ViewBuilder
+    private func tabIcon(for tab: RootTab) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: tab.systemImage)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 22, height: 20)
+
+            if tab == .analytics && showsAnalyticsLock {
+                PremiumLockBadge()
+                    .offset(
+                        x: HomeStyle.premiumLockBadgeOffsetX + 2,
+                        y: HomeStyle.premiumLockBadgeOffsetY - 2
+                    )
+            }
+        }
     }
 }

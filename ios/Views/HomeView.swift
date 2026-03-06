@@ -3,6 +3,7 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
     @Environment(\.modelContext) private var modelContext
     @Query(
         filter: #Predicate<Episode> { $0.isSoftDeleted == false },
@@ -21,6 +22,7 @@ struct HomeView: View {
     @State private var selectedEpisodeIDs: Set<UUID> = []
     @State private var showsDeleteAlert = false
     @State private var suppressNextNavigation = false
+    @State private var isRevertingSortSelection = false
     @State private var scrollContentHeight: CGFloat = 0
     @State private var scrollViewportHeight: CGFloat = 0
     @FocusState private var isSearchFocused: Bool
@@ -92,6 +94,10 @@ struct HomeView: View {
         searchTokens.contains { HomeAdvancedFilterDraft.isHistoryField($0.field) }
     }
 
+    private var hasAdvancedSearchAccess: Bool {
+        premiumAccess.hasAccess(to: .advancedSearch)
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
@@ -117,7 +123,7 @@ struct HomeView: View {
             }()
 
             ZStack(alignment: .bottomTrailing) {
-                HomeStyle.background.ignoresSafeArea()
+                HomeStyle.screenBackground.ignoresSafeArea()
 
                 VStack(spacing: HomeStyle.sectionSpacing) {
                     VStack(spacing: HomeStyle.sectionSpacing) {
@@ -127,15 +133,19 @@ struct HomeView: View {
                             isFocused: $isSearchFocused,
                             showsBack: showsSearchBack,
                             accessory: isAdvancedFilterEnabled
-                                ? .advancedFilter(isActive: hasAdvancedHistoryFilterToken)
+                                ? .advancedFilter(
+                                    isActive: hasAdvancedHistoryFilterToken,
+                                    isLocked: !hasAdvancedSearchAccess
+                                )
                                 : .legacyMagnifier
                         ) {
                             let committedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
                             if let activeSearchField,
                                !committedQuery.isEmpty
                             {
-                                appendSearchToken(field: activeSearchField, value: committedQuery)
-                                query = ""
+                                if appendSearchToken(field: activeSearchField, value: committedQuery) {
+                                    query = ""
+                                }
                                 self.activeSearchField = nil
                             }
                             isSearchFocused = false
@@ -193,6 +203,9 @@ struct HomeView: View {
                             HomeSearchSuggestionPanel(
                                 width: contentWidth,
                                 items: suggestionItems,
+                                isItemLocked: { item in
+                                    !hasAdvancedSearchAccess && item.kind.field.isPremiumAdvancedSearchField
+                                },
                                 onSelect: applySuggestion
                             )
                         }
@@ -322,17 +335,35 @@ struct HomeView: View {
         .sheet(isPresented: $showsAdvancedFilterSheet) {
             HomeAdvancedFilterSheet(
                 draft: $advancedFilterDraft,
+                mode: hasAdvancedSearchAccess ? .interactive : .preview,
                 onApply: {
+                    guard hasAdvancedSearchAccess else { return }
                     applyAdvancedFilterDraft()
                     showsAdvancedFilterSheet = false
                 },
                 onClear: {
+                    guard hasAdvancedSearchAccess else { return }
                     clearAdvancedHistoryFilters()
                     showsAdvancedFilterSheet = false
+                },
+                onUpgrade: {
+                    showsAdvancedFilterSheet = false
+                    router.presentPaywall(.advancedSearch)
                 }
             )
             .presentationDetents([.height(HomeStyle.advancedFilterSheetHeight)])
             .presentationDragIndicator(.visible)
+            .presentationBackground(HomeStyle.background)
+        }
+        .onChange(of: sortOption) { oldValue, newValue in
+            handleSortOptionChanged(oldValue: oldValue, newValue: newValue)
+        }
+        .onChange(of: premiumAccess.subscriptionStatus) { _, _ in
+            sanitizeAdvancedSearchStateIfNeeded()
+        }
+        .task {
+            await premiumAccess.ensureStatusLoaded()
+            sanitizeAdvancedSearchStateIfNeeded()
         }
     }
 }
@@ -354,10 +385,6 @@ private struct HomeScrollViewportHeightPreferenceKey: PreferenceKey {
 }
 
 private extension HomeView {
-    func borderColor(for episode: Episode) -> Color {
-        episode.isUnlocked ? HomeStyle.cardBorder : HomeStyle.lockedCardBorder
-    }
-
     func hasAnySearchCondition() -> Bool {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty || !searchTokens.isEmpty
@@ -370,23 +397,34 @@ private extension HomeView {
         advancedFilterDraft.clearHistoryConditions()
     }
 
-    func appendSearchToken(field: HomeSearchField, value: String) {
-        guard let token = HomeSearchFilterToken(field: field, value: value) else { return }
+    @discardableResult
+    func appendSearchToken(field: HomeSearchField, value: String) -> Bool {
+        if field.isPremiumAdvancedSearchField && !hasAdvancedSearchAccess {
+            router.presentPaywall(.advancedSearch)
+            return false
+        }
+        guard let token = HomeSearchFilterToken(field: field, value: value) else { return false }
         if !searchTokens.contains(token) {
             searchTokens.append(token)
         }
+        return true
     }
 
     func applySuggestion(_ item: HomeSearchSuggestionItem) {
         switch item.kind {
         case .selectField(let field):
+            guard !field.isPremiumAdvancedSearchField || hasAdvancedSearchAccess else {
+                router.presentPaywall(.advancedSearch)
+                return
+            }
             activeSearchField = field
             isSearchCommitted = !searchTokens.isEmpty
         case .value(let field, let value):
-            appendSearchToken(field: field, value: value)
-            query = ""
-            activeSearchField = nil
-            isSearchCommitted = true
+            if appendSearchToken(field: field, value: value) {
+                query = ""
+                activeSearchField = nil
+                isSearchCommitted = true
+            }
         }
         isSearchFocused = true
     }
@@ -409,6 +447,46 @@ private extension HomeView {
         searchTokens = HomeAdvancedFilterDraft.removingHistoryTokens(from: searchTokens)
         advancedFilterDraft.clearHistoryConditions()
         isSearchCommitted = hasAnySearchCondition()
+    }
+
+    func sanitizeAdvancedSearchStateIfNeeded() {
+        guard !hasAdvancedSearchAccess else { return }
+
+        let previousTokens = searchTokens
+        searchTokens = searchTokens.filter { !$0.field.isPremiumAdvancedSearchField }
+
+        var didSanitize = previousTokens.count != searchTokens.count
+        if let activeSearchField,
+           activeSearchField.isPremiumAdvancedSearchField
+        {
+            self.activeSearchField = nil
+            didSanitize = true
+        }
+
+        guard didSanitize else { return }
+        advancedFilterDraft = HomeAdvancedFilterDraft(tokens: searchTokens)
+        advancedFilterDraft.clearHistoryConditions()
+        isSearchCommitted = hasAnySearchCondition()
+    }
+
+    func handleSortOptionChanged(oldValue: HomeEpisodeSortOption, newValue: HomeEpisodeSortOption) {
+        // Programmatic revert sets this flag to avoid recursively re-entering onChange.
+        if isRevertingSortSelection {
+            isRevertingSortSelection = false
+            return
+        }
+
+        guard newValue.requiresPremium else { return }
+        guard premiumAccess.hasAccess(to: .advancedSort) else {
+            revertSortSelectionAndPresentPaywall(oldValue: oldValue)
+            return
+        }
+    }
+
+    private func revertSortSelectionAndPresentPaywall(oldValue: HomeEpisodeSortOption) {
+        isRevertingSortSelection = true
+        sortOption = oldValue
+        router.presentPaywall(.advancedSort)
     }
 
     func buildSearchSummaryText() -> String {
@@ -437,7 +515,6 @@ private extension HomeView {
             date: episode.date,
             isUnlocked: episode.isUnlocked,
             width: width,
-            borderColor: borderColor(for: episode),
             showsSelection: isSelectionMode,
             isSelected: isSelected
         )
@@ -568,6 +645,7 @@ struct HomeView_Previews: PreviewProvider {
     static var previews: some View {
         HomeView()
             .environmentObject(AppRouter())
+            .environmentObject(PremiumAccessViewModel())
     }
 }
 
@@ -622,18 +700,30 @@ private struct HomeSelectionStatusRow: View {
 }
 
 private enum HomeEpisodeSortOption: String, CaseIterable, Identifiable {
-    case createdAtDescending = "登録日(新しい順)"
-    case createdAtAscending = "登録日(古い順)"
+    case createdAtDescending = "エピソード日付(新しい順)"
+    case createdAtAscending = "エピソード日付(古い順)"
     case recentlyTalked = "最近話した順"
     case longTimeNoTalk = "最近話していない順"
     case talkedCountDescending = "話した回数(降順)"
     case talkedCountAscending = "話した回数(昇順)"
 
     var id: String { rawValue }
+
+    var requiresPremium: Bool {
+        switch self {
+        case .createdAtDescending, .createdAtAscending:
+            return false
+        case .recentlyTalked, .longTimeNoTalk, .talkedCountDescending, .talkedCountAscending:
+            return true
+        }
+    }
 }
 
 private struct HomeEpisodeSortControl: View {
+    @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
     @Binding var selection: HomeEpisodeSortOption
+    @State private var showsSortOptions = false
     let width: CGFloat
 
     private var widestLabel: String {
@@ -648,18 +738,8 @@ private struct HomeEpisodeSortControl: View {
                 .font(HomeFont.bodyMedium())
                 .foregroundColor(HomeStyle.subtitle)
             Spacer(minLength: 0)
-            Menu {
-                ForEach(HomeEpisodeSortOption.allCases) { option in
-                    Button {
-                        selection = option
-                    } label: {
-                        if selection == option {
-                            Label(option.rawValue, systemImage: "checkmark")
-                        } else {
-                            Text(option.rawValue)
-                        }
-                    }
-                }
+            Button {
+                showsSortOptions.toggle()
             } label: {
                 ZStack(alignment: .leading) {
                     // Keep width stable by reserving space for the longest sort label.
@@ -687,15 +767,129 @@ private struct HomeEpisodeSortControl: View {
                 }
                 .padding(.horizontal, 10)
                 .frame(height: HomeStyle.searchChipHeight)
-                .background(HomeStyle.searchChipFill)
+                .background(HomeStyle.sortMenuFill)
                 .overlay(
                     Capsule()
-                        .stroke(HomeStyle.searchChipBorder, lineWidth: 1)
+                        .stroke(HomeStyle.sortMenuBorder, lineWidth: 1)
                 )
                 .clipShape(Capsule())
+                .shadow(
+                    color: HomeStyle.controlShadowPrimary,
+                    radius: HomeStyle.controlShadowPrimaryRadius,
+                    x: 0,
+                    y: HomeStyle.controlShadowPrimaryY
+                )
+                .shadow(
+                    color: HomeStyle.controlShadowSecondary,
+                    radius: HomeStyle.controlShadowSecondaryRadius,
+                    x: 0,
+                    y: HomeStyle.controlShadowSecondaryY
+                )
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showsSortOptions, attachmentAnchor: .rect(.bounds), arrowEdge: .top) {
+                sortOptionsPopover
+                    .presentationCompactAdaptation(.popover)
             }
         }
         .frame(width: width, alignment: .leading)
+    }
+
+    private func shouldShowPremiumLock(for option: HomeEpisodeSortOption) -> Bool {
+        option.requiresPremium && !premiumAccess.hasAccess(to: .advancedSort)
+    }
+
+    private var sortOptionsPopover: some View {
+        VStack(spacing: 0) {
+            ForEach(HomeEpisodeSortOption.allCases) { option in
+                Button {
+                    if shouldShowPremiumLock(for: option) {
+                        showsSortOptions = false
+                        router.presentPaywall(.advancedSort)
+                        return
+                    }
+                    selection = option
+                    showsSortOptions = false
+                } label: {
+                    sortOptionRow(for: option)
+                        .padding(.horizontal, 14)
+                        .frame(height: 46)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(width: 276, alignment: .leading)
+        .padding(.vertical, 8)
+        .background(Color(.systemBackground))
+    }
+
+    @ViewBuilder
+    private func sortOptionRow(for option: HomeEpisodeSortOption) -> some View {
+        let isLockedOption = shouldShowPremiumLock(for: option)
+        HStack(spacing: 8) {
+            Group {
+                if selection == option {
+                    checkmarkBadge()
+                } else if isLockedOption {
+                    proBadgeWithLock()
+                } else {
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                }
+            }
+            .frame(width: HomeStyle.sortOptionAccessoryWidth, alignment: .center)
+
+            Text(option.rawValue)
+                .font(AppTypography.bodyEmphasis)
+                .foregroundColor(isLockedOption ? HomeStyle.sortLockedOptionText : HomeStyle.searchChipText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(1)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func proBadgeWithLock() -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 11, weight: .semibold))
+            Text("Pro")
+                .font(AppTypography.metaEmphasis)
+        }
+        .foregroundColor(HomeStyle.sortProChipText)
+        .fixedSize(horizontal: true, vertical: false)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(
+            Capsule()
+                .fill(HomeStyle.sortProChipFill)
+                .overlay(
+                    Capsule()
+                        .stroke(HomeStyle.sortProChipBorder, lineWidth: 1)
+                )
+        )
+    }
+
+    private func checkmarkBadge() -> some View {
+        ZStack {
+            Circle()
+                .fill(HomeStyle.sortCheckChipFill)
+                .overlay(
+                    Circle()
+                        .stroke(HomeStyle.sortCheckChipBorder, lineWidth: 1)
+                )
+            Image(systemName: "checkmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(HomeStyle.sortCheckChipText)
+        }
+        .frame(
+            width: HomeStyle.sortCheckBadgeDiameter,
+            height: HomeStyle.sortCheckBadgeDiameter
+        )
+        .fixedSize(horizontal: true, vertical: true)
     }
 }
 

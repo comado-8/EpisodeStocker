@@ -4,8 +4,11 @@ import SwiftUI
 struct NewEpisodeView: View {
   @EnvironmentObject var store: EpisodeStore
   @EnvironmentObject private var router: AppRouter
+  @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Query(filter: #Predicate<Episode> { $0.isSoftDeleted == false })
+  private var episodes: [Episode]
   @Query(filter: #Predicate<Person> { $0.isSoftDeleted == false })
   private var allPersons: [Person]
   @Query(filter: #Predicate<Project> { $0.isSoftDeleted == false })
@@ -164,7 +167,7 @@ struct NewEpisodeView: View {
         .onTapGesture {
           hideKeyboard()
         }
-        .background(Color.white)
+        .background(HomeStyle.screenBackground)
         .overlay(alignment: .bottom) {
           if !isKeyboardVisible {
             actionBarView
@@ -254,6 +257,9 @@ struct NewEpisodeView: View {
       .onDisappear {
         router.hasUnsavedNewEpisodeChanges = false
       }
+      .task {
+        await premiumAccess.ensureStatusLoaded()
+      }
       .edgeSwipeBack {
         requestClose()
       }
@@ -285,9 +291,9 @@ struct NewEpisodeView: View {
   private var formView: some View {
     VStack(alignment: .leading, spacing: NewEpisodeStyle.sectionSpacing) {
       labeledDateField(
-        title: "日付",
+        title: "エピソード日付",
         required: true,
-        placeholder: "日付を選択",
+        placeholder: "エピソード日付を選択",
         date: $selectedDate
       )
 
@@ -931,6 +937,10 @@ struct NewEpisodeView: View {
       !isProjectNameOverLimit,
       !isPlaceNameOverLimit
     else { return }
+    guard premiumAccess.canCreateEpisode(currentActiveCount: episodes.count) else {
+      router.presentPaywall(.episodeQuotaOver50)
+      return
+    }
     let selectedPlaceValue = (selectedPlaceChip ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     let placeValue =
       selectedPlaceValue.isEmpty ? normalizedPlaceName(placeText) : selectedPlaceValue
@@ -1465,6 +1475,7 @@ struct NewEpisodeView_Previews: PreviewProvider {
     NewEpisodeView()
       .environmentObject(EpisodeStore())
       .environmentObject(AppRouter())
+      .environmentObject(PremiumAccessViewModel())
   }
 }
 

@@ -223,6 +223,16 @@ final class HomeSearchQueryEngineTests: XCTestCase {
         XCTAssertEqual(valueItem.symbolName, HomeSearchField.project.symbolName)
     }
 
+    func testPremiumAdvancedSearchFieldMapping() {
+        let premiumFields: Set<HomeSearchField> = [
+            .talkCount, .lastTalkedAt, .registeredDate, .mediaType, .reaction
+        ]
+
+        for field in HomeSearchField.allCases {
+            XCTAssertEqual(field.isPremiumAdvancedSearchField, premiumFields.contains(field))
+        }
+    }
+
     func testSuggestionsRespectFieldOrderAndMaxValuesPerField() throws {
         _ = makeEpisode(title: "1", body: "", persons: ["Alice"])
         _ = makeEpisode(title: "2", body: "", persons: ["Ami"])

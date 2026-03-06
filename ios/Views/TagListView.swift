@@ -58,7 +58,7 @@ struct TagListView: View {
         let isSearching = !trimmedQuery.isEmpty
 
         ZStack(alignment: .bottomTrailing) {
-          HomeStyle.background.ignoresSafeArea()
+          HomeStyle.screenBackground.ignoresSafeArea()
 
           VStack(spacing: TagStyle.sectionSpacing) {
             VStack(alignment: .leading, spacing: TagStyle.sectionSpacing) {
@@ -279,6 +279,24 @@ private struct TagListCardView: View {
     }
     .frame(width: width, alignment: .top)
     .frame(maxHeight: .infinity, alignment: .top)
+    .background(TagStyle.cardFill)
+    .clipShape(RoundedRectangle(cornerRadius: TagStyle.cardCornerRadius, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: TagStyle.cardCornerRadius, style: .continuous)
+        .stroke(TagStyle.cardBorder, lineWidth: TagStyle.cardBorderWidth)
+    )
+    .shadow(
+      color: TagStyle.cardShadowPrimary,
+      radius: TagStyle.cardShadowPrimaryRadius,
+      x: 0,
+      y: TagStyle.cardShadowPrimaryY
+    )
+    .shadow(
+      color: TagStyle.cardShadowSecondary,
+      radius: TagStyle.cardShadowSecondaryRadius,
+      x: 0,
+      y: TagStyle.cardShadowSecondaryY
+    )
   }
 }
 
@@ -695,6 +713,7 @@ private enum TagStyle {
   static let subheaderText = HomeStyle.textSecondary
   static let rowTitleText = HomeStyle.textPrimary
   static let rowMetaText = HomeStyle.textSecondary
+  static let cardFill = Color.white
   static let rowDivider = Color(hex: "E5E7EB")
   static let cardBorder = Color(hex: "E5E7EB")
   static let headerIconTint = Color(hex: "101828")

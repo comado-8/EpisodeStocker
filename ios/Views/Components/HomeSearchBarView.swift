@@ -2,7 +2,7 @@ import SwiftUI
 
 enum HomeSearchBarAccessory: Equatable {
     case legacyMagnifier
-    case advancedFilter(isActive: Bool)
+    case advancedFilter(isActive: Bool, isLocked: Bool)
 }
 
 struct HomeSearchBarView: View {
@@ -91,6 +91,18 @@ struct HomeSearchBarView: View {
                 )
         )
         .clipShape(Capsule())
+        .shadow(
+            color: HomeStyle.controlShadowPrimary,
+            radius: HomeStyle.controlShadowPrimaryRadius,
+            x: 0,
+            y: HomeStyle.controlShadowPrimaryY
+        )
+        .shadow(
+            color: HomeStyle.controlShadowSecondary,
+            radius: HomeStyle.controlShadowSecondaryRadius,
+            x: 0,
+            y: HomeStyle.controlShadowSecondaryY
+        )
         .contentShape(Capsule())
         .onTapGesture {
             isFocused.wrappedValue = true
@@ -103,37 +115,46 @@ struct HomeSearchBarView: View {
         case .legacyMagnifier:
             Image(systemName: "magnifyingglass")
                 .foregroundColor(HomeStyle.segmentText)
-        case .advancedFilter(let isActive):
+        case .advancedFilter(let isActive, let isLocked):
             Group {
                 if let onAccessoryTap {
                     Button {
                         onAccessoryTap()
                     } label: {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(
-                                isActive ? HomeStyle.advancedFilterAccessoryActiveIcon
-                                    : HomeStyle.segmentText
-                            )
-                            .padding(6)
-                            .background(
-                                Capsule()
-                                    .fill(
-                                        isActive ? HomeStyle.advancedFilterAccessoryActiveFill
-                                            : .clear
-                                    )
-                            )
+                        advancedFilterIcon(isActive: isActive, isLocked: isLocked)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("詳細検索")
+                    .accessibilityLabel(isLocked ? "詳細検索（有料）" : "詳細検索")
                 } else {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(
-                            isActive ? HomeStyle.advancedFilterAccessoryActiveIcon
-                                : HomeStyle.segmentText
-                        )
+                    advancedFilterIcon(isActive: isActive, isLocked: isLocked)
                 }
+            }
+        }
+    }
+
+    private func advancedFilterIcon(isActive: Bool, isLocked: Bool) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(
+                    isActive ? HomeStyle.advancedFilterAccessoryActiveIcon
+                        : HomeStyle.segmentText
+                )
+                .padding(6)
+                .background(
+                    Capsule()
+                        .fill(
+                            isActive ? HomeStyle.advancedFilterAccessoryActiveFill
+                                : .clear
+                        )
+                )
+
+            if isLocked {
+                PremiumLockBadge()
+                    .offset(
+                        x: HomeStyle.premiumLockBadgeOffsetX,
+                        y: HomeStyle.premiumLockBadgeOffsetY
+                    )
             }
         }
     }

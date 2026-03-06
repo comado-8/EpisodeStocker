@@ -12,7 +12,7 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
             ),
             products: [
                 SubscriptionProduct(
-                    id: "com.episodestocker.premium.monthly",
+                    id: SubscriptionCatalog.monthlyProductID,
                     displayName: "月額プラン",
                     displayPrice: "¥400",
                     plan: .monthly
@@ -31,7 +31,7 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
 
         XCTAssertEqual(vm.status.plan, .monthly)
         XCTAssertEqual(vm.products.count, 1)
-        XCTAssertEqual(vm.products.first?.id, "com.episodestocker.premium.monthly")
+        XCTAssertEqual(vm.products.first?.id, SubscriptionCatalog.monthlyProductID)
         XCTAssertNil(vm.errorMessage)
     }
 
@@ -49,7 +49,7 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
         )
         let vm = SubscriptionSettingsViewModel(service: service)
 
-        await vm.purchase(productID: "com.episodestocker.premium.yearly")
+        await vm.purchase(productID: SubscriptionCatalog.yearlyProductID)
 
         XCTAssertEqual(vm.status.plan, .yearly)
         XCTAssertNil(vm.errorMessage)
@@ -68,7 +68,7 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
         )
         let vm = SubscriptionSettingsViewModel(service: service)
 
-        await vm.purchase(productID: "com.episodestocker.premium.monthly")
+        await vm.purchase(productID: SubscriptionCatalog.monthlyProductID)
 
         XCTAssertEqual(vm.errorMessage, "購入はキャンセルされました。")
     }

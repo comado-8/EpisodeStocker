@@ -8,91 +8,31 @@ struct AnalyticsView: View {
     )
     private var episodes: [Episode]
 
-    @Query(
-        filter: #Predicate<UnlockLog> { $0.isSoftDeleted == false },
-        sort: [SortDescriptor(\UnlockLog.talkedAt, order: .reverse)]
-    )
-    private var unlockLogs: [UnlockLog]
+    @StateObject private var viewModel = AnalyticsMVPViewModel()
 
-    private var monthTalkCount: Int {
-        unlockLogs.filter {
-            Calendar.current.isDate($0.talkedAt, equalTo: Date(), toGranularity: .month)
-        }.count
-    }
+    private var refreshToken: Int {
+        var hasher = Hasher()
+        for episode in episodes.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+            hasher.combine(episode.id)
+            hasher.combine(episode.updatedAt.timeIntervalSince1970)
+            hasher.combine(episode.title)
 
-    private var talkedRankingTop10: [AnalyticsEpisodeRankItem] {
-        episodes
-            .sorted { lhs, rhs in
-                if lhs.talkedCount != rhs.talkedCount {
-                    return lhs.talkedCount > rhs.talkedCount
-                }
-                let lhsLatest = lhs.latestTalkedAt ?? .distantPast
-                let rhsLatest = rhs.latestTalkedAt ?? .distantPast
-                if lhsLatest != rhsLatest {
-                    return lhsLatest > rhsLatest
-                }
-                return lhs.updatedAt > rhs.updatedAt
+            for tag in episode.tags.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+                hasher.combine(tag.id)
+                hasher.combine(tag.updatedAt.timeIntervalSince1970)
+                hasher.combine(tag.name)
+                hasher.combine(tag.isSoftDeleted)
             }
-            .prefix(10)
-            .enumerated()
-            .map { index, episode in
-                AnalyticsEpisodeRankItem(
-                    rank: index + 1,
-                    title: episode.title,
-                    metric: "\(episode.talkedCount)回",
-                    submetric: episode.latestTalkedAt.map { "最終 \(AnalyticsStyle.dateFormatter.string(from: $0))" } ?? "未トーク"
-                )
+
+            for log in episode.activeUnlockLogs.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+                hasher.combine(log.id)
+                hasher.combine(log.updatedAt.timeIntervalSince1970)
+                hasher.combine(log.talkedAt.timeIntervalSince1970)
+                hasher.combine(log.reaction)
+                hasher.combine(log.isSoftDeleted)
             }
-    }
-
-    private var notTalkedRecentlyTop10: [AnalyticsEpisodeRankItem] {
-        episodes
-            .sorted { lhs, rhs in
-                let lhsLatest = lhs.latestTalkedAt
-                let rhsLatest = rhs.latestTalkedAt
-
-                if lhsLatest == nil && rhsLatest != nil {
-                    return true
-                }
-                if lhsLatest != nil && rhsLatest == nil {
-                    return false
-                }
-
-                let lhsDate = lhsLatest ?? .distantFuture
-                let rhsDate = rhsLatest ?? .distantFuture
-                if lhsDate != rhsDate {
-                    return lhsDate < rhsDate
-                }
-                return lhs.updatedAt < rhs.updatedAt
-            }
-            .prefix(10)
-            .enumerated()
-            .map { index, episode in
-                AnalyticsEpisodeRankItem(
-                    rank: index + 1,
-                    title: episode.title,
-                    metric: episode.latestTalkedAt.map { AnalyticsStyle.dateFormatter.string(from: $0) } ?? "未トーク",
-                    submetric: "話した回数 \(episode.talkedCount)回"
-                )
-            }
-    }
-
-    private var mediaTypeBreakdown: [AnalyticsMetricItem] {
-        var counts: [String: Int] = [:]
-        for log in unlockLogs {
-            let trimmed = log.mediaType?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let key = trimmed.isEmpty ? "未設定" : trimmed
-            counts[key, default: 0] += 1
         }
-
-        return counts
-            .map { AnalyticsMetricItem(label: $0.key, count: $0.value) }
-            .sorted { lhs, rhs in
-                if lhs.count != rhs.count {
-                    return lhs.count > rhs.count
-                }
-                return lhs.label < rhs.label
-            }
+        return hasher.finalize()
     }
 
     var body: some View {
@@ -101,202 +41,464 @@ struct AnalyticsView: View {
             let topPadding = max(0, AnalyticsStyle.figmaTopInset - proxy.safeAreaInsets.top)
 
             ZStack {
-                HomeStyle.background.ignoresSafeArea()
+                AnalyticsStyle.background.ignoresSafeArea()
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("分析")
-                            .font(AnalyticsStyle.headerFont)
-                            .foregroundColor(AnalyticsStyle.headerText)
+                if viewModel.snapshot == nil, viewModel.isLoading {
+                    ProgressView("分析を計算中…")
+                        .font(AppTypography.body)
+                        .foregroundColor(AnalyticsStyle.supportingText)
+                } else {
+                    ScrollView(showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            AnalyticsHeaderView()
 
-                        AnalyticsSummaryCard(
-                            title: "今月のトーク回数",
-                            valueText: "\(monthTalkCount)回"
-                        )
+                            if let snapshot = viewModel.snapshot {
+                                AnalyticsSectionHeader(title: "掘り起こしエピソード")
+                                AnalyticsDigUpCard(items: snapshot.digUpSuggestions)
 
-                        AnalyticsSectionCard(title: "話した回数ランキング Top10") {
-                            if talkedRankingTop10.isEmpty {
-                                AnalyticsEmptyText(text: "データがありません")
+                                AnalyticsSectionHeader(title: "エピソード分析")
+                                AnalyticsTopTalkedCard(items: snapshot.topTalkedEpisodes)
+                                AnalyticsDormantCard(items: snapshot.dormantEpisodes)
+                                AnalyticsStrongCard(items: snapshot.strongEpisodes)
+                                AnalyticsOverusedCard(items: snapshot.overusedEpisodes)
+
+                                AnalyticsSectionHeader(title: "ジャンル分析")
+                                AnalyticsTagTalkCountCard(items: snapshot.tagTalkCounts)
+                                AnalyticsTagHitRateCard(items: snapshot.tagHitRates)
+                            } else if let errorMessage = viewModel.errorMessage {
+                                AnalyticsErrorCard(message: errorMessage)
                             } else {
-                                ForEach(talkedRankingTop10) { item in
-                                    AnalyticsRankRow(item: item)
-                                }
+                                AnalyticsErrorCard(message: "分析対象のデータがありません。")
                             }
                         }
-
-                        AnalyticsSectionCard(title: "最近話していないエピソード Top10") {
-                            if notTalkedRecentlyTop10.isEmpty {
-                                AnalyticsEmptyText(text: "データがありません")
-                            } else {
-                                ForEach(notTalkedRecentlyTop10) { item in
-                                    AnalyticsRankRow(item: item)
-                                }
-                            }
-                        }
-
-                        AnalyticsSectionCard(title: "媒体別トーク回数") {
-                            if mediaTypeBreakdown.isEmpty {
-                                AnalyticsEmptyText(text: "データがありません")
-                            } else {
-                                ForEach(mediaTypeBreakdown) { item in
-                                    HStack {
-                                        Text(item.label)
-                                            .font(AnalyticsStyle.bodyFont)
-                                            .foregroundColor(AnalyticsStyle.headerText)
-                                        Spacer(minLength: 0)
-                                        Text("\(item.count)回")
-                                            .font(AnalyticsStyle.bodyFont)
-                                            .foregroundColor(AnalyticsStyle.bodyText)
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-                        }
+                        .frame(width: contentWidth, alignment: .leading)
+                        .padding(.top, topPadding)
+                        .padding(.bottom, HomeStyle.tabBarHeight + 16)
+                        .frame(maxWidth: .infinity, alignment: .top)
                     }
-                    .frame(width: contentWidth, alignment: .leading)
-                    .padding(.top, topPadding)
-                    .padding(.bottom, HomeStyle.tabBarHeight + 16)
-                    .frame(maxWidth: .infinity, alignment: .top)
                 }
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .task(id: refreshToken) {
+            await viewModel.refresh(episodes: episodes)
+        }
     }
 }
 
-private struct AnalyticsMetricItem: Identifiable {
-    let label: String
-    let count: Int
+private struct AnalyticsHeaderView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("分析ダッシュボード")
+                .font(AnalyticsStyle.titleFont)
+                .foregroundColor(AnalyticsStyle.titleText)
 
-    var id: String { label }
+            Text("エピソード履歴の傾向を確認")
+                .font(AnalyticsStyle.descriptionFont)
+                .foregroundColor(AnalyticsStyle.descriptionText)
+        }
+        .padding(.horizontal, 2)
+        .padding(.bottom, 8)
+    }
 }
 
-private struct AnalyticsEpisodeRankItem: Identifiable {
-    let rank: Int
+private struct AnalyticsSectionHeader: View {
     let title: String
-    let metric: String
-    let submetric: String
-
-    var id: String { "\(rank)-\(title)" }
-}
-
-private enum AnalyticsStyle {
-    static let figmaTopInset: CGFloat = 59
-    static let headerFont = AppTypography.screenTitle
-    static let sectionTitleFont = AppTypography.bodyEmphasis
-    static let bodyFont = AppTypography.body
-    static let subtextFont = AppTypography.subtext
-    static let headerText = HomeStyle.textPrimary
-    static let bodyText = HomeStyle.textSecondary
-
-    static let cardFill = Color(hex: "FFFFFF")
-    static let cardBorder = Color(hex: "E5E7EB")
-
-    static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "yyyy/MM/dd"
-        return formatter
-    }()
-}
-
-private struct AnalyticsSummaryCard: View {
-    let title: String
-    let valueText: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(AnalyticsStyle.sectionTitleFont)
-                .foregroundColor(AnalyticsStyle.headerText)
-
-            Text(valueText)
-                .font(AppTypography.screenTitle)
-                .foregroundColor(HomeStyle.fabRed)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(AnalyticsStyle.cardFill)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AnalyticsStyle.cardBorder, lineWidth: 1)
-                )
-        )
+        Text(title)
+            .font(AppTypography.sectionTitle)
+            .foregroundColor(AnalyticsStyle.sectionTitle)
+            .padding(.top, 4)
+            .padding(.horizontal, 2)
     }
 }
 
-private struct AnalyticsSectionCard<Content: View>: View {
-    let title: String
-    let content: Content
-
-    init(title: String, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.content = content()
-    }
+private struct AnalyticsDigUpCard: View {
+    let items: [DigUpSuggestionItem]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(AnalyticsStyle.sectionTitleFont)
-                .foregroundColor(AnalyticsStyle.headerText)
+        VStack(alignment: .leading, spacing: 14) {
+            AnalyticsCardHeader(
+                icon: "sparkles",
+                iconFill: Color(hex: "EA580C"),
+                title: "最近話していないウケるネタ"
+            )
 
-            content
+            if items.isEmpty {
+                AnalyticsEmptyLabel(text: "条件を満たす候補がありません")
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(items) { item in
+                        NavigationLink(value: item.episodeID) {
+                            AnalyticsEpisodeRow(
+                                title: item.title,
+                                subtitle: "最終 \(AnalyticsStyle.dateFormatter.string(from: item.lastTalkedAt))",
+                                trailing: "\(AnalyticsStyle.percent(item.hitRate)) / \(item.talkCount)回"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(AnalyticsStyle.cardFill)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AnalyticsStyle.cardBorder, lineWidth: 1)
-                )
-        )
+        .analyticsCardStyle()
     }
 }
 
-private struct AnalyticsRankRow: View {
-    let item: AnalyticsEpisodeRankItem
+private struct AnalyticsTopTalkedCard: View {
+    let items: [EpisodeTopItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AnalyticsCardHeader(
+                icon: "star.fill",
+                iconFill: AnalyticsStyle.accentRed,
+                title: "よく使われているエピソード"
+            )
+
+            if items.isEmpty {
+                AnalyticsEmptyLabel(text: "データがありません")
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(items) { item in
+                        NavigationLink(value: item.episodeID) {
+                            AnalyticsEpisodeRow(
+                                title: item.title,
+                                subtitle: item.lastTalkedAt.map {
+                                    "最終 \(AnalyticsStyle.dateFormatter.string(from: $0))"
+                                } ?? "未トーク",
+                                trailing: "\(item.talkCount)回"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .analyticsCardStyle()
+    }
+}
+
+private struct AnalyticsDormantCard: View {
+    let items: [EpisodeDormantItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AnalyticsCardHeader(
+                icon: "moon.fill",
+                iconFill: Color(hex: "334155"),
+                title: "話していないエピソード"
+            )
+
+            if items.isEmpty {
+                AnalyticsEmptyLabel(text: "データがありません")
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(items) { item in
+                        let subtitle = item.lastTalkedAt.map {
+                            "最終 \(AnalyticsStyle.dateFormatter.string(from: $0))"
+                        } ?? "未トーク"
+
+                        NavigationLink(value: item.episodeID) {
+                            AnalyticsEpisodeRow(
+                                title: item.title,
+                                subtitle: subtitle,
+                                trailing: "\(item.talkCount)回"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .analyticsCardStyle()
+    }
+}
+
+private struct AnalyticsStrongCard: View {
+    let items: [EpisodeHitRateItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AnalyticsCardHeader(
+                icon: "flame.fill",
+                iconFill: Color(hex: "B91C1C"),
+                title: "ウケ率ランキング（3回以上）"
+            )
+
+            if items.isEmpty {
+                AnalyticsEmptyLabel(text: "条件を満たすエピソードがありません")
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(items) { item in
+                        NavigationLink(value: item.episodeID) {
+                            AnalyticsEpisodeRow(
+                                title: item.title,
+                                subtitle: item.lastTalkedAt.map {
+                                    "最終 \(AnalyticsStyle.dateFormatter.string(from: $0))"
+                                } ?? "未トーク",
+                                trailing: "\(AnalyticsStyle.percent(item.hitRate)) / \(item.talkCount)回"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .analyticsCardStyle()
+    }
+}
+
+private struct AnalyticsOverusedCard: View {
+    let items: [EpisodeOverusedItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AnalyticsCardHeader(
+                icon: "exclamationmark.triangle.fill",
+                iconFill: Color(hex: "92400E"),
+                title: "最近話しすぎエピソード（30日）"
+            )
+
+            if items.isEmpty {
+                AnalyticsEmptyLabel(text: "直近30日のトークはありません")
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(items) { item in
+                        NavigationLink(value: item.episodeID) {
+                            AnalyticsEpisodeRow(
+                                title: item.title,
+                                subtitle: item.lastTalkedAt.map {
+                                    "最終 \(AnalyticsStyle.dateFormatter.string(from: $0))"
+                                } ?? "未トーク",
+                                trailing: "\(item.recent30DayTalkCount)回"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .analyticsCardStyle()
+    }
+}
+
+private struct AnalyticsTagTalkCountCard: View {
+    let items: [TagTalkCountItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AnalyticsCardHeader(
+                icon: "tag.fill",
+                iconFill: Color(hex: "1E293B"),
+                title: "タグ別トーク回数"
+            )
+
+            if items.isEmpty {
+                AnalyticsEmptyLabel(text: "データがありません")
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(items) { item in
+                        AnalyticsTagRow(name: item.tagName, trailing: "\(item.talkCount)回")
+                    }
+                }
+            }
+        }
+        .analyticsCardStyle()
+    }
+}
+
+private struct AnalyticsTagHitRateCard: View {
+    let items: [TagHitRateItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AnalyticsCardHeader(
+                icon: "chart.bar.fill",
+                iconFill: Color(hex: "374151"),
+                title: "タグ別ウケ率（3回以上）"
+            )
+
+            if items.isEmpty {
+                AnalyticsEmptyLabel(text: "条件を満たすタグがありません")
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(items) { item in
+                        AnalyticsTagRow(
+                            name: item.tagName,
+                            trailing: "\(AnalyticsStyle.percent(item.hitRate)) / \(item.talkCount)回"
+                        )
+                    }
+                }
+            }
+        }
+        .analyticsCardStyle()
+    }
+}
+
+private struct AnalyticsCardHeader: View {
+    let icon: String
+    let iconFill: Color
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(iconFill)
+                )
+
+            Text(title)
+                .font(AnalyticsStyle.cardTitleFont)
+                .foregroundColor(AnalyticsStyle.cardText)
+        }
+    }
+}
+
+private struct AnalyticsEpisodeRow: View {
+    let title: String
+    let subtitle: String
+    let trailing: String
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Text("\(item.rank).")
-                .font(AnalyticsStyle.subtextFont)
-                .foregroundColor(HomeStyle.subtitle)
-                .frame(width: 24, alignment: .leading)
-
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(AnalyticsStyle.bodyFont)
-                    .foregroundColor(AnalyticsStyle.headerText)
-                    .lineLimit(1)
+                Text(title)
+                    .font(AnalyticsStyle.rowTitleFont)
+                    .foregroundColor(AnalyticsStyle.cardText)
+                    .lineLimit(2)
 
-                Text(item.submetric)
-                    .font(AnalyticsStyle.subtextFont)
-                    .foregroundColor(AnalyticsStyle.bodyText)
+                Text(subtitle)
+                    .font(AppTypography.caption)
+                    .foregroundColor(AnalyticsStyle.supportingText)
             }
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
 
-            Text(item.metric)
-                .font(AnalyticsStyle.bodyFont)
-                .foregroundColor(HomeStyle.fabRed)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(trailing)
+                    .font(AppTypography.metaEmphasis)
+                    .foregroundColor(AnalyticsStyle.metricText)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(hex: "9CA3AF"))
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
     }
 }
 
-private struct AnalyticsEmptyText: View {
+private struct AnalyticsTagRow: View {
+    let name: String
+    let trailing: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(name)
+                .font(AnalyticsStyle.rowTitleFont)
+                .foregroundColor(AnalyticsStyle.cardText)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            Text(trailing)
+                .font(AppTypography.metaEmphasis)
+                .foregroundColor(AnalyticsStyle.metricText)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct AnalyticsEmptyLabel: View {
     let text: String
 
     var body: some View {
         Text(text)
-            .font(AnalyticsStyle.subtextFont)
-            .foregroundColor(AnalyticsStyle.bodyText)
+            .font(AppTypography.subtext)
+            .foregroundColor(AnalyticsStyle.supportingText)
+    }
+}
+
+private struct AnalyticsErrorCard: View {
+    let message: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("分析を表示できません")
+                .font(AnalyticsStyle.cardTitleFont)
+                .foregroundColor(AnalyticsStyle.cardText)
+
+            Text(message)
+                .font(AppTypography.body)
+                .foregroundColor(AnalyticsStyle.supportingText)
+        }
+        .analyticsCardStyle()
+    }
+}
+
+private enum AnalyticsStyle {
+    static let figmaTopInset: CGFloat = 59
+
+    static let titleFont = Font.system(size: 34, weight: .bold)
+    static let descriptionFont = Font.system(size: 14, weight: .regular)
+    static let cardTitleFont = Font.system(size: 20, weight: .semibold)
+    static let rowTitleFont = AppTypography.body
+    static let bigCountFont = Font.system(size: 54, weight: .bold)
+
+    static let titleText = Color(hex: "101828")
+    static let descriptionText = Color(hex: "4A5565")
+    static let cardText = Color(hex: "101828")
+    static let sectionTitle = Color(hex: "334155")
+    static let supportingText = Color(hex: "6A7282")
+    static let metricText = Color(hex: "334155")
+    static let accentRed = Color(hex: "DC2626")
+    static let accentBlue = Color(hex: "1D4ED8")
+
+    static let cardFill = Color.white
+    static let cardShadow = Color.black.opacity(0.09)
+
+    static let background = LinearGradient(
+        colors: [
+            Color(hex: "FCD4D5"),
+            Color(hex: "FEE4D9"),
+            Color(hex: "FFF3E8")
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(identifier: "Asia/Tokyo")
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "yyyy/MM/dd"
+        return formatter
+    }()
+
+    static func percent(_ ratio: Double) -> String {
+        let value = (ratio * 100).rounded()
+        return "\(Int(value))%"
+    }
+}
+
+private extension View {
+    func analyticsCardStyle() -> some View {
+        self
+            .padding(.horizontal, 16)
+            .padding(.vertical, 18)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AnalyticsStyle.cardFill)
+                    .shadow(color: AnalyticsStyle.cardShadow, radius: 6, x: 0, y: 2)
+            )
     }
 }
 

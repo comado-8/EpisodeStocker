@@ -26,17 +26,30 @@ struct HomeStatusSegmentedControl: View {
                     .foregroundColor(selection == item ? selectedText(for: item) : HomeStyle.segmentText)
                         .frame(maxWidth: .infinity)
                         .frame(height: HomeStyle.segmentedItemHeight)
-                        .background(selection == item ? selectedFill(for: item) : Color.white)
+                        .background(selection == item ? selectedFill(for: item) : Color.clear)
                         .clipShape(Capsule())
                 }
             }
         }
         .padding(4)
         .frame(width: width, height: HomeStyle.statusRowHeight)
-        .background(Color.white)
+        .background(HomeStyle.screenBackground)
+        .clipShape(Capsule())
         .overlay(
             Capsule()
                 .stroke(HomeStyle.outline, lineWidth: 1)
+        )
+        .shadow(
+            color: HomeStyle.controlShadowPrimary,
+            radius: HomeStyle.controlShadowPrimaryRadius,
+            x: 0,
+            y: HomeStyle.controlShadowPrimaryY
+        )
+        .shadow(
+            color: HomeStyle.controlShadowSecondary,
+            radius: HomeStyle.controlShadowSecondaryRadius,
+            x: 0,
+            y: HomeStyle.controlShadowSecondaryY
         )
     }
 }
@@ -56,7 +69,7 @@ private extension HomeStatusSegmentedControl {
     func selectedFill(for item: HomeStatusFilter) -> Color {
         switch item {
         case .all:
-            return HomeStyle.searchFill
+            return HomeStyle.segmentAllSelectedFill
         case .locked:
             return HomeStyle.lockedAccent
         case .ok:

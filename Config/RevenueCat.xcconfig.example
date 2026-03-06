@@ -1,0 +1,5 @@
+// Copy this file to:
+// - Config/RevenueCat.Debug.xcconfig
+// - Config/RevenueCat.Release.xcconfig
+// Then set your RevenueCat Public SDK key for each environment.
+REVENUECAT_API_KEY = paste_revenuecat_public_sdk_key_here
