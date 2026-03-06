@@ -33,12 +33,24 @@ final class EpisodeExportService {
     }
 
     func export(format: EpisodeExportFormat, episode: Episode) throws -> URL {
+        try export(
+            format: format,
+            payload: makePayload(from: episode),
+            filenameTitle: episode.title
+        )
+    }
+
+    func export(
+        format: EpisodeExportFormat,
+        payload: EpisodeExportPayload,
+        filenameTitle: String
+    ) throws -> URL {
         try fileManager.createDirectory(
             at: temporaryDirectory,
             withIntermediateDirectories: true
         )
 
-        let filename = makeFilename(format: format, title: episode.title)
+        let filename = makeFilename(format: format, title: filenameTitle)
         let outputURL = temporaryDirectory.appendingPathComponent(filename)
         if fileManager.fileExists(atPath: outputURL.path) {
             do {
@@ -49,7 +61,6 @@ final class EpisodeExportService {
             }
         }
 
-        let payload = makePayload(from: episode)
         switch format {
         case .txt:
             try writeTXT(payload: payload, to: outputURL)
@@ -58,6 +69,22 @@ final class EpisodeExportService {
         }
 
         return outputURL
+    }
+
+    static func makePayload(
+        title: String,
+        body: String?,
+        episodeDate: Date,
+        unlockDate: Date?,
+        isUnlocked: Bool
+    ) -> EpisodeExportPayload {
+        EpisodeExportPayload(
+            title: title,
+            body: body ?? "",
+            episodeDateText: displayDateFormatter.string(from: episodeDate),
+            unlockDateText: unlockDate.map { displayDateFormatter.string(from: $0) } ?? "未設定",
+            statusText: isUnlocked ? "解禁OK" : "解禁前"
+        )
     }
 
     func makeFilename(format: EpisodeExportFormat, title: String) -> String {
@@ -90,12 +117,12 @@ final class EpisodeExportService {
     }
 
     private func makePayload(from episode: Episode) -> EpisodeExportPayload {
-        EpisodeExportPayload(
+        Self.makePayload(
             title: episode.title,
-            body: episode.body ?? "",
-            episodeDateText: Self.displayDateFormatter.string(from: episode.date),
-            unlockDateText: episode.unlockDate.map { Self.displayDateFormatter.string(from: $0) } ?? "未設定",
-            statusText: episode.isUnlocked ? "解禁OK" : "解禁前"
+            body: episode.body,
+            episodeDate: episode.date,
+            unlockDate: episode.unlockDate,
+            isUnlocked: episode.isUnlocked
         )
     }
 

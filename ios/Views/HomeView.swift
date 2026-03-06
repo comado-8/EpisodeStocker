@@ -95,7 +95,11 @@ struct HomeView: View {
     }
 
     private var hasAdvancedSearchAccess: Bool {
-        premiumAccess.hasAccess(to: .advancedSearch)
+        premiumAccess.hasLoadedStatus && premiumAccess.hasAccess(to: .advancedSearch)
+    }
+
+    private var isAdvancedSearchLocked: Bool {
+        premiumAccess.hasLoadedStatus && !premiumAccess.hasAccess(to: .advancedSearch)
     }
 
     var body: some View {
@@ -135,7 +139,7 @@ struct HomeView: View {
                             accessory: isAdvancedFilterEnabled
                                 ? .advancedFilter(
                                     isActive: hasAdvancedHistoryFilterToken,
-                                    isLocked: !hasAdvancedSearchAccess
+                                    isLocked: isAdvancedSearchLocked
                                 )
                                 : .legacyMagnifier
                         ) {
@@ -204,7 +208,7 @@ struct HomeView: View {
                                 width: contentWidth,
                                 items: suggestionItems,
                                 isItemLocked: { item in
-                                    !hasAdvancedSearchAccess && item.kind.field.isPremiumAdvancedSearchField
+                                    isAdvancedSearchLocked && item.kind.field.isPremiumAdvancedSearchField
                                 },
                                 onSelect: applySuggestion
                             )
@@ -360,10 +364,12 @@ struct HomeView: View {
         }
         .onChange(of: premiumAccess.subscriptionStatus) { _, _ in
             sanitizeAdvancedSearchStateIfNeeded()
+            sanitizeSortOptionIfNeeded()
         }
         .task {
             await premiumAccess.ensureStatusLoaded()
             sanitizeAdvancedSearchStateIfNeeded()
+            sanitizeSortOptionIfNeeded()
         }
     }
 }
@@ -399,7 +405,7 @@ private extension HomeView {
 
     @discardableResult
     func appendSearchToken(field: HomeSearchField, value: String) -> Bool {
-        if field.isPremiumAdvancedSearchField && !hasAdvancedSearchAccess {
+        if field.isPremiumAdvancedSearchField && isAdvancedSearchLocked {
             router.presentPaywall(.advancedSearch)
             return false
         }
@@ -413,7 +419,7 @@ private extension HomeView {
     func applySuggestion(_ item: HomeSearchSuggestionItem) {
         switch item.kind {
         case .selectField(let field):
-            guard !field.isPremiumAdvancedSearchField || hasAdvancedSearchAccess else {
+            guard !field.isPremiumAdvancedSearchField || !isAdvancedSearchLocked else {
                 router.presentPaywall(.advancedSearch)
                 return
             }
@@ -450,7 +456,8 @@ private extension HomeView {
     }
 
     func sanitizeAdvancedSearchStateIfNeeded() {
-        guard !hasAdvancedSearchAccess else { return }
+        guard premiumAccess.hasLoadedStatus else { return }
+        guard isAdvancedSearchLocked else { return }
 
         let previousTokens = searchTokens
         searchTokens = searchTokens.filter { !$0.field.isPremiumAdvancedSearchField }
@@ -466,6 +473,13 @@ private extension HomeView {
         guard didSanitize else { return }
         advancedFilterDraft = HomeAdvancedFilterDraft(tokens: searchTokens)
         isSearchCommitted = hasAnySearchCondition()
+    }
+
+    func sanitizeSortOptionIfNeeded() {
+        guard premiumAccess.hasLoadedStatus else { return }
+        guard !premiumAccess.hasAccess(to: .advancedSort) else { return }
+        guard sortOption.requiresPremium else { return }
+        sortOption = .createdAtDescending
     }
 
     func handleSortOptionChanged(oldValue: HomeEpisodeSortOption, newValue: HomeEpisodeSortOption) {
@@ -578,12 +592,12 @@ private extension HomeView {
         items.sorted { lhs, rhs in
             switch sortOption {
             case .createdAtDescending:
-                if lhs.createdAt != rhs.createdAt {
-                    return lhs.createdAt > rhs.createdAt
+                if lhs.date != rhs.date {
+                    return lhs.date > rhs.date
                 }
             case .createdAtAscending:
-                if lhs.createdAt != rhs.createdAt {
-                    return lhs.createdAt < rhs.createdAt
+                if lhs.date != rhs.date {
+                    return lhs.date < rhs.date
                 }
             case .recentlyTalked:
                 let lhsLatest = lhs.latestTalkedAt ?? .distantPast

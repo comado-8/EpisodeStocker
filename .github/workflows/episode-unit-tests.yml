@@ -30,9 +30,19 @@ jobs:
       - name: Build and test
         run: |
           mkdir -p artifacts
-          DESTINATION_ID="$(xcrun simctl list devices available | sed -nE 's/^[[:space:]]*iPhone 16 \(([0-9A-Fa-f-]+)\).*/\1/p' | head -n 1)"
+          TARGET_RUNTIME="iOS 18.5"
+          DESTINATION_ID="$(
+            xcrun simctl list devices available | \
+            awk -v runtime="$TARGET_RUNTIME" '
+              $0 == "-- " runtime " --" { in_runtime = 1; next }
+              /^-- / { in_runtime = 0 }
+              in_runtime { print }
+            ' | \
+            sed -nE 's/^[[:space:]]*iPhone 16 \(([0-9A-Fa-f-]+)\).*/\1/p' | \
+            head -n 1
+          )"
           if [ -z "$DESTINATION_ID" ]; then
-            echo "::error::No available iPhone 16 simulator found."
+            echo "::error::No available iPhone 16 simulator found for runtime ${TARGET_RUNTIME}."
             xcrun simctl list devices available
             exit 1
           fi

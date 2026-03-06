@@ -182,6 +182,7 @@ enum AnalyticsSnapshotBuilder {
         guard !Task.isCancelled else { return emptySnapshot() }
 
         let topTalkedEpisodes = stats
+            .filter { $0.talkCount > 0 }
             .sorted { lhs, rhs in
                 if lhs.talkCount != rhs.talkCount {
                     return lhs.talkCount > rhs.talkCount
@@ -191,7 +192,10 @@ enum AnalyticsSnapshotBuilder {
                 if lhsLast != rhsLast {
                     return lhsLast > rhsLast
                 }
-                return lhs.title < rhs.title
+                if lhs.title != rhs.title {
+                    return lhs.title < rhs.title
+                }
+                return lhs.episodeID.uuidString < rhs.episodeID.uuidString
             }
             .prefix(rankingLimit)
             .map {
@@ -220,7 +224,10 @@ enum AnalyticsSnapshotBuilder {
                 if lhs.talkCount != rhs.talkCount {
                     return lhs.talkCount < rhs.talkCount
                 }
-                return lhs.title < rhs.title
+                if lhs.title != rhs.title {
+                    return lhs.title < rhs.title
+                }
+                return lhs.episodeID.uuidString < rhs.episodeID.uuidString
             }
             .prefix(rankingLimit)
             .map {
@@ -249,7 +256,10 @@ enum AnalyticsSnapshotBuilder {
                 if lhsLast != rhsLast {
                     return lhsLast > rhsLast
                 }
-                return lhs.title < rhs.title
+                if lhs.title != rhs.title {
+                    return lhs.title < rhs.title
+                }
+                return lhs.episodeID.uuidString < rhs.episodeID.uuidString
             }
             .prefix(rankingLimit)
             .map {
@@ -275,7 +285,10 @@ enum AnalyticsSnapshotBuilder {
                 if lhsLast != rhsLast {
                     return lhsLast > rhsLast
                 }
-                return lhs.title < rhs.title
+                if lhs.title != rhs.title {
+                    return lhs.title < rhs.title
+                }
+                return lhs.episodeID.uuidString < rhs.episodeID.uuidString
             }
             .prefix(rankingLimit)
             .map {

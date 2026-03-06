@@ -844,10 +844,22 @@ struct EpisodeDetailView: View {
   private func exportEpisode(as format: EpisodeExportFormat) {
     guard !isExporting else { return }
     isExporting = true
+    let exportTitle = episode.title
+    let exportPayload = EpisodeExportService.makePayload(
+      title: episode.title,
+      body: episode.body,
+      episodeDate: episode.date,
+      unlockDate: episode.unlockDate,
+      isUnlocked: episode.isUnlocked
+    )
 
     DispatchQueue.global(qos: .userInitiated).async {
       do {
-        let fileURL = try exportService.export(format: format, episode: episode)
+        let fileURL = try exportService.export(
+          format: format,
+          payload: exportPayload,
+          filenameTitle: exportTitle
+        )
         DispatchQueue.main.async {
           self.shareItems = [fileURL]
           self.showsShareSheet = true

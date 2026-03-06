@@ -130,29 +130,9 @@ final class RevenueCatSubscriptionService: SubscriptionService {
     }
 
     private func selectPackage(from offering: Offering, productID: String) -> Package? {
-        if let package = offering.availablePackages.first(where: {
+        offering.availablePackages.first(where: {
             $0.storeProduct.productIdentifier == productID
-        }) {
-            return package
-        }
-
-        if productID == SubscriptionCatalog.monthlyProductID,
-           let package = offering.availablePackages.first(where: {
-               $0.identifier == RevenueCatConfig.monthlyPackageID
-           })
-        {
-            return package
-        }
-
-        if productID == SubscriptionCatalog.yearlyProductID,
-           let package = offering.availablePackages.first(where: {
-               $0.identifier == RevenueCatConfig.yearlyPackageID
-           })
-        {
-            return package
-        }
-
-        return nil
+        })
     }
 
     private func plan(for package: Package, productID: String) -> SubscriptionStatus.Plan? {
