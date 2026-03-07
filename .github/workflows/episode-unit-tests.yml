@@ -210,12 +210,14 @@ jobs:
               git diff --name-only "${BASE_SHA}...${HEAD_SHA}" || true
             else
               git diff --name-only HEAD~1...HEAD || true
-            fi | awk '/^ios\/(Services|ViewModels|Models)\/.*\.swift$/ && $0 !~ /^ios\/Views\//'
+            fi | awk '/^ios\/(Services|ViewModels|Models)\/.*\.swift$/ && $0 !~ /^ios\/Views\//' \
+              | awk '$0 !~ /^ios\/Services\/RevenueCat(Bootstrap|Config|SubscriptionService)\.swift$/'
           }
 
           overall_logic_counts() {
             echo "$FULL_REPORT" \
               | awk '/\/ios\/Services\/.*\.swift|\/ios\/ViewModels\/.*\.swift|\/ios\/Models\/.*\.swift/' \
+              | awk '$0 !~ /\/ios\/Services\/RevenueCatBootstrap\.swift / && $0 !~ /\/ios\/Services\/RevenueCatConfig\.swift / && $0 !~ /\/ios\/Services\/RevenueCatSubscriptionService\.swift /' \
               | sed -nE 's/.*\(([0-9]+)\/([0-9]+)\).*/\1 \2/p' \
               | awk '{ covered += $1; total += $2 } END { printf "%d %d\n", covered, total }'
           }

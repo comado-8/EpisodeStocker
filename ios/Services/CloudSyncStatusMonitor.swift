@@ -125,7 +125,7 @@ final class CloudSyncStatusMonitor: CloudSyncStatusMonitoring {
         onChange?(snapshot)
     }
 
-    private static func makeCloudSyncEvent(from notification: Notification) -> CloudSyncEvent? {
+    static func makeCloudSyncEvent(from notification: Notification) -> CloudSyncEvent? {
         guard
             let event = notification.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
                 as? NSPersistentCloudKitContainer.Event
@@ -133,23 +133,40 @@ final class CloudSyncStatusMonitor: CloudSyncStatusMonitoring {
             return nil
         }
 
-        let kind: CloudSyncEvent.Kind
-        switch event.type {
-        case .setup:
-            kind = .setup
-        case .import:
-            kind = .import
-        case .export:
-            kind = .export
-        @unknown default:
-            kind = .other
-        }
-
-        return CloudSyncEvent(
+        return makeCloudSyncEvent(
             id: event.identifier,
-            kind: kind,
+            type: event.type,
             endDate: event.endDate,
             errorDescription: event.error?.localizedDescription
         )
+    }
+
+    static func makeCloudSyncEvent(
+        id: UUID,
+        type: NSPersistentCloudKitContainer.EventType,
+        endDate: Date?,
+        errorDescription: String?
+    ) -> CloudSyncEvent {
+        CloudSyncEvent(
+            id: id,
+            kind: cloudSyncEventKind(from: type),
+            endDate: endDate,
+            errorDescription: errorDescription
+        )
+    }
+
+    static func cloudSyncEventKind(
+        from type: NSPersistentCloudKitContainer.EventType
+    ) -> CloudSyncEvent.Kind {
+        switch type {
+        case .setup:
+            return .setup
+        case .import:
+            return .import
+        case .export:
+            return .export
+        @unknown default:
+            return .other
+        }
     }
 }
