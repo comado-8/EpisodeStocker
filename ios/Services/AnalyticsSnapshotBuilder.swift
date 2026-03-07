@@ -310,6 +310,7 @@ enum AnalyticsSnapshotBuilder {
                 let lastTalkedAtStart = calendar.startOfDay(for: lastTalkedAt)
                 let rawDays = calendar.dateComponents([.day], from: lastTalkedAtStart, to: todayStart).day ?? 0
                 let unusedDays = max(0, rawDays)
+                guard unusedDays > 0 else { return nil }
                 let score = stat.hitRate * Double(unusedDays)
                 return DigUpSuggestionItem(
                     episodeID: stat.episodeID,

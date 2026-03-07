@@ -45,21 +45,17 @@ final class EpisodeExportService {
         payload: EpisodeExportPayload,
         filenameTitle: String
     ) throws -> URL {
-        try fileManager.createDirectory(
-            at: temporaryDirectory,
-            withIntermediateDirectories: true
-        )
+        do {
+            try fileManager.createDirectory(
+                at: temporaryDirectory,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            throw EpisodeExportError.fileWriteFailed
+        }
 
         let filename = makeFilename(format: format, title: filenameTitle)
         let outputURL = temporaryDirectory.appendingPathComponent(filename)
-        if fileManager.fileExists(atPath: outputURL.path) {
-            do {
-                try fileManager.removeItem(at: outputURL)
-            } catch {
-                NSLog("Failed to remove existing export file: \(error)")
-                throw EpisodeExportError.fileWriteFailed
-            }
-        }
 
         switch format {
         case .txt:
@@ -91,7 +87,8 @@ final class EpisodeExportService {
     func makeFilename(format: EpisodeExportFormat, title: String) -> String {
         let dateString = Self.makeFilenameDateFormatter().string(from: now())
         let sanitizedTitle = Self.sanitizeFilenameTitle(title)
-        return "Episode_\(dateString)_\(sanitizedTitle).\(format.fileExtension)"
+        let uniqueSuffix = UUID().uuidString.prefix(8)
+        return "Episode_\(dateString)_\(uniqueSuffix)_\(sanitizedTitle).\(format.fileExtension)"
     }
 
     static func sanitizeFilenameTitle(_ title: String) -> String {

@@ -65,7 +65,9 @@ final class EpisodeExportServiceTests: XCTestCase {
         let service = makeService(now: makeDate(2026, 3, 5))
         let filename = service.makeFilename(format: .txt, title: "sample")
 
-        XCTAssertEqual(filename, "Episode_20260305_sample.txt")
+        XCTAssertTrue(filename.hasPrefix("Episode_20260305_"))
+        XCTAssertTrue(filename.hasSuffix("_sample.txt"))
+        XCTAssertEqual(filename.count, "Episode_20260305__sample.txt".count + 8)
     }
 
     func testPDFExportGeneratesMultiplePagesForLongBody() throws {
