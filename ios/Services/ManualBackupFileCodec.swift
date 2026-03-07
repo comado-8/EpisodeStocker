@@ -93,6 +93,8 @@ struct ManualBackupFileCodec {
                 throw ManualBackupError.wrongPassphrase
             }
             throw error
+        } catch let error {
+            throw error
         }
 
         let payload: ManualBackupPayloadV1

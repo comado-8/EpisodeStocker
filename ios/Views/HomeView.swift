@@ -792,8 +792,8 @@ private struct HomeEpisodeSortControl: View {
 
     private var widestLabel: String {
         HomeEpisodeSortOption.allCases
-            .map(\.rawValue)
-            .max(by: { $0.count < $1.count }) ?? selection.rawValue
+            .map(\.controlLabel)
+            .max(by: { $0.count < $1.count }) ?? selection.controlLabel
     }
 
     var body: some View {
@@ -818,7 +818,7 @@ private struct HomeEpisodeSortControl: View {
                     .accessibilityHidden(true)
 
                     HStack(spacing: 6) {
-                        Text(selection.rawValue)
+                        Text(selection.controlLabel)
                             .font(AppTypography.subtextEmphasis)
                             .foregroundColor(HomeStyle.searchChipText)
                             .lineLimit(1)

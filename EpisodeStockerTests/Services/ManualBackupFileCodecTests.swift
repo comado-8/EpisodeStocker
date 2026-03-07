@@ -53,6 +53,25 @@ final class ManualBackupFileCodecTests: XCTestCase {
         }
     }
 
+    func testDecodeWithTooLargeIterationsThrowsInvalidFormat() throws {
+        let codec = ManualBackupFileCodec()
+        let encoded = try codec.encode(
+            payload: makePayload(),
+            passphrase: "backup-passphrase",
+            appVersion: "1.0.0"
+        )
+
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var encryption = try XCTUnwrap(json["encryption"] as? [String: Any])
+        encryption["iterations"] = Int.max
+        json["encryption"] = encryption
+        let modified = try JSONSerialization.data(withJSONObject: json, options: [])
+
+        XCTAssertThrowsError(try codec.decode(modified, passphrase: "backup-passphrase")) { error in
+            XCTAssertEqual(error as? ManualBackupError, .invalidFormat)
+        }
+    }
+
     private func makePayload() -> ManualBackupPayloadV1 {
         let episodeID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
         let unlockLogID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!

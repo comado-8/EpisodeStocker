@@ -767,18 +767,20 @@ private struct BackupSettingsView: View {
                         )
                         if isPrepared {
                             showsRestoreConfirmationSheet = true
+                        } else {
+                            discardSelectedImportFile()
                         }
                     }
                 },
                 onCancel: {
                     showsImportPassphraseSheet = false
-                    selectedImportURL = nil
+                    discardSelectedImportFile()
                 }
             )
         }
         .sheet(isPresented: $showsRestoreConfirmationSheet, onDismiss: {
             manualBackupViewModel.clearPendingRestore()
-            selectedImportURL = nil
+            discardSelectedImportFile()
         }) {
             if let preview = manualBackupViewModel.pendingRestorePreview {
                 ManualRestoreConfirmationSheet(
@@ -823,12 +825,15 @@ private struct BackupSettingsView: View {
             case .success(let urls):
                 guard let firstURL = urls.first else { return }
                 do {
+                    discardSelectedImportFile()
                     selectedImportURL = try copyImportedBackupToTemporaryDirectory(from: firstURL)
                     showsImportPassphraseSheet = true
                 } catch {
+                    discardSelectedImportFile()
                     manualBackupViewModel.errorMessage = error.localizedDescription
                 }
             case .failure(let error):
+                discardSelectedImportFile()
                 manualBackupViewModel.errorMessage = error.localizedDescription
             }
         }
@@ -875,6 +880,7 @@ private struct BackupSettingsView: View {
             return
         }
         manualBackupViewModel.errorMessage = nil
+        discardSelectedImportFile()
         showsImportFileGuide = true
     }
 
@@ -889,6 +895,18 @@ private struct BackupSettingsView: View {
         }
         try FileManager.default.copyItem(at: sourceURL, to: destination)
         return destination
+    }
+
+    private func discardSelectedImportFile() {
+        guard let selectedImportURL else { return }
+        do {
+            try FileManager.default.removeItem(at: selectedImportURL)
+        } catch {
+            #if DEBUG
+            print("Failed to remove temporary backup file: \(error)")
+            #endif
+        }
+        self.selectedImportURL = nil
     }
 }
 

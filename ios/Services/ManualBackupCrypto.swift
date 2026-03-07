@@ -11,6 +11,7 @@ struct ManualBackupCiphertext {
 
 enum ManualBackupCrypto {
     static let defaultPBKDF2Iterations = 600_000
+    static let maxPBKDF2Iterations = 2_000_000
     private static let keySizeInBytes = 32
     private static let saltSizeInBytes = 16
 
@@ -60,6 +61,13 @@ enum ManualBackupCrypto {
         salt: Data,
         iterations: Int
     ) throws -> SymmetricKey {
+        guard iterations > 0,
+              iterations <= maxPBKDF2Iterations,
+              let validatedIterations = UInt32(exactly: iterations)
+        else {
+            throw ManualBackupError.invalidFormat
+        }
+
         var derivedData = Data(repeating: 0, count: keySizeInBytes)
         let passwordData = Data(passphrase.utf8)
 
@@ -73,7 +81,7 @@ enum ManualBackupCrypto {
                         saltBytes.bindMemory(to: UInt8.self).baseAddress,
                         salt.count,
                         CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
-                        UInt32(iterations),
+                        validatedIterations,
                         derivedBytes.bindMemory(to: UInt8.self).baseAddress,
                         keySizeInBytes
                     )

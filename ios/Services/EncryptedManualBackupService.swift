@@ -39,28 +39,36 @@ final class EncryptedManualBackupService: ManualBackupService {
             throw ManualBackupError.invalidPassphrase
         }
 
-        let payload = try makePayloadSnapshot()
+        let payload = try await makePayloadSnapshot()
+        let exportedAt = now()
+        let outputURL = backupDirectory.appendingPathComponent(makeFilename(now: exportedAt))
+        let appVersion = appVersionProvider()
+
+        let backupData: Data
+        do {
+            backupData = try await runInBackground { [self] in
+                try self.fileCodec.encode(
+                    payload: payload,
+                    passphrase: passphrase,
+                    appVersion: appVersion
+                )
+            }
+        } catch let error as ManualBackupError {
+            throw error
+        } catch {
+            throw ManualBackupError.encryptFailed
+        }
 
         do {
-            try fileManager.createDirectory(at: backupDirectory, withIntermediateDirectories: true)
+            try await runInBackground { [self] in
+                try self.fileManager.createDirectory(at: self.backupDirectory, withIntermediateDirectories: true)
+                try backupData.write(to: outputURL, options: .atomic)
+            }
         } catch {
             throw ManualBackupError.fileWriteFailed
         }
 
-        let backupData = try fileCodec.encode(
-            payload: payload,
-            passphrase: passphrase,
-            appVersion: appVersionProvider()
-        )
-
-        let outputURL = backupDirectory.appendingPathComponent(makeFilename(now: now()))
-        do {
-            try backupData.write(to: outputURL, options: .atomic)
-        } catch {
-            throw ManualBackupError.fileWriteFailed
-        }
-
-        settingsRepository.set(now(), for: .manualBackupLastExportAt)
+        settingsRepository.set(exportedAt, for: .manualBackupLastExportAt)
         return outputURL
     }
 
@@ -68,7 +76,7 @@ final class EncryptedManualBackupService: ManualBackupService {
         guard passphrase.count >= Self.minimumPassphraseLength else {
             throw ManualBackupError.invalidPassphrase
         }
-        let decoded = try decodeBackup(at: url, passphrase: passphrase)
+        let decoded = try await decodeBackup(at: url, passphrase: passphrase)
         return makePreview(from: decoded.manifest, payload: decoded.payload)
     }
 
@@ -77,12 +85,13 @@ final class EncryptedManualBackupService: ManualBackupService {
             throw ManualBackupError.invalidPassphrase
         }
 
-        let decoded = try decodeBackup(at: url, passphrase: passphrase)
-        try validate(payload: decoded.payload)
+        let decoded = try await decodeBackup(at: url, passphrase: passphrase)
+        try await validate(payload: decoded.payload)
+        try await stageRestoreValidation(payload: decoded.payload)
 
         do {
-            try deleteAllExistingData()
-            try restore(payload: decoded.payload)
+            try Self.deleteAllExistingData(in: modelContext)
+            try Self.restore(payload: decoded.payload, in: modelContext)
             try modelContext.save()
         } catch let error as ManualBackupError {
             throw error
@@ -98,18 +107,28 @@ final class EncryptedManualBackupService: ManualBackupService {
         )
     }
 
-    private func decodeBackup(at url: URL, passphrase: String) throws -> DecodedManualBackup {
+    private func decodeBackup(at url: URL, passphrase: String) async throws -> DecodedManualBackup {
         let data: Data
         do {
-            data = try Data(contentsOf: url)
+            data = try await runInBackground {
+                try Data(contentsOf: url)
+            }
         } catch {
             throw ManualBackupError.fileReadFailed
         }
 
-        return try fileCodec.decode(data, passphrase: passphrase)
+        do {
+            return try await runInBackground { [self] in
+                try self.fileCodec.decode(data, passphrase: passphrase)
+            }
+        } catch let error as ManualBackupError {
+            throw error
+        } catch {
+            throw ManualBackupError.decryptFailed
+        }
     }
 
-    private func makePayloadSnapshot() throws -> ManualBackupPayloadV1 {
+    private func makePayloadSnapshot() async throws -> ManualBackupPayloadV1 {
         let episodes = try modelContext.fetch(FetchDescriptor<Episode>())
         let unlockLogs = try modelContext.fetch(FetchDescriptor<UnlockLog>())
         let tags = try modelContext.fetch(FetchDescriptor<Tag>())
@@ -118,112 +137,114 @@ final class EncryptedManualBackupService: ManualBackupService {
         let emotions = try modelContext.fetch(FetchDescriptor<Emotion>())
         let places = try modelContext.fetch(FetchDescriptor<Place>())
 
-        return ManualBackupPayloadV1(
-            episodes: episodes
-                .map {
-                    ManualBackupPayloadV1.EpisodeRecord(
-                        id: $0.id,
-                        date: $0.date,
-                        title: $0.title,
-                        body: $0.body,
-                        unlockDate: $0.unlockDate,
-                        type: $0.type,
-                        createdAt: $0.createdAt,
-                        updatedAt: $0.updatedAt,
-                        isSoftDeleted: $0.isSoftDeleted,
-                        deletedAt: $0.deletedAt,
-                        tagIDs: $0.tags.map(\.id).sorted(by: Self.uuidLessThan),
-                        personIDs: $0.persons.map(\.id).sorted(by: Self.uuidLessThan),
-                        projectIDs: $0.projects.map(\.id).sorted(by: Self.uuidLessThan),
-                        emotionIDs: $0.emotions.map(\.id).sorted(by: Self.uuidLessThan),
-                        placeIDs: $0.places.map(\.id).sorted(by: Self.uuidLessThan)
-                    )
-                }
-                .sorted { Self.uuidLessThan($0.id, $1.id) },
-            unlockLogs: unlockLogs
-                .map {
-                    ManualBackupPayloadV1.UnlockLogRecord(
-                        id: $0.id,
-                        talkedAt: $0.talkedAt,
-                        mediaPublicAt: $0.mediaPublicAt,
-                        mediaType: $0.mediaType,
-                        projectNameText: $0.projectNameText,
-                        reaction: $0.reaction,
-                        memo: $0.memo,
-                        createdAt: $0.createdAt,
-                        updatedAt: $0.updatedAt,
-                        isSoftDeleted: $0.isSoftDeleted,
-                        deletedAt: $0.deletedAt,
-                        episodeID: $0.episode.id
-                    )
-                }
-                .sorted { Self.uuidLessThan($0.id, $1.id) },
-            tags: tags
-                .map {
-                    ManualBackupPayloadV1.TagRecord(
-                        id: $0.id,
-                        name: $0.name,
-                        nameNormalized: $0.nameNormalized,
-                        createdAt: $0.createdAt,
-                        updatedAt: $0.updatedAt,
-                        isSoftDeleted: $0.isSoftDeleted,
-                        deletedAt: $0.deletedAt
-                    )
-                }
-                .sorted { Self.uuidLessThan($0.id, $1.id) },
-            persons: persons
-                .map {
-                    ManualBackupPayloadV1.PersonRecord(
-                        id: $0.id,
-                        name: $0.name,
-                        nameNormalized: $0.nameNormalized,
-                        createdAt: $0.createdAt,
-                        updatedAt: $0.updatedAt,
-                        isSoftDeleted: $0.isSoftDeleted,
-                        deletedAt: $0.deletedAt
-                    )
-                }
-                .sorted { Self.uuidLessThan($0.id, $1.id) },
-            projects: projects
-                .map {
-                    ManualBackupPayloadV1.ProjectRecord(
-                        id: $0.id,
-                        name: $0.name,
-                        nameNormalized: $0.nameNormalized,
-                        createdAt: $0.createdAt,
-                        updatedAt: $0.updatedAt,
-                        isSoftDeleted: $0.isSoftDeleted,
-                        deletedAt: $0.deletedAt
-                    )
-                }
-                .sorted { Self.uuidLessThan($0.id, $1.id) },
-            emotions: emotions
-                .map {
-                    ManualBackupPayloadV1.EmotionRecord(
-                        id: $0.id,
-                        name: $0.name,
-                        nameNormalized: $0.nameNormalized,
-                        createdAt: $0.createdAt,
-                        updatedAt: $0.updatedAt,
-                        isSoftDeleted: $0.isSoftDeleted,
-                        deletedAt: $0.deletedAt
-                    )
-                }
-                .sorted { Self.uuidLessThan($0.id, $1.id) },
-            places: places
-                .map {
-                    ManualBackupPayloadV1.PlaceRecord(
-                        id: $0.id,
-                        name: $0.name,
-                        nameNormalized: $0.nameNormalized,
-                        createdAt: $0.createdAt,
-                        updatedAt: $0.updatedAt,
-                        isSoftDeleted: $0.isSoftDeleted,
-                        deletedAt: $0.deletedAt
-                    )
-                }
-                .sorted { Self.uuidLessThan($0.id, $1.id) }
-        )
+        let episodeRecords = episodes.map {
+            ManualBackupPayloadV1.EpisodeRecord(
+                id: $0.id,
+                date: $0.date,
+                title: $0.title,
+                body: $0.body,
+                unlockDate: $0.unlockDate,
+                type: $0.type,
+                createdAt: $0.createdAt,
+                updatedAt: $0.updatedAt,
+                isSoftDeleted: $0.isSoftDeleted,
+                deletedAt: $0.deletedAt,
+                tagIDs: $0.tags.map(\.id).sorted(by: Self.uuidLessThan),
+                personIDs: $0.persons.map(\.id).sorted(by: Self.uuidLessThan),
+                projectIDs: $0.projects.map(\.id).sorted(by: Self.uuidLessThan),
+                emotionIDs: $0.emotions.map(\.id).sorted(by: Self.uuidLessThan),
+                placeIDs: $0.places.map(\.id).sorted(by: Self.uuidLessThan)
+            )
+        }
+
+        let unlockLogRecords = unlockLogs.map {
+            ManualBackupPayloadV1.UnlockLogRecord(
+                id: $0.id,
+                talkedAt: $0.talkedAt,
+                mediaPublicAt: $0.mediaPublicAt,
+                mediaType: $0.mediaType,
+                projectNameText: $0.projectNameText,
+                reaction: $0.reaction,
+                memo: $0.memo,
+                createdAt: $0.createdAt,
+                updatedAt: $0.updatedAt,
+                isSoftDeleted: $0.isSoftDeleted,
+                deletedAt: $0.deletedAt,
+                episodeID: $0.episode.id
+            )
+        }
+
+        let tagRecords = tags.map {
+            ManualBackupPayloadV1.TagRecord(
+                id: $0.id,
+                name: $0.name,
+                nameNormalized: $0.nameNormalized,
+                createdAt: $0.createdAt,
+                updatedAt: $0.updatedAt,
+                isSoftDeleted: $0.isSoftDeleted,
+                deletedAt: $0.deletedAt
+            )
+        }
+
+        let personRecords = persons.map {
+            ManualBackupPayloadV1.PersonRecord(
+                id: $0.id,
+                name: $0.name,
+                nameNormalized: $0.nameNormalized,
+                createdAt: $0.createdAt,
+                updatedAt: $0.updatedAt,
+                isSoftDeleted: $0.isSoftDeleted,
+                deletedAt: $0.deletedAt
+            )
+        }
+
+        let projectRecords = projects.map {
+            ManualBackupPayloadV1.ProjectRecord(
+                id: $0.id,
+                name: $0.name,
+                nameNormalized: $0.nameNormalized,
+                createdAt: $0.createdAt,
+                updatedAt: $0.updatedAt,
+                isSoftDeleted: $0.isSoftDeleted,
+                deletedAt: $0.deletedAt
+            )
+        }
+
+        let emotionRecords = emotions.map {
+            ManualBackupPayloadV1.EmotionRecord(
+                id: $0.id,
+                name: $0.name,
+                nameNormalized: $0.nameNormalized,
+                createdAt: $0.createdAt,
+                updatedAt: $0.updatedAt,
+                isSoftDeleted: $0.isSoftDeleted,
+                deletedAt: $0.deletedAt
+            )
+        }
+
+        let placeRecords = places.map {
+            ManualBackupPayloadV1.PlaceRecord(
+                id: $0.id,
+                name: $0.name,
+                nameNormalized: $0.nameNormalized,
+                createdAt: $0.createdAt,
+                updatedAt: $0.updatedAt,
+                isSoftDeleted: $0.isSoftDeleted,
+                deletedAt: $0.deletedAt
+            )
+        }
+
+        return try await runInBackground {
+            ManualBackupPayloadV1(
+                episodes: episodeRecords.sorted { Self.uuidLessThan($0.id, $1.id) },
+                unlockLogs: unlockLogRecords.sorted { Self.uuidLessThan($0.id, $1.id) },
+                tags: tagRecords.sorted { Self.uuidLessThan($0.id, $1.id) },
+                persons: personRecords.sorted { Self.uuidLessThan($0.id, $1.id) },
+                projects: projectRecords.sorted { Self.uuidLessThan($0.id, $1.id) },
+                emotions: emotionRecords.sorted { Self.uuidLessThan($0.id, $1.id) },
+                places: placeRecords.sorted { Self.uuidLessThan($0.id, $1.id) }
+            )
+        }
     }
 
     private func makePreview(from manifest: ManualBackupManifest, payload: ManualBackupPayloadV1) -> ManualBackupPreview {
@@ -239,25 +260,24 @@ final class EncryptedManualBackupService: ManualBackupService {
         )
     }
 
-    private func deleteAllExistingData() throws {
-        try deleteAll(UnlockLog.self)
-        try deleteAll(Episode.self)
-        try deleteAll(Tag.self)
-        try deleteAll(Person.self)
-        try deleteAll(Project.self)
-        try deleteAll(Emotion.self)
-        try deleteAll(Place.self)
-        try modelContext.save()
+    private static func deleteAllExistingData(in context: ModelContext) throws {
+        try deleteAll(UnlockLog.self, in: context)
+        try deleteAll(Episode.self, in: context)
+        try deleteAll(Tag.self, in: context)
+        try deleteAll(Person.self, in: context)
+        try deleteAll(Project.self, in: context)
+        try deleteAll(Emotion.self, in: context)
+        try deleteAll(Place.self, in: context)
     }
 
-    private func deleteAll<Model: PersistentModel>(_ modelType: Model.Type) throws {
-        let records = try modelContext.fetch(FetchDescriptor<Model>())
+    private static func deleteAll<Model: PersistentModel>(_ modelType: Model.Type, in context: ModelContext) throws {
+        let records = try context.fetch(FetchDescriptor<Model>())
         for record in records {
-            modelContext.delete(record)
+            context.delete(record)
         }
     }
 
-    private func restore(payload: ManualBackupPayloadV1) throws {
+    private static func restore(payload: ManualBackupPayloadV1, in context: ModelContext) throws {
         var tagsByID: [UUID: Tag] = [:]
         var personsByID: [UUID: Person] = [:]
         var projectsByID: [UUID: Project] = [:]
@@ -276,7 +296,7 @@ final class EncryptedManualBackupService: ManualBackupService {
                 deletedAt: tag.deletedAt,
                 episodes: []
             )
-            modelContext.insert(restored)
+            context.insert(restored)
             tagsByID[tag.id] = restored
         }
 
@@ -290,7 +310,7 @@ final class EncryptedManualBackupService: ManualBackupService {
                 isSoftDeleted: person.isSoftDeleted,
                 deletedAt: person.deletedAt
             )
-            modelContext.insert(restored)
+            context.insert(restored)
             personsByID[person.id] = restored
         }
 
@@ -304,7 +324,7 @@ final class EncryptedManualBackupService: ManualBackupService {
                 isSoftDeleted: project.isSoftDeleted,
                 deletedAt: project.deletedAt
             )
-            modelContext.insert(restored)
+            context.insert(restored)
             projectsByID[project.id] = restored
         }
 
@@ -318,7 +338,7 @@ final class EncryptedManualBackupService: ManualBackupService {
                 isSoftDeleted: emotion.isSoftDeleted,
                 deletedAt: emotion.deletedAt
             )
-            modelContext.insert(restored)
+            context.insert(restored)
             emotionsByID[emotion.id] = restored
         }
 
@@ -332,7 +352,7 @@ final class EncryptedManualBackupService: ManualBackupService {
                 isSoftDeleted: place.isSoftDeleted,
                 deletedAt: place.deletedAt
             )
-            modelContext.insert(restored)
+            context.insert(restored)
             placesByID[place.id] = restored
         }
 
@@ -355,7 +375,7 @@ final class EncryptedManualBackupService: ManualBackupService {
                 places: [],
                 unlockLogs: []
             )
-            modelContext.insert(restored)
+            context.insert(restored)
             episodesByID[episode.id] = restored
         }
 
@@ -377,7 +397,7 @@ final class EncryptedManualBackupService: ManualBackupService {
                 isSoftDeleted: unlockLog.isSoftDeleted,
                 deletedAt: unlockLog.deletedAt
             )
-            modelContext.insert(restored)
+            context.insert(restored)
         }
 
         for episode in payload.episodes {
@@ -392,7 +412,13 @@ final class EncryptedManualBackupService: ManualBackupService {
         }
     }
 
-    private func validate(payload: ManualBackupPayloadV1) throws {
+    private func validate(payload: ManualBackupPayloadV1) async throws {
+        try await runInBackground {
+            try Self.validatePayload(payload)
+        }
+    }
+
+    private static func validatePayload(_ payload: ManualBackupPayloadV1) throws {
         try validateUniqueIDs(payload.episodes.map(\.id), label: "Episode")
         try validateUniqueIDs(payload.unlockLogs.map(\.id), label: "UnlockLog")
         try validateUniqueIDs(payload.tags.map(\.id), label: "Tag")
@@ -431,11 +457,45 @@ final class EncryptedManualBackupService: ManualBackupService {
         }
     }
 
-    private func validateUniqueIDs(_ ids: [UUID], label: String) throws {
+    private static func validateUniqueIDs(_ ids: [UUID], label: String) throws {
         var seen = Set<UUID>()
         for id in ids {
             if !seen.insert(id).inserted {
                 throw ManualBackupError.validationFailed(reason: "\(label) に重複IDが含まれています。")
+            }
+        }
+    }
+
+    private func stageRestoreValidation(payload: ManualBackupPayloadV1) async throws {
+        try await runInBackground {
+            let configuration = ModelConfiguration(
+                isStoredInMemoryOnly: true,
+                cloudKitDatabase: .none
+            )
+            let container = try ModelContainer(
+                for: Episode.self,
+                UnlockLog.self,
+                Tag.self,
+                Person.self,
+                Project.self,
+                Emotion.self,
+                Place.self,
+                configurations: configuration
+            )
+            let context = ModelContext(container)
+            try Self.restore(payload: payload, in: context)
+            try context.save()
+        }
+    }
+
+    private func runInBackground<T>(_ work: @escaping () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    continuation.resume(returning: try work())
+                } catch {
+                    continuation.resume(throwing: error)
+                }
             }
         }
     }

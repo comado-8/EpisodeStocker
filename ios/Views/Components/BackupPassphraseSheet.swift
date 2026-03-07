@@ -38,7 +38,7 @@ struct BackupPassphraseSheet: View {
                     Text("パスフレーズ")
                         .font(AppTypography.bodyEmphasis)
                         .foregroundColor(HomeStyle.textPrimary)
-                    SecureField("8文字以上", text: $passphrase)
+                    SecureField("\(minimumLength)文字以上", text: $passphrase)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .padding(12)
