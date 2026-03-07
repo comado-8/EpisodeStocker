@@ -11,7 +11,9 @@ final class AppRouter: ObservableObject {
     @Published var hasUnsavedEpisodeDetailChanges = false
     @Published var hasUnsavedNewEpisodeChanges = false
     @Published var hasTagDetailPath = false
+    @Published var hasSettingsDetailPath = false
     @Published var tagRootResetSignal = 0
+    @Published var settingsRootResetSignal = 0
     @Published var pendingRootTabSwitch: RootTab?
     @Published var committedRootTabSwitch: RootTab?
     @Published var paywallTrigger: PaywallTrigger?
@@ -47,6 +49,10 @@ final class AppRouter: ObservableObject {
 
     func requestTagRootReset() {
         tagRootResetSignal &+= 1
+    }
+
+    func requestSettingsRootReset() {
+        settingsRootResetSignal &+= 1
     }
 
     func presentPaywall(_ trigger: PaywallTrigger) {

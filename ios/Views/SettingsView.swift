@@ -1,53 +1,73 @@
+import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 #if canImport(RevenueCatUI)
 import RevenueCatUI
 #endif
 
 struct SettingsView: View {
+    @EnvironmentObject private var router: AppRouter
+    @State private var navigationPath: [SettingsDestination] = []
     private let items: [SettingsItemData] = [
         .init(title: "サブスクリプション", detail: "プラン/更新日/試用残日数", systemImage: "creditcard", destination: .subscription),
         .init(title: "同期・バックアップ", detail: "クラウド同期の状態管理", systemImage: "icloud", destination: .backup),
         .init(title: "セキュリティ", detail: "パスコード/生体認証", systemImage: "lock", destination: .security),
-        .init(title: "表示", detail: "テーマ・フォントサイズ・一覧表示", systemImage: "textformat.size", destination: .display),
-        .init(title: "法務", detail: "利用規約・プライバシー", systemImage: "doc.text", destination: .legal)
+        .init(title: "表示", detail: "テーマカラー", systemImage: "paintpalette", destination: .display),
+        .init(title: "サポート", detail: "メールで問い合わせ", systemImage: "envelope", destination: .support),
+        .init(title: "利用規約とプライバシーポリシー", detail: "利用に関する重要事項", systemImage: "doc.text", destination: .legal)
     ]
 
     var body: some View {
-        GeometryReader { proxy in
-            let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
-            let bottomInset = baseSafeAreaBottom()
-            let topPadding = max(0, SettingsStyle.figmaTopInset - proxy.safeAreaInsets.top)
+        NavigationStack(path: $navigationPath) {
+            GeometryReader { proxy in
+                let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
+                let bottomInset = baseSafeAreaBottom()
+                let topPadding = max(0, SettingsStyle.figmaTopInset - proxy.safeAreaInsets.top)
 
-            ZStack {
-                HomeStyle.screenBackground.ignoresSafeArea()
+                ZStack {
+                    HomeStyle.screenBackground.ignoresSafeArea()
 
-                ScrollView {
-                    VStack(spacing: SettingsStyle.sectionSpacing) {
-                        SettingsHeaderView()
-                            .frame(width: contentWidth, alignment: .leading)
+                    ScrollView {
+                        VStack(spacing: SettingsStyle.sectionSpacing) {
+                            SettingsHeaderView()
+                                .frame(width: contentWidth, alignment: .leading)
 
-                        Rectangle()
-                            .fill(HomeStyle.outline)
-                            .frame(width: contentWidth, height: HomeStyle.dividerHeight)
+                            Rectangle()
+                                .fill(HomeStyle.outline)
+                                .frame(width: contentWidth, height: HomeStyle.dividerHeight)
 
-                        VStack(spacing: SettingsStyle.cardSpacing) {
-                            ForEach(items) { item in
-                                NavigationLink {
-                                    SettingsDestinationView(destination: item.destination)
-                                } label: {
-                                    SettingsCardView(item: item, width: contentWidth)
+                            VStack(spacing: SettingsStyle.cardSpacing) {
+                                ForEach(items) { item in
+                                    NavigationLink(value: item.destination) {
+                                        SettingsCardView(item: item, width: contentWidth)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
+                            .frame(width: contentWidth, alignment: .center)
                         }
-                        .frame(width: contentWidth, alignment: .center)
+                        .padding(.top, topPadding)
+                        .padding(.bottom, HomeStyle.tabBarHeight + 16 + bottomInset)
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.top, topPadding)
-                    .padding(.bottom, HomeStyle.tabBarHeight + 16 + bottomInset)
-                    .frame(maxWidth: .infinity)
                 }
+                .toolbar(.hidden, for: .navigationBar)
             }
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: SettingsDestination.self) { destination in
+                SettingsDestinationView(destination: destination)
+            }
+        }
+        .onAppear {
+            router.hasSettingsDetailPath = !navigationPath.isEmpty
+        }
+        .onChange(of: navigationPath) { _, newValue in
+            router.hasSettingsDetailPath = !newValue.isEmpty
+        }
+        .onChange(of: router.settingsRootResetSignal) { _, _ in
+            guard !navigationPath.isEmpty else { return }
+            withAnimation(.easeInOut(duration: 0.25)) {
+                navigationPath.removeAll()
+            }
         }
     }
 }
@@ -134,11 +154,12 @@ private struct SettingsItemData: Identifiable {
     let destination: SettingsDestination
 }
 
-private enum SettingsDestination {
+private enum SettingsDestination: Hashable {
     case subscription
     case backup
     case security
     case display
+    case support
     case legal
 }
 
@@ -150,11 +171,13 @@ private struct SettingsDestinationView: View {
         case .subscription:
             SubscriptionSettingsView()
         case .backup:
-            BackupSettingsView()
+            BackupSettingsDestinationView()
         case .security:
             SecuritySettingsView()
         case .display:
             DisplaySettingsView()
+        case .support:
+            SupportSettingsView()
         case .legal:
             LegalSettingsView()
         }
@@ -459,10 +482,33 @@ private struct SubscriptionSettingsView: View {
 }
 
 @MainActor
+private struct BackupSettingsDestinationView: View {
+    @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        BackupSettingsView(
+            manualBackupViewModel: ManualBackupSettingsViewModel(
+                manualBackupService: EncryptedManualBackupService(modelContext: modelContext)
+            )
+        )
+    }
+}
+
+@MainActor
 private struct BackupSettingsView: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
     @StateObject private var viewModel: BackupSettingsViewModel
+    @StateObject private var manualBackupViewModel: ManualBackupSettingsViewModel
+    @State private var showsExportPassphraseSheet = false
+    @State private var showsImportPassphraseSheet = false
+    @State private var showsImportFileGuide = false
+    @State private var showsFileImporter = false
+    @State private var showsRestoreConfirmationSheet = false
+    @State private var showsShareSheet = false
+    @State private var showsAppleAccountSignInAlert = false
+    @State private var shareItems: [Any] = []
+    @State private var selectedImportURL: URL?
     private let subscriptionService: SubscriptionService
 
     private static var isBackupPaywallEnabled: Bool {
@@ -494,6 +540,7 @@ private struct BackupSettingsView: View {
 
     init(
         viewModel: BackupSettingsViewModel? = nil,
+        manualBackupViewModel: ManualBackupSettingsViewModel,
         subscriptionService: SubscriptionService = SubscriptionServiceFactory.makeService()
     ) {
         self.subscriptionService = subscriptionService
@@ -503,6 +550,7 @@ private struct BackupSettingsView: View {
                 isEntitlementCheckEnabled: Self.isBackupPaywallEnabled
             )
         )
+        _manualBackupViewModel = StateObject(wrappedValue: manualBackupViewModel)
     }
 
     private var backupBinding: Binding<Bool> {
@@ -544,7 +592,7 @@ private struct BackupSettingsView: View {
             return nil
         case .unavailable(let reason):
             if reason == "iCloudにサインインしてください。" {
-                return "iPhoneの『設定』アプリ > 画面上部のApple Account からサインインしてください。"
+                return "『設定』アプリのApple Accountからサインインしてください。"
             }
             return reason
         }
@@ -565,6 +613,24 @@ private struct BackupSettingsView: View {
         return formatter
     }()
 
+    private static let manualBackupContentType: UTType = {
+        UTType(filenameExtension: "esbackup") ?? .data
+    }()
+
+    private var manualLastExportText: String {
+        guard let date = manualBackupViewModel.lastExportAt else {
+            return "未実行"
+        }
+        return Self.backupDateFormatter.string(from: date)
+    }
+
+    private var manualLastRestoreText: String {
+        guard let date = manualBackupViewModel.lastRestoreAt else {
+            return "未実行"
+        }
+        return Self.backupDateFormatter.string(from: date)
+    }
+
     var body: some View {
         SettingsDetailContainerView(
             title: "同期・バックアップ",
@@ -572,7 +638,7 @@ private struct BackupSettingsView: View {
         ) {
             SettingsSectionCard(
                 title: "クラウド同期",
-                subtitle: "同期の有効化と状態",
+                subtitle: "有効化と状態",
                 headerAccessory: { ProFeatureBadge() }
             ) {
                 Toggle(isOn: backupBinding) {
@@ -611,6 +677,38 @@ private struct BackupSettingsView: View {
                 }
             }
 
+            SettingsSectionCard(
+                title: "手動バックアップ",
+                subtitle: "ダウンロード/アップロード",
+                headerAccessory: { ProFeatureBadge() }
+            ) {
+                Text("通常はiCloudでのデータ同期の利用をおすすめします。手動バックアップは必要な場合にご利用ください。")
+                    .font(SettingsDetailStyle.rowMetaFont)
+                    .foregroundColor(SettingsDetailStyle.rowMetaText)
+
+                SettingsKeyValueRow(title: "最終ダウンロード日時", value: manualLastExportText)
+                SettingsKeyValueRow(title: "最終アップロード日時", value: manualLastRestoreText)
+
+                VStack(spacing: 10) {
+                    SettingsActionButton(title: "バックアップをダウンロード", isPrimary: true) {
+                        startManualBackupExportFlow()
+                    }
+                    .disabled(manualBackupViewModel.isExporting || manualBackupViewModel.isInspecting || manualBackupViewModel.isRestoring)
+
+                    SettingsActionButton(title: "バックアップをアップロード（復元）", isPrimary: false) {
+                        startManualBackupImportFlow()
+                    }
+                    .disabled(manualBackupViewModel.isExporting || manualBackupViewModel.isInspecting || manualBackupViewModel.isRestoring)
+                }
+
+                if let manualErrorMessage = manualBackupViewModel.errorMessage {
+                    Text(manualErrorMessage)
+                        .font(SettingsDetailStyle.rowMetaFont)
+                        .foregroundColor(.red)
+                        .padding(.top, 2)
+                }
+            }
+
             if viewModel.requiresAppRestartNotice {
                 SettingsSectionCard(title: "反映メッセージ", subtitle: "切替の反映タイミング") {
                     Text("設定変更は再起動後に反映されます。")
@@ -623,6 +721,121 @@ private struct BackupSettingsView: View {
         .task {
             await viewModel.load()
             await viewModel.refreshSubscriptionStatus(using: subscriptionService)
+            manualBackupViewModel.load()
+        }
+        .sheet(isPresented: $showsExportPassphraseSheet) {
+            BackupPassphraseSheet(
+                title: "バックアップをダウンロード",
+                subtitle: "バックアップファイルを暗号化するパスフレーズを設定します。",
+                confirmButtonTitle: "ダウンロードを開始",
+                requiresConfirmation: true,
+                isProcessing: manualBackupViewModel.isExporting,
+                minimumLength: ManualBackupSettingsViewModel.minimumPassphraseLength,
+                onSubmit: { passphrase, confirmation in
+                    showsExportPassphraseSheet = false
+                    Task {
+                        guard let exportedURL = await manualBackupViewModel.exportBackup(
+                            passphrase: passphrase,
+                            confirmation: confirmation
+                        ) else {
+                            return
+                        }
+                        shareItems = [exportedURL]
+                        showsShareSheet = true
+                    }
+                },
+                onCancel: {
+                    showsExportPassphraseSheet = false
+                }
+            )
+        }
+        .sheet(isPresented: $showsImportPassphraseSheet) {
+            BackupPassphraseSheet(
+                title: "バックアップをアップロード",
+                subtitle: "バックアップ作成時に設定したパスフレーズを入力してください。",
+                confirmButtonTitle: "内容を確認",
+                requiresConfirmation: false,
+                isProcessing: manualBackupViewModel.isInspecting,
+                minimumLength: ManualBackupSettingsViewModel.minimumPassphraseLength,
+                onSubmit: { passphrase, _ in
+                    showsImportPassphraseSheet = false
+                    guard let selectedImportURL else { return }
+                    Task {
+                        let isPrepared = await manualBackupViewModel.inspectBackup(
+                            at: selectedImportURL,
+                            passphrase: passphrase
+                        )
+                        if isPrepared {
+                            showsRestoreConfirmationSheet = true
+                        }
+                    }
+                },
+                onCancel: {
+                    showsImportPassphraseSheet = false
+                    selectedImportURL = nil
+                }
+            )
+        }
+        .sheet(isPresented: $showsRestoreConfirmationSheet, onDismiss: {
+            manualBackupViewModel.clearPendingRestore()
+            selectedImportURL = nil
+        }) {
+            if let preview = manualBackupViewModel.pendingRestorePreview {
+                ManualRestoreConfirmationSheet(
+                    preview: preview,
+                    isRestoring: manualBackupViewModel.isRestoring,
+                    onConfirm: {
+                        Task {
+                            let result = await manualBackupViewModel.restorePendingBackup()
+                            if result != nil {
+                                showsRestoreConfirmationSheet = false
+                            }
+                        }
+                    },
+                    onCancel: {
+                        manualBackupViewModel.clearPendingRestore()
+                        showsRestoreConfirmationSheet = false
+                    }
+                )
+            } else {
+                EmptyView()
+            }
+        }
+        .sheet(isPresented: $showsShareSheet, onDismiss: {
+            shareItems = []
+        }) {
+            ActivityView(activityItems: shareItems)
+        }
+        .alert("バックアップファイルを選択", isPresented: $showsImportFileGuide) {
+            Button("ファイルを開く") {
+                showsFileImporter = true
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("拡張子 .esbackup のバックアップファイルを選択してください。")
+        }
+        .fileImporter(
+            isPresented: $showsFileImporter,
+            allowedContentTypes: [Self.manualBackupContentType, .data],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let firstURL = urls.first else { return }
+                do {
+                    selectedImportURL = try copyImportedBackupToTemporaryDirectory(from: firstURL)
+                    showsImportPassphraseSheet = true
+                } catch {
+                    manualBackupViewModel.errorMessage = error.localizedDescription
+                }
+            case .failure(let error):
+                manualBackupViewModel.errorMessage = error.localizedDescription
+            }
+        }
+        .alert("Apple Accountにサインインしてください", isPresented: $showsAppleAccountSignInAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("クラウド同期を有効にするには、iPhoneの『設定』アプリ > 画面上部のApple Accountからサインインしてください。")
         }
     }
 
@@ -636,7 +849,46 @@ private struct BackupSettingsView: View {
             router.presentPaywall(.backup)
             return
         }
+
+        if case .unavailable(let reason) = viewModel.availability,
+           reason == "iCloudにサインインしてください。"
+        {
+            showsAppleAccountSignInAlert = true
+            return
+        }
+
         viewModel.setBackupEnabled(true)
+    }
+
+    private func startManualBackupExportFlow() {
+        guard !Self.isBackupPaywallEnabled || premiumAccess.hasAccess(to: .backup) else {
+            router.presentPaywall(.backup)
+            return
+        }
+        manualBackupViewModel.errorMessage = nil
+        showsExportPassphraseSheet = true
+    }
+
+    private func startManualBackupImportFlow() {
+        guard !Self.isBackupPaywallEnabled || premiumAccess.hasAccess(to: .backup) else {
+            router.presentPaywall(.backup)
+            return
+        }
+        manualBackupViewModel.errorMessage = nil
+        showsImportFileGuide = true
+    }
+
+    private func copyImportedBackupToTemporaryDirectory(from sourceURL: URL) throws -> URL {
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("imported-manual-backup-\(UUID().uuidString).esbackup")
+        let isSecurityScoped = sourceURL.startAccessingSecurityScopedResource()
+        defer {
+            if isSecurityScoped {
+                sourceURL.stopAccessingSecurityScopedResource()
+            }
+        }
+        try FileManager.default.copyItem(at: sourceURL, to: destination)
+        return destination
     }
 }
 
@@ -659,6 +911,39 @@ private struct RevenueCatCustomerCenterContainer: View {
 private struct SecuritySettingsView: View {
     @State private var passcodeEnabled = true
     @State private var biometricEnabled = false
+    @State private var selectedAutoLockInterval: AutoLockInterval = .minutes2
+
+    private var isAutoLockConfigEnabled: Bool {
+        passcodeEnabled || biometricEnabled
+    }
+
+    private enum AutoLockInterval: Int, CaseIterable, Identifiable {
+        case immediately = 0
+        case seconds30 = 30
+        case minutes1 = 60
+        case minutes2 = 120
+        case minutes5 = 300
+        case minutes10 = 600
+
+        var id: Int { rawValue }
+
+        var label: String {
+            switch self {
+            case .immediately:
+                return "すぐに"
+            case .seconds30:
+                return "30秒"
+            case .minutes1:
+                return "1分"
+            case .minutes2:
+                return "2分"
+            case .minutes5:
+                return "5分"
+            case .minutes10:
+                return "10分"
+            }
+        }
+    }
 
     var body: some View {
         SettingsDetailContainerView(
@@ -682,9 +967,19 @@ private struct SecuritySettingsView: View {
             }
 
             SettingsSectionCard(title: "自動ロック", subtitle: "非アクティブ時のロック") {
-                VStack(spacing: 10) {
-                    SettingsKeyValueRow(title: "自動ロックまで", value: "2分")
-                    SettingsKeyValueRow(title: "試行回数制限", value: "10回")
+                HStack {
+                    Text("自動ロックまで")
+                        .font(SettingsDetailStyle.rowTitleFont)
+                        .foregroundColor(SettingsDetailStyle.rowTitleText)
+                    Spacer(minLength: 0)
+                    Picker("自動ロックまで", selection: $selectedAutoLockInterval) {
+                        ForEach(AutoLockInterval.allCases) { interval in
+                            Text(interval.label).tag(interval)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .disabled(!isAutoLockConfigEnabled)
                 }
             }
         }
@@ -692,51 +987,99 @@ private struct SecuritySettingsView: View {
 }
 
 private struct DisplaySettingsView: View {
-    @State private var themeIndex = 0
-    @State private var fontScaleIndex = 1
-
-    private let themeOptions = ["ライト", "ダーク", "自動"]
-    private let fontScaleOptions = ["小", "標準", "大"]
+    @State private var themeModeIndex = 0
+    private let themeModeOptions = ["自動", "ライトモード", "ダークモード"]
 
     var body: some View {
         SettingsDetailContainerView(
             title: "表示",
-            subtitle: "テーマとフォントを調整"
+            subtitle: "テーマを選択"
         ) {
-            SettingsSectionCard(title: "テーマ", subtitle: "表示モードを選択") {
-                SettingsSegmentedControl(options: themeOptions, selection: $themeIndex)
-            }
-
-            SettingsSectionCard(title: "フォントサイズ", subtitle: "読みやすさの調整") {
-                SettingsSegmentedControl(options: fontScaleOptions, selection: $fontScaleIndex)
-            }
-
-            SettingsSectionCard(title: "一覧の表示", subtitle: "Home画面の表示形式") {
-                SettingsKeyValueRow(title: "ホーム一覧", value: "リスト表示（固定）")
+            SettingsSectionCard(title: "テーマ", subtitle: "表示モード") {
+                SettingsSegmentedControl(options: themeModeOptions, selection: $themeModeIndex)
+                Text("ダークモード表示は今後対応予定です。")
+                    .font(SettingsDetailStyle.rowMetaFont)
+                    .foregroundColor(SettingsDetailStyle.rowMetaText)
             }
         }
     }
 }
 
 private struct LegalSettingsView: View {
+    @Environment(\.openURL) private var openURL
+
     var body: some View {
         SettingsDetailContainerView(
-            title: "法務",
-            subtitle: "利用規約とプライバシー"
+            title: "利用規約とプライバシーポリシー",
+            subtitle: "利用に関する重要事項"
         ) {
-            SettingsSectionCard(title: "ドキュメント", subtitle: "利用に関する重要事項") {
+            SettingsSectionCard(title: "ポリシー", subtitle: "公式ドキュメント") {
                 VStack(spacing: 12) {
-                    SettingsLinkRow(title: "利用規約", detail: "最終更新 2026/01/15")
-                    SettingsLinkRow(title: "プライバシーポリシー", detail: "最終更新 2026/01/15")
-                    SettingsLinkRow(title: "ライセンス", detail: "オープンソース情報")
+                    Text("外部ブラウザへ遷移します。")
+                        .font(SettingsDetailStyle.rowMetaFont)
+                        .foregroundColor(SettingsDetailStyle.rowMetaText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    SettingsLinkRow(title: "利用規約") {
+                        guard let url = URL(string: "https://episodestocker.com/terms") else { return }
+                        openURL(url)
+                    }
+                    SettingsLinkRow(title: "プライバシーポリシー") {
+                        guard let url = URL(string: "https://episodestocker.com/privacy") else { return }
+                        openURL(url)
+                    }
+
+                    Text("© 2026 comado.studio All rights reserved.")
+                        .font(SettingsDetailStyle.rowMetaFont)
+                        .foregroundColor(SettingsDetailStyle.rowMetaText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .allowsTightening(true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
                 }
             }
+        }
+    }
+}
 
-            SettingsSectionCard(title: "サポート", subtitle: "問い合わせと不具合報告") {
+private struct SupportSettingsView: View {
+    @Environment(\.openURL) private var openURL
+    @State private var errorMessage: String?
+
+    var body: some View {
+        SettingsDetailContainerView(
+            title: "サポート",
+            subtitle: "メールで問い合わせ"
+        ) {
+            SettingsSectionCard(title: "お問い合わせ", subtitle: "サポート窓口へメール送信") {
                 VStack(spacing: 10) {
-                    SettingsActionButton(title: "問い合わせフォームを開く", isPrimary: true) {}
-                    SettingsActionButton(title: "バージョン情報を確認", isPrimary: false) {}
+                    SettingsActionButton(title: "メールアプリを開く", isPrimary: true) {
+                        openSupportMail()
+                    }
+                    Text("デフォルトのメールクライアントが開きます。")
+                        .font(SettingsDetailStyle.rowMetaFont)
+                        .foregroundColor(SettingsDetailStyle.rowMetaText)
                 }
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(SettingsDetailStyle.rowMetaFont)
+                        .foregroundColor(.red)
+                }
+            }
+        }
+    }
+
+    private func openSupportMail() {
+        guard let url = URL(string: "mailto:support@episodestocker.com") else {
+            errorMessage = "メールアプリを開けませんでした。"
+            return
+        }
+        openURL(url) { accepted in
+            if accepted {
+                errorMessage = nil
+            } else {
+                errorMessage = "メールアプリを開けませんでした。"
             }
         }
     }
@@ -744,24 +1087,22 @@ private struct LegalSettingsView: View {
 
 private struct SettingsLinkRow: View {
     let title: String
-    let detail: String
+    let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        Button(action: action) {
+            HStack(spacing: 12) {
                 Text(title)
                     .font(SettingsDetailStyle.rowTitleFont)
                     .foregroundColor(SettingsDetailStyle.rowTitleText)
-                Text(detail)
-                    .font(SettingsDetailStyle.rowMetaFont)
-                    .foregroundColor(SettingsDetailStyle.rowMetaText)
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(SettingsDetailStyle.linkIcon)
             }
-            Spacer(minLength: 0)
-            Image(systemName: "arrow.up.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(SettingsDetailStyle.linkIcon)
+            .padding(.vertical, 4)
         }
-        .padding(.vertical, 4)
+        .buttonStyle(.plain)
     }
 }
 
@@ -808,28 +1149,29 @@ private struct SettingsDetailContainerView<Content: View>: View {
             let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
             let bottomInset = baseSafeAreaBottom()
             let topPadding = max(0, SettingsStyle.figmaTopInset - proxy.safeAreaInsets.top)
+            let fullBottomPadding = HomeStyle.tabBarHeight + 16 + bottomInset
+            let compactBottomPadding = bottomInset + 8
 
-            ZStack {
+            ZStack(alignment: .top) {
                 HomeStyle.screenBackground.ignoresSafeArea()
 
-                ScrollView {
-                    VStack(spacing: SettingsDetailStyle.sectionSpacing) {
-                        SettingsDetailHeader(title: title, subtitle: subtitle)
-                            .frame(width: contentWidth, alignment: .leading)
+                ViewThatFits(in: .vertical) {
+                    detailContent(
+                        width: contentWidth,
+                        topPadding: topPadding,
+                        bottomPadding: compactBottomPadding
+                    )
 
-                        Rectangle()
-                            .fill(HomeStyle.outline)
-                            .frame(width: contentWidth, height: HomeStyle.dividerHeight)
-
-                        VStack(spacing: SettingsDetailStyle.sectionSpacing) {
-                            content
-                        }
-                        .frame(width: contentWidth)
+                    ScrollView {
+                        detailContent(
+                            width: contentWidth,
+                            topPadding: topPadding,
+                            bottomPadding: fullBottomPadding
+                        )
                     }
-                    .padding(.top, topPadding)
-                    .padding(.bottom, HomeStyle.tabBarHeight + 16 + bottomInset)
-                    .frame(maxWidth: .infinity)
+                    .scrollBounceBehavior(.basedOnSize)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .toolbar(.hidden, for: .navigationBar)
             .edgeSwipeBack {
@@ -838,6 +1180,29 @@ private struct SettingsDetailContainerView<Content: View>: View {
         }
     }
 
+    @ViewBuilder
+    private func detailContent(
+        width: CGFloat,
+        topPadding: CGFloat,
+        bottomPadding: CGFloat
+    ) -> some View {
+        VStack(spacing: SettingsDetailStyle.sectionSpacing) {
+            SettingsDetailHeader(title: title, subtitle: subtitle)
+                .frame(width: width, alignment: .leading)
+
+            Rectangle()
+                .fill(HomeStyle.outline)
+                .frame(width: width, height: HomeStyle.dividerHeight)
+
+            VStack(spacing: SettingsDetailStyle.sectionSpacing) {
+                content
+            }
+            .frame(width: width)
+        }
+        .padding(.top, topPadding)
+        .padding(.bottom, bottomPadding)
+        .frame(maxWidth: .infinity)
+    }
 }
 
 private enum SettingsDetailStyle {

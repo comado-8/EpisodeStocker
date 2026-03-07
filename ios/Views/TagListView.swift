@@ -587,8 +587,14 @@ private struct TagEditorSheet: View {
       )
       .onPreferenceChange(TagEditorHeightKey.self) { height in
         let contentHeight = height
-        let viewportHeight = fullScreenHeight > 0 ? fullScreenHeight : proxy.size.height
-        let maxHeight = viewportHeight * 0.8
+        let viewportHeight = max(fullScreenHeight, proxy.size.height)
+        let maxHeight: CGFloat
+        if viewportHeight > 0.5 {
+          maxHeight = max(viewportHeight * 0.8, TagStyle.editorSheetMinHeight)
+        } else {
+          // On first presentation, viewport can be unresolved (0). Avoid clamping too low.
+          maxHeight = .greatestFiniteMagnitude
+        }
         let targetHeight = min(max(contentHeight, TagStyle.editorSheetMinHeight), maxHeight)
         if abs(measuredHeight - targetHeight) > 0.5 {
           measuredHeight = targetHeight
