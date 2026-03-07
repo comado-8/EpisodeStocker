@@ -330,7 +330,10 @@ enum AnalyticsSnapshotBuilder {
                 if lhs.talkCount != rhs.talkCount {
                     return lhs.talkCount > rhs.talkCount
                 }
-                return lhs.title < rhs.title
+                if lhs.title != rhs.title {
+                    return lhs.title < rhs.title
+                }
+                return lhs.episodeID.uuidString < rhs.episodeID.uuidString
             }
             .prefix(suggestionLimit)
 

@@ -102,6 +102,14 @@ struct HomeView: View {
         premiumAccess.hasLoadedStatus && !premiumAccess.hasAccess(to: .advancedSearch)
     }
 
+    private var isAdvancedSearchPendingResolution: Bool {
+        !premiumAccess.hasLoadedStatus
+    }
+
+    private var isAdvancedSearchUnavailable: Bool {
+        isAdvancedSearchPendingResolution || isAdvancedSearchLocked
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
@@ -405,9 +413,14 @@ private extension HomeView {
 
     @discardableResult
     func appendSearchToken(field: HomeSearchField, value: String) -> Bool {
-        if field.isPremiumAdvancedSearchField && isAdvancedSearchLocked {
-            router.presentPaywall(.advancedSearch)
-            return false
+        if field.isPremiumAdvancedSearchField {
+            if isAdvancedSearchPendingResolution {
+                return false
+            }
+            if isAdvancedSearchLocked {
+                router.presentPaywall(.advancedSearch)
+                return false
+            }
         }
         guard let token = HomeSearchFilterToken(field: field, value: value) else { return false }
         if !searchTokens.contains(token) {
@@ -419,9 +432,14 @@ private extension HomeView {
     func applySuggestion(_ item: HomeSearchSuggestionItem) {
         switch item.kind {
         case .selectField(let field):
-            guard !field.isPremiumAdvancedSearchField || !isAdvancedSearchLocked else {
-                router.presentPaywall(.advancedSearch)
-                return
+            if field.isPremiumAdvancedSearchField {
+                if isAdvancedSearchPendingResolution {
+                    return
+                }
+                guard !isAdvancedSearchUnavailable else {
+                    router.presentPaywall(.advancedSearch)
+                    return
+                }
             }
             activeSearchField = field
             isSearchCommitted = !searchTokens.isEmpty
@@ -490,6 +508,11 @@ private extension HomeView {
         }
 
         guard newValue.requiresPremium else { return }
+        guard premiumAccess.hasLoadedStatus else {
+            isRevertingSortSelection = true
+            sortOption = oldValue
+            return
+        }
         guard premiumAccess.hasAccess(to: .advancedSort) else {
             revertSortSelectionAndPresentPaywall(oldValue: oldValue)
             return
@@ -809,13 +832,22 @@ private struct HomeEpisodeSortControl: View {
     }
 
     private func shouldShowPremiumLock(for option: HomeEpisodeSortOption) -> Bool {
-        option.requiresPremium && !premiumAccess.hasAccess(to: .advancedSort)
+        option.requiresPremium
+            && premiumAccess.hasLoadedStatus
+            && !premiumAccess.hasAccess(to: .advancedSort)
+    }
+
+    private func isPremiumSortPending(for option: HomeEpisodeSortOption) -> Bool {
+        option.requiresPremium && !premiumAccess.hasLoadedStatus
     }
 
     private var sortOptionsPopover: some View {
         VStack(spacing: 0) {
             ForEach(HomeEpisodeSortOption.allCases) { option in
                 Button {
+                    if isPremiumSortPending(for: option) {
+                        return
+                    }
                     if shouldShowPremiumLock(for: option) {
                         showsSortOptions = false
                         router.presentPaywall(.advancedSort)
@@ -840,6 +872,7 @@ private struct HomeEpisodeSortControl: View {
     @ViewBuilder
     private func sortOptionRow(for option: HomeEpisodeSortOption) -> some View {
         let isLockedOption = shouldShowPremiumLock(for: option)
+        let isPendingOption = isPremiumSortPending(for: option)
         HStack(spacing: 8) {
             Group {
                 if selection == option {
@@ -859,6 +892,7 @@ private struct HomeEpisodeSortControl: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
+                .opacity(isPendingOption ? 0.5 : 1)
 
             Spacer(minLength: 0)
         }

@@ -46,9 +46,10 @@ final class PremiumAccessViewModelTests: XCTestCase {
     }
 
     func testPaidPlanCanCreateEpisodeBeyondFreeLimit() async {
+        let futureExpiry = Date().addingTimeInterval(24 * 60 * 60)
         let vm = PremiumAccessViewModel(
             service: FakeSubscriptionServiceForPremiumAccess(
-                status: .init(plan: .monthly, expiryDate: Date(), trialEndDate: nil)
+                status: .init(plan: .monthly, expiryDate: futureExpiry, trialEndDate: nil)
             )
         )
         await vm.refresh()
@@ -58,8 +59,9 @@ final class PremiumAccessViewModelTests: XCTestCase {
     }
 
     func testEnsureStatusLoadedFetchesOnce() async {
+        let futureExpiry = Date().addingTimeInterval(24 * 60 * 60)
         let service = FakeSubscriptionServiceForPremiumAccess(
-            status: .init(plan: .yearly, expiryDate: Date(), trialEndDate: nil)
+            status: .init(plan: .yearly, expiryDate: futureExpiry, trialEndDate: nil)
         )
         let vm = PremiumAccessViewModel(service: service)
 
@@ -71,10 +73,11 @@ final class PremiumAccessViewModelTests: XCTestCase {
     }
 
     func testRefreshCachesPremiumAccess() async {
+        let futureExpiry = Date().addingTimeInterval(24 * 60 * 60)
         let entitlementCache = StubSubscriptionEntitlementCacheForPremiumAccess()
         let vm = PremiumAccessViewModel(
             service: FakeSubscriptionServiceForPremiumAccess(
-                status: .init(plan: .monthly, expiryDate: Date(), trialEndDate: nil)
+                status: .init(plan: .monthly, expiryDate: futureExpiry, trialEndDate: nil)
             ),
             cloudSyncPreferenceRepository: StubCloudSyncPreferenceRepositoryForPremiumAccess(),
             entitlementCache: entitlementCache
@@ -159,7 +162,7 @@ final class PremiumAccessViewModelTests: XCTestCase {
         let service = FakeSequenceSubscriptionService(
             results: [
                 .failure(DummyError(message: "first failed")),
-                .success(.init(plan: .monthly, expiryDate: Date(), trialEndDate: nil))
+                .success(.init(plan: .monthly, expiryDate: Date().addingTimeInterval(24 * 60 * 60), trialEndDate: nil))
             ]
         )
         let vm = PremiumAccessViewModel(
@@ -179,7 +182,7 @@ final class PremiumAccessViewModelTests: XCTestCase {
 
     func testConcurrentRefreshCallsOnlyFetchOnceWhileInFlight() async {
         let service = FakeDelayedSubscriptionService(
-            status: .init(plan: .yearly, expiryDate: Date(), trialEndDate: nil),
+            status: .init(plan: .yearly, expiryDate: Date().addingTimeInterval(24 * 60 * 60), trialEndDate: nil),
             delayNanoseconds: 200_000_000
         )
         let vm = PremiumAccessViewModel(

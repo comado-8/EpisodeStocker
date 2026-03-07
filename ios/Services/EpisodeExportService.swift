@@ -56,7 +56,7 @@ final class EpisodeExportService {
             do {
                 try fileManager.removeItem(at: outputURL)
             } catch {
-                NSLog("Failed to remove existing export file at \(outputURL): \(error)")
+                NSLog("Failed to remove existing export file: \(error)")
                 throw EpisodeExportError.fileWriteFailed
             }
         }
@@ -78,17 +78,18 @@ final class EpisodeExportService {
         unlockDate: Date?,
         isUnlocked: Bool
     ) -> EpisodeExportPayload {
-        EpisodeExportPayload(
+        let formatter = makeDisplayDateFormatter()
+        return EpisodeExportPayload(
             title: title,
             body: body ?? "",
-            episodeDateText: displayDateFormatter.string(from: episodeDate),
-            unlockDateText: unlockDate.map { displayDateFormatter.string(from: $0) } ?? "未設定",
+            episodeDateText: formatter.string(from: episodeDate),
+            unlockDateText: unlockDate.map { formatter.string(from: $0) } ?? "未設定",
             statusText: isUnlocked ? "解禁OK" : "解禁前"
         )
     }
 
     func makeFilename(format: EpisodeExportFormat, title: String) -> String {
-        let dateString = Self.filenameDateFormatter.string(from: now())
+        let dateString = Self.makeFilenameDateFormatter().string(from: now())
         let sanitizedTitle = Self.sanitizeFilenameTitle(title)
         return "Episode_\(dateString)_\(sanitizedTitle).\(format.fileExtension)"
     }
@@ -151,19 +152,19 @@ final class EpisodeExportService {
         }
     }
 
-    private static let displayDateFormatter: DateFormatter = {
+    private static func makeDisplayDateFormatter() -> DateFormatter {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "ja_JP")
         formatter.dateFormat = "yyyy/MM/dd"
         return formatter
-    }()
+    }
 
-    private static let filenameDateFormatter: DateFormatter = {
+    private static func makeFilenameDateFormatter() -> DateFormatter {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd"
         return formatter
-    }()
+    }
 }

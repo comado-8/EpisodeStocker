@@ -13,7 +13,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .available,
             enabled: false,
             manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
@@ -34,7 +34,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .available,
             enabled: false,
             manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
@@ -56,7 +56,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .unavailable(reason: "iCloud未ログイン"),
             enabled: false,
             manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
@@ -77,7 +77,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .available,
             enabled: true,
             manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
@@ -98,7 +98,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .available,
             enabled: true,
             manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
@@ -122,7 +122,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .available,
             enabled: true,
             manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
@@ -144,7 +144,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .available,
             enabled: true,
             manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
@@ -165,7 +165,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .available,
             enabled: false,
             manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         let monitor = FakeCloudSyncStatusMonitor()
         var vm: BackupSettingsViewModel? = BackupSettingsViewModel(
@@ -189,7 +189,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .available,
             enabled: false,
             manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         let monitor = FakeCloudSyncStatusMonitor()
         let vm = BackupSettingsViewModel(
@@ -207,7 +207,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .unavailable(reason: "iCloud未ログイン"),
             enabled: false,
             manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         let vm = BackupSettingsViewModel(
             cloudBackupService: service,
@@ -225,7 +225,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
                 availabilityValue: .available,
                 enabled: false,
                 manualBackupResult: .success(Date()),
-                lastSyncAt: nil
+                lastBackupAt: nil
             ),
             cloudSyncStatusMonitor: FakeCloudSyncStatusMonitor(),
             subscriptionStatus: .init(
@@ -244,7 +244,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
                 availabilityValue: .available,
                 enabled: false,
                 manualBackupResult: .success(Date()),
-                lastSyncAt: nil
+                lastBackupAt: nil
             ),
             cloudSyncStatusMonitor: FakeCloudSyncStatusMonitor(),
             isEntitlementCheckEnabled: false,
@@ -259,7 +259,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .available,
             enabled: true,
             manualBackupResult: .success(Date()),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         let vm = BackupSettingsViewModel(
             cloudBackupService: service,
@@ -284,7 +284,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
                 availabilityValue: .available,
                 enabled: false,
                 manualBackupResult: .success(Date()),
-                lastSyncAt: nil
+                lastBackupAt: nil
             ),
             cloudSyncStatusMonitor: FakeCloudSyncStatusMonitor(),
             subscriptionStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
@@ -304,7 +304,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .available,
             enabled: true,
             manualBackupResult: .success(Date()),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         service.setBackupEnabledErrorForValue[false] = DummyError(message: "toggle off failed")
         let vm = BackupSettingsViewModel(
@@ -325,7 +325,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .available,
             enabled: false,
             manualBackupResult: .success(Date()),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         service.setBackupEnabledErrorForValue[true] = DummyError(message: "toggle on failed")
         let vm = BackupSettingsViewModel(
@@ -347,7 +347,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
                 availabilityValue: .available,
                 enabled: false,
                 manualBackupResult: .success(Date()),
-                lastSyncAt: nil
+                lastBackupAt: nil
             ),
             cloudSyncStatusMonitor: FakeCloudSyncStatusMonitor(),
             subscriptionStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
@@ -366,7 +366,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
                 availabilityValue: .available,
                 enabled: true,
                 manualBackupResult: .success(Date()),
-                lastSyncAt: nil
+                lastBackupAt: nil
             ),
             cloudSyncStatusMonitor: FakeCloudSyncStatusMonitor(),
             subscriptionStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil)
@@ -384,7 +384,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
                 availabilityValue: .unavailable(reason: "iCloud未ログイン"),
                 enabled: true,
                 manualBackupResult: .success(Date()),
-                lastSyncAt: nil
+                lastBackupAt: nil
             ),
             cloudSyncStatusMonitor: FakeCloudSyncStatusMonitor(),
             subscriptionStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
@@ -404,7 +404,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
                 availabilityValue: .available,
                 enabled: true,
                 manualBackupResult: .success(expected),
-                lastSyncAt: nil
+                lastBackupAt: nil
             ),
             cloudSyncStatusMonitor: FakeCloudSyncStatusMonitor(),
             subscriptionStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
@@ -425,7 +425,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
                 availabilityValue: .available,
                 enabled: true,
                 manualBackupResult: .failure(DummyError(message: "backup failed")),
-                lastSyncAt: nil
+                lastBackupAt: nil
             ),
             cloudSyncStatusMonitor: FakeCloudSyncStatusMonitor(),
             subscriptionStatus: .init(plan: .monthly, expiryDate: nil, trialEndDate: nil)
@@ -443,7 +443,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
             availabilityValue: .available,
             enabled: true,
             manualBackupResult: .success(Date()),
-            lastSyncAt: nil
+            lastBackupAt: nil
         )
         service.setBackupEnabledErrorForValue[false] = DummyError(message: "downgrade failed")
         let vm = BackupSettingsViewModel(
@@ -471,12 +471,12 @@ private final class FakeCloudBackupService: CloudBackupService {
         availabilityValue: CloudBackupAvailability,
         enabled: Bool,
         manualBackupResult: Result<Date, Error>,
-        lastSyncAt: Date?
+        lastBackupAt: Date?
     ) {
         self.availabilityValue = availabilityValue
         self.enabled = enabled
         self.manualBackupResult = manualBackupResult
-        self.latestBackupAt = lastSyncAt
+        self.latestBackupAt = lastBackupAt
     }
 
     func availability() async -> CloudBackupAvailability {

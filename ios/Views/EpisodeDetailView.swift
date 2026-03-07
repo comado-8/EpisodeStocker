@@ -309,7 +309,8 @@ struct EpisodeDetailView: View {
   }
 
   private var showsExportLockBadge: Bool {
-    isExportPaywallEnabled && !premiumAccess.hasAccess(to: .export)
+    guard isExportPaywallEnabled, premiumAccess.hasLoadedStatus else { return false }
+    return !premiumAccess.hasAccess(to: .export)
   }
 
   private var headerView: some View {
@@ -834,6 +835,12 @@ struct EpisodeDetailView: View {
 
   private func handleExport() {
     guard !isEditing else { return }
+    guard premiumAccess.hasLoadedStatus else {
+      Task {
+        await premiumAccess.ensureStatusLoaded()
+      }
+      return
+    }
     guard !isExportPaywallEnabled || premiumAccess.hasAccess(to: .export) else {
       router.presentPaywall(.export)
       return
