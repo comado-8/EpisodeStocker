@@ -16,9 +16,9 @@ enum CloudBackupError: LocalizedError, Equatable {
         case .unavailable(let reason):
             return reason
         case .notEntitled:
-            return "バックアップ機能はサブスクリプション登録で利用できます。"
+            return "クラウド同期機能はサブスクリプション登録で利用できます。"
         case .backupDisabled:
-            return "クラウドバックアップを有効にしてください。"
+            return "クラウド同期を有効にしてください。"
         case .failed(let reason):
             return reason
         }

@@ -10,7 +10,6 @@ enum HomeStyle {
     static let figmaTopInset: CGFloat = 61
     static let sectionSpacing: CGFloat = 8
     static let listSpacing: CGFloat = 10
-    static let listCardBorderWidth: CGFloat = 1.5
     static let selectionIndicatorSize: CGFloat = 22
     static let selectionIndicatorSpacing: CGFloat = 12
     static let selectionStatusRowHeight: CGFloat = statusRowHeight
@@ -46,6 +45,7 @@ enum HomeStyle {
     static let cardMetaBadgeInnerSpacing: CGFloat = 4
     static let cardMetaBadgeHorizontalPadding: CGFloat = 8
     static let cardMetaBadgeHeight: CGFloat = 24
+    static let cardShadowHorizontalInset: CGFloat = 4
 
     static let emptyStateCircleSize: CGFloat = 206
     static let emptyStateIconSize: CGFloat = 150
@@ -65,14 +65,30 @@ enum HomeStyle {
     static let textInput = Color(hex: "343741")
 
     static let background = Color(hex: "FFFFFF")
+    static let screenBackground = Color(hex: "F8F9FB")
     static let outline = Color(hex: "CAC4D0")
-    static let searchFill = Color(hex: "F5F6F8")
+    static let searchFill = screenBackground
     static let searchActiveFill = Color(hex: "FFFFFF")
     static let searchBorder = Color(hex: "E1E4EA")
     static let searchActiveBorder = Color(hex: "D4D9E2")
     static let searchChipFill = Color(hex: "F3F4F6")
     static let searchChipBorder = Color(hex: "D1D5DC")
     static let searchChipText = Color(hex: "364153")
+    static let sortMenuFill = Color.white
+    static let sortMenuBorder = Color(hex: "D7DCE5")
+    static let sortProChipFill = Color(hex: "6B7280")
+    static let sortProChipBorder = Color(hex: "6B7280")
+    static let sortProChipText = Color.white
+    static let sortCheckChipFill = fabRed
+    static let sortCheckChipBorder = fabRed
+    static let sortCheckChipText = Color.white
+    static let sortLockedOptionText = searchChipText.opacity(0.8)
+    static let sortOptionAccessoryWidth: CGFloat = 60
+    static let sortCheckBadgeDiameter: CGFloat = 24
+    static let premiumLockBadgeIconSize: CGFloat = 8
+    static let premiumLockBadgePadding: CGFloat = 3
+    static let premiumLockBadgeOffsetX: CGFloat = 3
+    static let premiumLockBadgeOffsetY: CGFloat = -3
     static let searchModeFill = Color(hex: "FDECEC")
     static let searchModeBorder = Color(hex: "F3B4B4")
     static let searchModeText = Color(hex: "8D110E")
@@ -96,6 +112,7 @@ enum HomeStyle {
     static let advancedFilterReactionShelvedText = Color(hex: "5B2C83")
 
     static let segmentSelectedFill = Color(hex: "FCCECE")
+    static let segmentAllSelectedFill = Color(hex: "E7EBF0")
     static let segmentSelectedText = textPrimary
     static let segmentText = Color(hex: "4E4959")
     static let lockedAccent = Color(hex: "D5D5FE")
@@ -109,6 +126,18 @@ enum HomeStyle {
     static let cardBackgroundLocked = Color(hex: "FBFAFF")
 
     static let cardBorder = Color(hex: "FA9695")
+    static let cardShadowPrimary = Color.black.opacity(0.08)
+    static let cardShadowPrimaryRadius: CGFloat = 3
+    static let cardShadowPrimaryY: CGFloat = 1
+    static let cardShadowSecondary = Color.black.opacity(0.04)
+    static let cardShadowSecondaryRadius: CGFloat = 10
+    static let cardShadowSecondaryY: CGFloat = 4
+    static let controlShadowPrimary = Color.black.opacity(0.04)
+    static let controlShadowPrimaryRadius: CGFloat = 2
+    static let controlShadowPrimaryY: CGFloat = 1
+    static let controlShadowSecondary = Color.black.opacity(0.02)
+    static let controlShadowSecondaryRadius: CGFloat = 5
+    static let controlShadowSecondaryY: CGFloat = 2
     static let cardMetaDivider = Color(hex: "E5E7EB")
     static let cardMetaBadgeFill = Color.white
     static let cardMetaBadgeBorder = Color(hex: "D1D5DC")

@@ -79,4 +79,14 @@ final class AppRouterTests: XCTestCase {
 
         XCTAssertEqual(router.tagRootResetSignal, initial + 1)
     }
+
+    func testPaywallLifecycle() {
+        let router = AppRouter()
+
+        router.presentPaywall(.advancedSearch)
+        XCTAssertEqual(router.paywallTrigger, .advancedSearch)
+
+        router.dismissPaywall()
+        XCTAssertNil(router.paywallTrigger)
+    }
 }

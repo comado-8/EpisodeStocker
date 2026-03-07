@@ -1,9 +1,20 @@
 import SwiftUI
 
+enum HomeAdvancedFilterSheetMode {
+    case interactive
+    case preview
+}
+
 struct HomeAdvancedFilterSheet: View {
     @Binding var draft: HomeAdvancedFilterDraft
+    var mode: HomeAdvancedFilterSheetMode = .interactive
     let onApply: () -> Void
     let onClear: () -> Void
+    var onUpgrade: (() -> Void)? = nil
+
+    private var isPreview: Bool {
+        mode == .preview
+    }
 
     private var talkedStartDateEnabled: Binding<Bool> {
         Binding(
@@ -94,6 +105,13 @@ struct HomeAdvancedFilterSheet: View {
                 .padding(.top, 24)
                 .padding(.bottom, 8)
 
+            previewContent
+        }
+        .background(HomeStyle.background)
+    }
+
+    private var previewContent: some View {
+        VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: HomeStyle.advancedFilterSectionSpacing) {
                 talkCountSection
                 episodeDateRangeSection
@@ -104,39 +122,30 @@ struct HomeAdvancedFilterSheet: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 8)
 
-            HStack(spacing: 10) {
+            actionButtons(isEnabled: !isPreview)
+                .padding(.bottom, 12)
+        }
+        .blur(radius: isPreview ? 1.4 : 0)
+        .allowsHitTesting(!isPreview)
+        .overlay {
+            if isPreview {
                 Button {
-                    onClear()
+                    onUpgrade?()
                 } label: {
-                    Text("Clear")
-                        .font(AppTypography.bodyEmphasis)
-                        .foregroundColor(HomeStyle.segmentText)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .background(
-                            Capsule()
-                                .stroke(HomeStyle.searchBorder, lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    onApply()
-                } label: {
-                    Text("Apply")
+                    Text("Proで詳細検索を使う")
                         .font(AppTypography.bodyEmphasis)
                         .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
                         .frame(height: 44)
+                        .padding(.horizontal, 24)
                         .background(HomeStyle.fabRed)
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .onAppear {
+                    assert(onUpgrade != nil, "onUpgrade must be provided in preview mode")
+                }
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
         }
-        .background(HomeStyle.background)
     }
 
     private var talkCountSection: some View {
@@ -375,6 +384,42 @@ struct HomeAdvancedFilterSheet: View {
             )
         }
     }
+
+    private func actionButtons(isEnabled: Bool) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                onClear()
+            } label: {
+                Text("クリア")
+                    .font(AppTypography.bodyEmphasis)
+                    .foregroundColor(HomeStyle.segmentText)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(
+                        Capsule()
+                            .stroke(HomeStyle.searchBorder, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(!isEnabled)
+
+            Button {
+                onApply()
+            } label: {
+                Text("適用")
+                    .font(AppTypography.bodyEmphasis)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(HomeStyle.fabRed)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(!isEnabled)
+        }
+        .padding(.horizontal, 20)
+    }
+
 }
 
 struct HomeAdvancedFilterSheet_Previews: PreviewProvider {
@@ -397,8 +442,10 @@ private struct HomeAdvancedFilterSheetPreviewWrapper: View {
     var body: some View {
         HomeAdvancedFilterSheet(
             draft: $draft,
+            mode: .interactive,
             onApply: {},
-            onClear: {}
+            onClear: {},
+            onUpgrade: {}
         )
     }
 }

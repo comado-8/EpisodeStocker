@@ -67,7 +67,7 @@ struct TagDetailView: View {
         .padding(.bottom, 16)
         .frame(maxWidth: .infinity)
       }
-      .background(HomeStyle.background.ignoresSafeArea())
+      .background(HomeStyle.screenBackground.ignoresSafeArea())
     }
     .navigationTitle(tagName)
     .navigationBarTitleDisplayMode(.inline)
@@ -88,10 +88,6 @@ private struct TagDetailEpisodeRow: View {
   let width: CGFloat
   let onTap: () -> Void
 
-  private var borderColor: Color {
-    episode.isUnlocked ? HomeStyle.cardBorder : HomeStyle.lockedCardBorder
-  }
-
   var body: some View {
     Button(action: onTap) {
       EpisodeCardRow(
@@ -102,7 +98,6 @@ private struct TagDetailEpisodeRow: View {
         date: episode.date,
         isUnlocked: episode.isUnlocked,
         width: width,
-        borderColor: borderColor,
         showsSelection: false,
         isSelected: false
       )

@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		125A17D52F509663007F9B63 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 125A17D42F509663007F9B63 /* RevenueCat */; };
+		125A17D72F509663007F9B63 /* RevenueCatUI in Frameworks */ = {isa = PBXBuildFile; productRef = 125A17D62F509663007F9B63 /* RevenueCatUI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		12599E002EE400C20023319D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +32,8 @@
 		12599DEE2EE400C00023319D /* EpisodeStocker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EpisodeStocker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		12599DFF2EE400C20023319D /* EpisodeStockerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EpisodeStockerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		12599E092EE400C20023319D /* EpisodeStockerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EpisodeStockerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		125A17DC2F509C00007F9B63 /* Config/RevenueCat.Debug.base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/RevenueCat.Debug.base.xcconfig; sourceTree = SOURCE_ROOT; };
+		125A17DD2F509C00007F9B63 /* Config/RevenueCat.Release.base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/RevenueCat.Release.base.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -52,6 +59,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				125A17D72F509663007F9B63 /* RevenueCatUI in Frameworks */,
+				125A17D52F509663007F9B63 /* RevenueCat in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -75,6 +84,8 @@
 		12599DE52EE400C00023319D = {
 			isa = PBXGroup;
 			children = (
+				125A17DC2F509C00007F9B63 /* Config/RevenueCat.Debug.base.xcconfig */,
+				125A17DD2F509C00007F9B63 /* Config/RevenueCat.Release.base.xcconfig */,
 				12599E602EE410DC0023319D /* ios */,
 				12599E022EE400C20023319D /* EpisodeStockerTests */,
 				12599E0C2EE400C20023319D /* EpisodeStockerUITests */,
@@ -112,6 +123,8 @@
 			);
 			name = EpisodeStocker;
 			packageProductDependencies = (
+				125A17D42F509663007F9B63 /* RevenueCat */,
+				125A17D62F509663007F9B63 /* RevenueCatUI */,
 			);
 			productName = EpisodeStocker;
 			productReference = 12599DEE2EE400C00023319D /* EpisodeStocker.app */;
@@ -195,6 +208,9 @@
 			);
 			mainGroup = 12599DE52EE400C00023319D;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				125A17D32F509663007F9B63 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 12599DEF2EE400C00023319D /* Products */;
 			projectDirPath = "";
@@ -385,6 +401,7 @@
 		};
 		12599E142EE400C20023319D /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 125A17DC2F509C00007F9B63 /* Config/RevenueCat.Debug.base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -397,6 +414,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_REVENUECAT_API_KEY = "$(REVENUECAT_API_KEY)";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -415,6 +433,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.comado-studio.EpisodeStocker";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				REVENUECAT_API_KEY = "$(inherited)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -426,6 +445,7 @@
 		};
 		12599E152EE400C20023319D /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 125A17DD2F509C00007F9B63 /* Config/RevenueCat.Release.base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -438,6 +458,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_REVENUECAT_API_KEY = "$(REVENUECAT_API_KEY)";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -456,6 +477,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.comado-studio.EpisodeStocker";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				REVENUECAT_API_KEY = "$(inherited)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -595,6 +617,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		125A17D32F509663007F9B63 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/RevenueCat/purchases-ios-spm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.60.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		125A17D42F509663007F9B63 /* RevenueCat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 125A17D32F509663007F9B63 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCat;
+		};
+		125A17D62F509663007F9B63 /* RevenueCatUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 125A17D32F509663007F9B63 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCatUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 12599DE62EE400C00023319D /* Project object */;
 }

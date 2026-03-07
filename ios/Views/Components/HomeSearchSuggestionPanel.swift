@@ -3,44 +3,33 @@ import SwiftUI
 struct HomeSearchSuggestionPanel: View {
     let width: CGFloat
     let items: [HomeSearchSuggestionItem]
+    var isItemLocked: (HomeSearchSuggestionItem) -> Bool = { _ in false }
     let onSelect: (HomeSearchSuggestionItem) -> Void
 
     var body: some View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    let isLocked = isItemLocked(item)
                     Button {
+                        guard !isLocked else { return }
                         onSelect(item)
                     } label: {
-                        HStack(alignment: .center, spacing: 10) {
-                            Image(systemName: item.symbolName)
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(HomeStyle.searchSuggestionIcon)
-                                .frame(width: 18, height: 18)
+                        ZStack(alignment: .trailing) {
+                            suggestionRowBody(item: item)
+                                .blur(radius: isLocked ? 1.4 : 0)
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.title)
-                                    .font(AppTypography.subtextEmphasis)
-                                    .foregroundColor(HomeStyle.searchSuggestionTitle)
-                                    .lineLimit(1)
-                                Text(item.subtitle)
-                                    .font(AppTypography.subtext)
-                                    .foregroundColor(HomeStyle.searchSuggestionSubtitle)
-                                    .lineLimit(1)
+                            if isLocked {
+                                lockBadge
+                                    .padding(.trailing, 12)
                             }
-                            Spacer(minLength: 0)
                         }
-                        .padding(.horizontal, 12)
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: HomeStyle.searchSuggestionRowHeight,
-                            alignment: .leading
-                        )
-                        .contentShape(Rectangle())
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .buttonStyle(.plain)
+                    .disabled(isLocked)
+                    .accessibilityHint(isLocked ? "有料プランで利用できます" : "候補を追加")
 
                     if index < items.count - 1 {
                         Rectangle()
@@ -60,19 +49,64 @@ struct HomeSearchSuggestionPanel: View {
             .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 2)
         }
     }
+
+    private func suggestionRowBody(item: HomeSearchSuggestionItem) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: item.symbolName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(HomeStyle.searchSuggestionIcon)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title)
+                    .font(AppTypography.subtextEmphasis)
+                    .foregroundColor(HomeStyle.searchSuggestionTitle)
+                    .lineLimit(1)
+                Text(item.subtitle)
+                    .font(AppTypography.subtext)
+                    .foregroundColor(HomeStyle.searchSuggestionSubtitle)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: HomeStyle.searchSuggestionRowHeight,
+            alignment: .leading
+        )
+        .contentShape(Rectangle())
+    }
+
+    private var lockBadge: some View {
+        PremiumLockBadge()
+            .shadow(color: Color.black.opacity(0.14), radius: 3, x: 0, y: 1)
+    }
 }
 
 struct HomeSearchSuggestionPanel_Previews: PreviewProvider {
     static var previews: some View {
-        HomeSearchSuggestionPanel(
-            width: 360,
-            items: [
-                HomeSearchSuggestionItem(kind: .value(field: .tag, value: "仕事")),
-                HomeSearchSuggestionItem(kind: .value(field: .person, value: "佐藤さん"))
-            ],
-            onSelect: { _ in }
-        )
-        .padding()
-        .previewLayout(.sizeThatFits)
+        VStack(spacing: 16) {
+            HomeSearchSuggestionPanel(
+                width: 360,
+                items: [
+                    HomeSearchSuggestionItem(kind: .value(field: .tag, value: "仕事")),
+                    HomeSearchSuggestionItem(kind: .value(field: .person, value: "佐藤さん"))
+                ],
+                onSelect: { _ in }
+            )
+
+            HomeSearchSuggestionPanel(
+                width: 360,
+                items: [
+                    HomeSearchSuggestionItem(kind: .value(field: .talkCount, value: "3回以上")),
+                    HomeSearchSuggestionItem(kind: .value(field: .tag, value: "趣味"))
+                ],
+                isItemLocked: { $0.kind.field.isPremiumAdvancedSearchField },
+                onSelect: { _ in }
+            )
+        }
+            .padding()
+            .previewLayout(.sizeThatFits)
     }
 }

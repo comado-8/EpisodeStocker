@@ -91,9 +91,10 @@ final class CloudKitBackupServiceTests: XCTestCase {
         XCTAssertEqual(service.lastBackupAt(), expectedDate)
     }
 
-    func testRunManualBackupStoresLastRunDate() async throws {
+    func testRunManualBackupReturnsExecutionDateWithoutPersistingLastRunDate() async throws {
         let settings = InMemorySettingsRepository()
         settings.set(true, for: .cloudBackupEnabled)
+        settings.setOptionalBool(true, for: .hasPremiumAccessCached)
         let expectedDate = Date(timeIntervalSince1970: 54_321)
         let service = CloudKitBackupService(
             cloudKitClient: FakeCloudKitClient(result: .success(.available)),
@@ -105,12 +106,13 @@ final class CloudKitBackupServiceTests: XCTestCase {
         let actual = try await service.runManualBackup()
 
         XCTAssertEqual(actual, expectedDate)
-        XCTAssertEqual(settings.date(for: .cloudBackupLastRunAt), expectedDate)
+        XCTAssertNil(settings.date(for: .cloudBackupLastRunAt))
     }
 
     func testRunManualBackupThrowsUnavailableWhenCloudKitUnavailable() async {
         let settings = InMemorySettingsRepository()
         settings.set(true, for: .cloudBackupEnabled)
+        settings.setOptionalBool(true, for: .hasPremiumAccessCached)
         let service = CloudKitBackupService(
             cloudKitClient: FakeCloudKitClient(result: .success(.restricted)),
             settingsRepository: settings,
@@ -149,6 +151,7 @@ final class CloudKitBackupServiceTests: XCTestCase {
     func testRunManualBackupMapsRunnerFailure() async {
         let settings = InMemorySettingsRepository()
         settings.set(true, for: .cloudBackupEnabled)
+        settings.setOptionalBool(true, for: .hasPremiumAccessCached)
         let service = CloudKitBackupService(
             cloudKitClient: FakeCloudKitClient(result: .success(.available)),
             settingsRepository: settings,
@@ -168,6 +171,7 @@ final class CloudKitBackupServiceTests: XCTestCase {
     func testRunManualBackupPassesThroughCloudBackupErrorFromRunner() async {
         let settings = InMemorySettingsRepository()
         settings.set(true, for: .cloudBackupEnabled)
+        settings.setOptionalBool(true, for: .hasPremiumAccessCached)
         let service = CloudKitBackupService(
             cloudKitClient: FakeCloudKitClient(result: .success(.available)),
             settingsRepository: settings,
@@ -179,6 +183,45 @@ final class CloudKitBackupServiceTests: XCTestCase {
             XCTFail("Expected error")
         } catch let error as CloudBackupError {
             XCTAssertEqual(error, .failed(reason: "runner failed"))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testRunManualBackupThrowsNotEntitledWhenRequestedButPremiumDenied() async {
+        let settings = InMemorySettingsRepository()
+        settings.set(true, for: .cloudBackupEnabled)
+        settings.setOptionalBool(false, for: .hasPremiumAccessCached)
+        let service = CloudKitBackupService(
+            cloudKitClient: FakeCloudKitClient(result: .success(.available)),
+            settingsRepository: settings,
+            backupJobRunner: FakeBackupJobRunner(result: .success(()))
+        )
+
+        do {
+            _ = try await service.runManualBackup()
+            XCTFail("Expected error")
+        } catch let error as CloudBackupError {
+            XCTAssertEqual(error, .notEntitled)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testRunManualBackupThrowsBackupDisabledWhenRequestedButPremiumUnknown() async {
+        let settings = InMemorySettingsRepository()
+        settings.set(true, for: .cloudBackupEnabled)
+        let service = CloudKitBackupService(
+            cloudKitClient: FakeCloudKitClient(result: .success(.available)),
+            settingsRepository: settings,
+            backupJobRunner: FakeBackupJobRunner(result: .success(()))
+        )
+
+        do {
+            _ = try await service.runManualBackup()
+            XCTFail("Expected error")
+        } catch let error as CloudBackupError {
+            XCTAssertEqual(error, .backupDisabled)
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -222,6 +265,14 @@ private final class InMemorySettingsRepository: SettingsRepository {
     }
 
     func set(_ value: Bool, for key: SettingsKey) {
+        boolStorage[key] = value
+    }
+
+    func optionalBool(for key: SettingsKey) -> Bool? {
+        boolStorage[key]
+    }
+
+    func setOptionalBool(_ value: Bool?, for key: SettingsKey) {
         boolStorage[key] = value
     }
 

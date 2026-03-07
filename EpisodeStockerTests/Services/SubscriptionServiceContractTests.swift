@@ -4,8 +4,8 @@ import XCTest
 @MainActor
 final class SubscriptionServiceContractTests: XCTestCase {
     func testSubscriptionCatalogMapsProductIDsToPlans() {
-        XCTAssertEqual(SubscriptionCatalog.monthlyProductID, "com.episodestocker.premium.monthly")
-        XCTAssertEqual(SubscriptionCatalog.yearlyProductID, "com.episodestocker.premium.yearly")
+        XCTAssertEqual(SubscriptionCatalog.monthlyProductID, "comado.studio.episodestocker.pro.monthly")
+        XCTAssertEqual(SubscriptionCatalog.yearlyProductID, "comado.studio.episodestocker.pro.yearly")
         XCTAssertEqual(SubscriptionCatalog.allProductIDs.count, 2)
         XCTAssertEqual(SubscriptionCatalog.plan(for: SubscriptionCatalog.monthlyProductID), .monthly)
         XCTAssertEqual(SubscriptionCatalog.plan(for: SubscriptionCatalog.yearlyProductID), .yearly)
@@ -67,9 +67,9 @@ final class SubscriptionServiceContractTests: XCTestCase {
             restoredStatus: expectedStatus
         )
 
-        let outcome = try await service.purchase(productID: "com.episodestocker.premium.yearly")
+        let outcome = try await service.purchase(productID: "comado.studio.episodestocker.pro.yearly")
 
-        XCTAssertEqual(service.capturedPurchaseProductID, "com.episodestocker.premium.yearly")
+        XCTAssertEqual(service.capturedPurchaseProductID, "comado.studio.episodestocker.pro.yearly")
         XCTAssertEqual(outcome, .purchased(expectedStatus))
     }
 

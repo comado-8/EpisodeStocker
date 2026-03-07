@@ -31,3 +31,7 @@ service-account*.json
 firebase-adminsdk*.json
 GoogleService-Info.plist
 google-services.json
+
+# Local xcconfig secrets (RevenueCat)
+Config/RevenueCat.*.xcconfig
+!Config/RevenueCat.*.base.xcconfig

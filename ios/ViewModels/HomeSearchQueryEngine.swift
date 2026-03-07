@@ -54,7 +54,7 @@ enum HomeSearchField: String, CaseIterable {
         case .lastTalkedAt:
             return ["話した日", "トーク日", "最終トーク日", "最終", "last talked"]
         case .registeredDate:
-            return ["エピソード日付", "登録日", "episode date", "date"]
+            return ["登録日", "エピソード日付", "episode date", "date"]
         case .mediaType:
             return ["媒体", "メディア", "media"]
         case .reaction:
@@ -84,6 +84,15 @@ enum HomeSearchField: String, CaseIterable {
             return "tv"
         case .reaction:
             return "hand.thumbsup"
+        }
+    }
+
+    var isPremiumAdvancedSearchField: Bool {
+        switch self {
+        case .talkCount, .lastTalkedAt, .registeredDate, .mediaType, .reaction:
+            return true
+        case .tag, .person, .project, .emotion, .place:
+            return false
         }
     }
 

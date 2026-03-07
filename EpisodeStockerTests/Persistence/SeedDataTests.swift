@@ -52,4 +52,11 @@ final class SeedDataTests: XCTestCase {
         let episodes = try context.fetch(FetchDescriptor<Episode>())
         XCTAssertEqual(episodes.count, 10)
     }
+
+    func testSeedIfNeededSkipsWhenCloudSyncEnabled() throws {
+        SeedData.seedIfNeeded(context: context, profile: .minimal, isCloudSyncEnabled: true)
+
+        let episodes = try context.fetch(FetchDescriptor<Episode>())
+        XCTAssertTrue(episodes.isEmpty)
+    }
 }

@@ -38,7 +38,6 @@ struct EpisodeCardRow: View {
     let date: Date
     let isUnlocked: Bool
     let width: CGFloat
-    let borderColor: Color
     let showsSelection: Bool
     let isSelected: Bool
 
@@ -50,9 +49,10 @@ struct EpisodeCardRow: View {
     }
 
     var body: some View {
+        let horizontalInset = HomeStyle.cardShadowHorizontalInset
         let cardWidth = showsSelection
-            ? max(0, width - HomeStyle.selectionIndicatorSize - HomeStyle.selectionIndicatorSpacing)
-            : width
+            ? max(0, width - HomeStyle.selectionIndicatorSize - HomeStyle.selectionIndicatorSpacing - (horizontalInset * 2))
+            : max(0, width - (horizontalInset * 2))
 
         HStack(spacing: HomeStyle.selectionIndicatorSpacing) {
             if showsSelection {
@@ -104,12 +104,21 @@ struct EpisodeCardRow: View {
             .padding(.bottom, HomeStyle.cardContentBottomPadding)
             .frame(width: cardWidth, height: HomeStyle.cardHeight)
             .background(cardBackgroundColor)
-            .overlay(
-                RoundedRectangle(cornerRadius: HomeStyle.cardCornerRadius)
-                    .stroke(borderColor, lineWidth: HomeStyle.listCardBorderWidth)
+            .clipShape(RoundedRectangle(cornerRadius: HomeStyle.cardCornerRadius, style: .continuous))
+            .shadow(
+                color: HomeStyle.cardShadowPrimary,
+                radius: HomeStyle.cardShadowPrimaryRadius,
+                x: 0,
+                y: HomeStyle.cardShadowPrimaryY
             )
-            .clipShape(RoundedRectangle(cornerRadius: HomeStyle.cardCornerRadius))
+            .shadow(
+                color: HomeStyle.cardShadowSecondary,
+                radius: HomeStyle.cardShadowSecondaryRadius,
+                x: 0,
+                y: HomeStyle.cardShadowSecondaryY
+            )
         }
+        .padding(.horizontal, horizontalInset)
         .frame(width: width, height: HomeStyle.cardHeight, alignment: .leading)
     }
 
@@ -174,7 +183,6 @@ struct EpisodeCardRow_Previews: PreviewProvider {
             date: Date(),
             isUnlocked: true,
             width: 360,
-            borderColor: HomeStyle.cardBorder,
             showsSelection: true,
             isSelected: true
         )

@@ -28,28 +28,12 @@ enum RootTab: String, CaseIterable {
 struct HomeTabBarView: View {
     @Binding var selection: RootTab
     var onTabTap: ((RootTab) -> Void)? = nil
+    var showsAnalyticsLock = false
 
     var body: some View {
         HStack {
             ForEach(RootTab.allCases, id: \.self) { tab in
-                Button {
-                    if let onTabTap {
-                        onTabTap(tab)
-                    } else {
-                        selection = tab
-                    }
-                } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: tab.systemImage)
-                            .font(.system(size: 17, weight: .semibold))
-                        Text(tab.title)
-                            .font(HomeFont.tabLabel())
-                            .tracking(0.1)
-                    }
-                    .foregroundColor(selection == tab ? HomeStyle.tabSelected : HomeStyle.tabUnselected)
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.plain)
+                tabButton(for: tab)
             }
         }
         .frame(height: HomeStyle.tabBarHeight)
@@ -61,5 +45,53 @@ struct HomeTabBarView: View {
             }
             .ignoresSafeArea(edges: .bottom)
         )
+    }
+
+    private func tabButton(for tab: RootTab) -> some View {
+        let isLockedAnalyticsTab = tab == .analytics && showsAnalyticsLock
+        return Button {
+            if showsAnalyticsLock, tab == .analytics {
+                onTabTap?(.analytics)
+                return
+            }
+            if let onTabTap {
+                onTabTap(tab)
+            } else {
+                selection = tab
+            }
+        } label: {
+            VStack(spacing: 4) {
+                tabIcon(for: tab)
+                Text(tab.title)
+                    .font(HomeFont.tabLabel())
+                    .tracking(0.1)
+            }
+            .foregroundColor(selection == tab ? HomeStyle.tabSelected : HomeStyle.tabUnselected)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(tab.title))
+        .accessibilityValue(Text(isLockedAnalyticsTab ? "ロック中" : ""))
+        .accessibilityHint(
+            Text(isLockedAnalyticsTab ? "Premium機能です。アップグレードが必要です。" : "タブを開きます")
+        )
+        .accessibilityRespondsToUserInteraction(!isLockedAnalyticsTab)
+    }
+
+    @ViewBuilder
+    private func tabIcon(for tab: RootTab) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: tab.systemImage)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 22, height: 20)
+
+            if tab == .analytics && showsAnalyticsLock {
+                PremiumLockBadge()
+                    .offset(
+                        x: HomeStyle.premiumLockBadgeOffsetX + 2,
+                        y: HomeStyle.premiumLockBadgeOffsetY - 2
+                    )
+            }
+        }
     }
 }

@@ -15,8 +15,8 @@ enum SubscriptionPurchaseOutcome: Equatable {
 }
 
 enum SubscriptionCatalog {
-    static let monthlyProductID = "com.episodestocker.premium.monthly"
-    static let yearlyProductID = "com.episodestocker.premium.yearly"
+    static let monthlyProductID = "comado.studio.episodestocker.pro.monthly"
+    static let yearlyProductID = "comado.studio.episodestocker.pro.yearly"
 
     static let allProductIDs = [monthlyProductID, yearlyProductID]
 

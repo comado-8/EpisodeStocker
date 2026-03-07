@@ -23,6 +23,7 @@ struct EpisodeDetailContainer: View {
 struct EpisodeDetailView: View {
   @EnvironmentObject private var store: EpisodeStore
   @EnvironmentObject private var router: AppRouter
+  @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   let episode: Episode
@@ -78,11 +79,18 @@ struct EpisodeDetailView: View {
   @State private var suggestionManagerField: SuggestionField? = nil
   @State private var showsTagSelectionSheet = false
   @State private var hasPrimedSuggestions = false
+  @State private var showsExportFormatDialog = false
+  @State private var showsShareSheet = false
+  @State private var shareItems: [Any] = []
+  @State private var showsExportErrorAlert = false
+  @State private var exportErrorMessage = ""
+  @State private var isExporting = false
 
   private let maxPersons = 10
   private let maxTags = 10
   private let maxEmotions = 3
   private let maxProjects = 3
+  private let exportService = EpisodeExportService()
 
   init(episode: Episode) {
     self.episode = episode
@@ -110,7 +118,7 @@ struct EpisodeDetailView: View {
           }
           .padding(.top, topPadding)
           .padding(.horizontal, horizontalPadding)
-          .background(Color.white)
+          .background(HomeStyle.screenBackground)
 
           ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: DetailStyle.sectionSpacing) {
@@ -135,7 +143,7 @@ struct EpisodeDetailView: View {
             hideKeyboard()
           }
         }
-        .background(Color.white)
+        .background(HomeStyle.screenBackground)
         .contentShape(Rectangle())
         .simultaneousGesture(
           DragGesture(
@@ -197,6 +205,20 @@ struct EpisodeDetailView: View {
       .presentationDetents([.large])
       .presentationDragIndicator(.visible)
       .presentationBackground(Color.white)
+    }
+    .sheet(isPresented: $showsShareSheet, onDismiss: {
+      shareItems = []
+    }) {
+      ActivityView(activityItems: shareItems)
+    }
+    .alert("エクスポートに失敗しました", isPresented: $showsExportErrorAlert) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      if exportErrorMessage.isEmpty {
+        Text("しばらくしてから再度お試しください。")
+      } else {
+        Text(exportErrorMessage)
+      }
     }
     .onChange(of: tagText) { _, newValue in
       let normalized = EpisodePersistence.normalizeTagInputWhileEditing(newValue)
@@ -275,6 +297,22 @@ struct EpisodeDetailView: View {
       && !isPlaceNameOverLimit
   }
 
+  private var isExportPaywallEnabled: Bool {
+    // TODO(TAX-COMPLIANCE): 税務情報フォーム対応後にこのDEBUGバイパスを削除する。
+    // 一時対応: 分析タブと同じく、Debugのみエクスポート課金ゲートを無効化する。
+    // 課金テスト再開時は、このフラグを削除するか DEBUG でも true を返して復帰する。
+    #if DEBUG
+      return false
+    #else
+      return true
+    #endif
+  }
+
+  private var showsExportLockBadge: Bool {
+    guard isExportPaywallEnabled, premiumAccess.hasLoadedStatus else { return false }
+    return !premiumAccess.hasAccess(to: .export)
+  }
+
   private var headerView: some View {
     HStack(spacing: 8) {
       Button {
@@ -299,31 +337,90 @@ struct EpisodeDetailView: View {
       Spacer()
 
       if selectedTab == .registration {
-        Button {
-          toggleEdit()
-        } label: {
-          HStack(spacing: 4) {
-            Image(systemName: isEditing ? "checkmark" : "pencil")
-              .font(.system(size: 16, weight: .semibold))
-              .frame(width: 24, height: 24)
-            Text(isEditing ? "保存" : "編集")
-              .font(DetailStyle.editButtonFont)
+        HStack(spacing: DetailStyle.headerActionButtonSpacing) {
+          Button {
+            handleExport()
+          } label: {
+            ZStack(alignment: .topTrailing) {
+              Image(systemName: "square.and.arrow.up")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundColor(DetailStyle.editAccent)
+                .frame(
+                  width: DetailStyle.headerActionButtonSize,
+                  height: DetailStyle.headerActionButtonSize
+                )
+                .background(
+                  Circle()
+                    .fill(DetailStyle.editButtonFill)
+                )
+                .overlay(
+                  Circle()
+                    .stroke(DetailStyle.editButtonBorder, lineWidth: 1)
+                )
+
+              if showsExportLockBadge {
+                PremiumLockBadge()
+                  .offset(
+                    x: HomeStyle.premiumLockBadgeOffsetX,
+                    y: HomeStyle.premiumLockBadgeOffsetY
+                  )
+              }
+            }
           }
-          .foregroundColor(DetailStyle.editAccent)
-          .padding(.horizontal, 14)
-          .padding(.vertical, 8)
-          .background(
-            Capsule()
-              .fill(DetailStyle.editButtonFill)
+          .buttonStyle(.plain)
+          .shadow(
+            color: DetailStyle.headerActionButtonShadowColor,
+            radius: DetailStyle.headerActionButtonShadowRadius,
+            x: 0,
+            y: DetailStyle.headerActionButtonShadowYOffset
           )
-          .overlay(
-            Capsule()
-              .stroke(DetailStyle.editButtonBorder, lineWidth: 1)
+          .disabled(isEditing || isExporting)
+          .opacity((isEditing || isExporting) ? 0.45 : 1)
+          .confirmationDialog(
+            "エクスポート",
+            isPresented: $showsExportFormatDialog,
+            titleVisibility: .visible
+          ) {
+            if EpisodeExportPDFRenderer.isSupported {
+              Button("PDF") {
+                exportEpisode(as: .pdf)
+              }
+            }
+            Button("TXT") {
+              exportEpisode(as: .txt)
+            }
+            Button("キャンセル", role: .cancel) {}
+          }
+
+          Button {
+            toggleEdit()
+          } label: {
+            Image(systemName: isEditing ? "checkmark" : "square.and.pencil")
+              .font(.system(size: 18, weight: .semibold))
+              .frame(
+                width: DetailStyle.headerActionButtonSize,
+                height: DetailStyle.headerActionButtonSize
+              )
+              .foregroundColor(DetailStyle.editAccent)
+              .background(
+                Circle()
+                  .fill(DetailStyle.editButtonFill)
+              )
+              .overlay(
+                Circle()
+                  .stroke(DetailStyle.editButtonBorder, lineWidth: 1)
+              )
+          }
+          .buttonStyle(.plain)
+          .shadow(
+            color: DetailStyle.headerActionButtonShadowColor,
+            radius: DetailStyle.headerActionButtonShadowRadius,
+            x: 0,
+            y: DetailStyle.headerActionButtonShadowYOffset
           )
+          .disabled(isEditing && !isRegistrationSaveEnabled)
+          .opacity(isEditing && !isRegistrationSaveEnabled ? 0.6 : 1)
         }
-        .buttonStyle(.plain)
-        .disabled(isEditing && !isRegistrationSaveEnabled)
-        .opacity(isEditing && !isRegistrationSaveEnabled ? 0.6 : 1)
       }
     }
     .frame(height: DetailStyle.headerHeight)
@@ -383,7 +480,7 @@ struct EpisodeDetailView: View {
 
         HStack(spacing: DetailStyle.columnSpacing) {
           VStack(alignment: .leading, spacing: DetailStyle.fieldSpacing) {
-            DetailFieldLabel(title: "日付", required: true)
+            DetailFieldLabel(title: "エピソード日付", required: true)
             if isEditing {
               DetailDateField(date: $dateValue)
             } else {
@@ -732,6 +829,63 @@ struct EpisodeDetailView: View {
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
       withAnimation(.easeInOut(duration: 0.2)) {
         flag.wrappedValue = false
+      }
+    }
+  }
+
+  private func handleExport() {
+    guard !isEditing else { return }
+    guard premiumAccess.hasLoadedStatus else {
+      Task {
+        await premiumAccess.ensureStatusLoaded()
+      }
+      return
+    }
+    guard !isExportPaywallEnabled || premiumAccess.hasAccess(to: .export) else {
+      router.presentPaywall(.export)
+      return
+    }
+    showsExportFormatDialog = true
+  }
+
+  private func exportEpisode(as format: EpisodeExportFormat) {
+    guard !isExporting else { return }
+    isExporting = true
+    let exportTitle = episode.title
+    let exportPayload = EpisodeExportService.makePayload(
+      title: episode.title,
+      body: episode.body,
+      episodeDate: episode.date,
+      unlockDate: episode.unlockDate,
+      isUnlocked: episode.isUnlocked
+    )
+
+    DispatchQueue.global(qos: .userInitiated).async {
+      do {
+        let fileURL = try exportService.export(
+          format: format,
+          payload: exportPayload,
+          filenameTitle: exportTitle
+        )
+        DispatchQueue.main.async {
+          self.shareItems = [fileURL]
+          self.showsShareSheet = true
+          self.isExporting = false
+        }
+      } catch {
+        let nsError = error as NSError
+        NSLog(
+          "Episode export failed (%@): type=%@ domain=%@ code=%ld",
+          format.fileExtension,
+          String(describing: type(of: error)),
+          nsError.domain,
+          nsError.code
+        )
+        DispatchQueue.main.async {
+          self.exportErrorMessage = error.localizedDescription
+          self.showsExportErrorAlert = true
+          self.isExporting = false
+        }
       }
     }
   }
@@ -1407,6 +1561,7 @@ struct EpisodeDetailView_Previews: PreviewProvider {
       EpisodeDetailView(episode: sample)
         .environmentObject(EpisodeStore())
         .environmentObject(AppRouter())
+        .environmentObject(PremiumAccessViewModel())
     }
   }
 }
@@ -1549,6 +1704,11 @@ private enum DetailStyle {
   static let editButtonCornerRadius: CGFloat = 10
   static let copyIconSize: CGFloat = 18
   static let copyButtonSize: CGFloat = 28
+  static let headerActionButtonSize: CGFloat = 36
+  static let headerActionButtonSpacing: CGFloat = 11
+  static let headerActionButtonShadowColor = Color.black.opacity(0.24)
+  static let headerActionButtonShadowRadius: CGFloat = 8
+  static let headerActionButtonShadowYOffset: CGFloat = 3
   static let releaseLogButtonFont = AppTypography.bodyEmphasis
   static let releaseLogDateFont = AppTypography.bodyEmphasis
   static let releaseLogMetaFont = AppTypography.subtext
@@ -2414,7 +2574,7 @@ private struct DetailDateField: View {
         }
         .padding(.top, 8)
         .padding(.bottom, 8)
-        .navigationTitle("日付を選択")
+        .navigationTitle("エピソード日付を選択")
         .navigationBarTitleDisplayMode(.large)
         .toolbar(.visible, for: .navigationBar)
         .toolbar {
