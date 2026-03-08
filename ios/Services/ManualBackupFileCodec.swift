@@ -36,13 +36,19 @@ struct ManualBackupFileCodec {
             throw ManualBackupError.invalidFormat
         }
 
-        let ciphertext = try ManualBackupCrypto.encrypt(plaintext: payloadData, passphrase: passphrase)
+        let manifest = ManualBackupManifest(
+            schemaVersion: Self.currentSchemaVersion,
+            createdAt: now(),
+            appVersion: appVersion
+        )
+        let associatedData = try Self.makeManifestAssociatedData(manifest)
+        let ciphertext = try ManualBackupCrypto.encrypt(
+            plaintext: payloadData,
+            passphrase: passphrase,
+            associatedData: associatedData
+        )
         let envelope = ManualBackupEnvelope(
-            manifest: ManualBackupManifest(
-                schemaVersion: Self.currentSchemaVersion,
-                createdAt: now(),
-                appVersion: appVersion
-            ),
+            manifest: manifest,
             encryption: ManualBackupEncryptionInfo(
                 algorithm: Self.algorithmIdentifier,
                 keyDerivation: Self.keyDerivationIdentifier,
@@ -82,13 +88,15 @@ struct ManualBackupFileCodec {
 
         let plaintext: Data
         do {
+            let associatedData = try Self.makeManifestAssociatedData(envelope.manifest)
             plaintext = try ManualBackupCrypto.decrypt(
                 ciphertext: ManualBackupCiphertext(
                     salt: envelope.encryption.salt,
                     iterations: envelope.encryption.iterations,
                     sealedBoxCombined: envelope.sealedBoxCombined
                 ),
-                passphrase: passphrase
+                passphrase: passphrase,
+                associatedData: associatedData
             )
         } catch let error as ManualBackupError {
             if error == .decryptFailed {
@@ -107,5 +115,32 @@ struct ManualBackupFileCodec {
         }
 
         return DecodedManualBackup(manifest: envelope.manifest, payload: payload)
+    }
+
+    private static func makeManifestAssociatedData(_ manifest: ManualBackupManifest) throws -> Data {
+        guard let schemaVersion = Int64(exactly: manifest.schemaVersion) else {
+            throw ManualBackupError.invalidFormat
+        }
+        var data = Data("EpisodeStockerManualBackupManifestV1".utf8)
+        data.appendFixedWidthInteger(schemaVersion)
+        data.appendFixedWidthInteger(manifest.createdAt.timeIntervalSince1970.bitPattern)
+        if let appVersion = manifest.appVersion {
+            data.append(1)
+            let versionData = Data(appVersion.utf8)
+            data.appendFixedWidthInteger(UInt32(versionData.count))
+            data.append(versionData)
+        } else {
+            data.append(0)
+        }
+        return data
+    }
+}
+
+private extension Data {
+    mutating func appendFixedWidthInteger<T: FixedWidthInteger>(_ value: T) {
+        var bigEndianValue = value.bigEndian
+        Swift.withUnsafeBytes(of: &bigEndianValue) { rawBuffer in
+            append(rawBuffer.bindMemory(to: UInt8.self))
+        }
     }
 }

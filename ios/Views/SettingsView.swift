@@ -165,13 +165,14 @@ private enum SettingsDestination: Hashable {
 
 private struct SettingsDestinationView: View {
     let destination: SettingsDestination
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         switch destination {
         case .subscription:
             SubscriptionSettingsView()
         case .backup:
-            BackupSettingsDestinationView()
+            BackupSettingsDestinationView(modelContext: modelContext)
         case .security:
             SecuritySettingsView()
         case .display:
@@ -483,14 +484,18 @@ private struct SubscriptionSettingsView: View {
 
 @MainActor
 private struct BackupSettingsDestinationView: View {
-    @Environment(\.modelContext) private var modelContext
+    @StateObject private var manualBackupViewModel: ManualBackupSettingsViewModel
 
-    var body: some View {
-        BackupSettingsView(
-            manualBackupViewModel: ManualBackupSettingsViewModel(
+    init(modelContext: ModelContext) {
+        _manualBackupViewModel = StateObject(
+            wrappedValue: ManualBackupSettingsViewModel(
                 manualBackupService: EncryptedManualBackupService(modelContext: modelContext)
             )
         )
+    }
+
+    var body: some View {
+        BackupSettingsView(manualBackupViewModel: manualBackupViewModel)
     }
 }
 
@@ -987,7 +992,7 @@ private struct DisplaySettingsView: View {
         ) {
             SettingsSectionCard(title: "テーマ", subtitle: "表示モード") {
                 SettingsSegmentedControl(options: themeModeOptions, selection: themeModeIndexBinding)
-                Text("ダークモード表示は今後対応予定です。")
+                Text("選択した表示モードはアプリ全体に反映されます。")
                     .font(SettingsDetailStyle.rowMetaFont)
                     .foregroundColor(SettingsDetailStyle.rowMetaText)
             }

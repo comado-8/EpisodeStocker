@@ -45,7 +45,6 @@ final class EncryptedManualBackupService: ManualBackupService {
 
         let payload = try await makePayloadSnapshot()
         let exportedAt = now()
-        let outputURL = backupDirectory.appendingPathComponent(makeFilename(now: exportedAt))
         let appVersion = appVersionProvider()
 
         let backupData: Data
@@ -63,10 +62,13 @@ final class EncryptedManualBackupService: ManualBackupService {
             throw ManualBackupError.encryptFailed
         }
 
+        let outputURL: URL
         do {
-            try await runInBackground { [self] in
+            outputURL = try await runInBackground { [self] in
                 try self.fileManager.createDirectory(at: self.backupDirectory, withIntermediateDirectories: true)
-                try backupData.write(to: outputURL, options: .atomic)
+                let resolvedOutputURL = self.uniqueBackupURL(for: exportedAt)
+                try backupData.write(to: resolvedOutputURL, options: .atomic)
+                return resolvedOutputURL
             }
         } catch {
             throw ManualBackupError.fileWriteFailed
@@ -507,6 +509,25 @@ final class EncryptedManualBackupService: ManualBackupService {
 
     private func makeFilename(now: Date) -> String {
         "EpisodeStockerBackup_\(Self.filenameTimestampFormatter.string(from: now)).esbackup"
+    }
+
+    private func uniqueBackupURL(for date: Date) -> URL {
+        let baseURL = backupDirectory.appendingPathComponent(makeFilename(now: date))
+        guard fileManager.fileExists(atPath: baseURL.path) else {
+            return baseURL
+        }
+
+        let directory = baseURL.deletingLastPathComponent()
+        let stem = baseURL.deletingPathExtension().lastPathComponent
+        let ext = baseURL.pathExtension
+        var candidateURL = baseURL
+        repeat {
+            candidateURL = directory
+                .appendingPathComponent("\(stem)_\(UUID().uuidString)")
+                .appendingPathExtension(ext)
+        } while fileManager.fileExists(atPath: candidateURL.path)
+
+        return candidateURL
     }
 
     private static let filenameTimestampFormatter: DateFormatter = {

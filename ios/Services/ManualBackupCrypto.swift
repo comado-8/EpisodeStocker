@@ -18,13 +18,14 @@ enum ManualBackupCrypto {
     static func encrypt(
         plaintext: Data,
         passphrase: String,
+        associatedData: Data? = nil,
         iterations: Int = defaultPBKDF2Iterations
     ) throws -> ManualBackupCiphertext {
         let salt = try makeRandomData(count: saltSizeInBytes)
         let key = try deriveKey(passphrase: passphrase, salt: salt, iterations: iterations)
 
         do {
-            let sealedBox = try AES.GCM.seal(plaintext, using: key)
+            let sealedBox = try AES.GCM.seal(plaintext, using: key, authenticating: associatedData ?? Data())
             guard let combined = sealedBox.combined else {
                 throw ManualBackupError.encryptFailed
             }
@@ -40,7 +41,8 @@ enum ManualBackupCrypto {
 
     static func decrypt(
         ciphertext: ManualBackupCiphertext,
-        passphrase: String
+        passphrase: String,
+        associatedData: Data? = nil
     ) throws -> Data {
         let key = try deriveKey(
             passphrase: passphrase,
@@ -50,7 +52,7 @@ enum ManualBackupCrypto {
 
         do {
             let sealedBox = try AES.GCM.SealedBox(combined: ciphertext.sealedBoxCombined)
-            return try AES.GCM.open(sealedBox, using: key)
+            return try AES.GCM.open(sealedBox, using: key, authenticating: associatedData ?? Data())
         } catch {
             throw ManualBackupError.decryptFailed
         }
