@@ -53,7 +53,8 @@ final class EncryptedManualBackupService: ManualBackupService {
                 try self.fileCodec.encode(
                     payload: payload,
                     passphrase: passphrase,
-                    appVersion: appVersion
+                    appVersion: appVersion,
+                    createdAt: exportedAt
                 )
             }
         } catch let error as ManualBackupError {
@@ -442,6 +443,12 @@ final class EncryptedManualBackupService: ManualBackupService {
         let episodeIDs = Set(payload.episodes.map(\.id))
 
         for episode in payload.episodes {
+            try validateUniqueIDs(episode.tagIDs, label: "Episode.tagIDs")
+            try validateUniqueIDs(episode.personIDs, label: "Episode.personIDs")
+            try validateUniqueIDs(episode.projectIDs, label: "Episode.projectIDs")
+            try validateUniqueIDs(episode.emotionIDs, label: "Episode.emotionIDs")
+            try validateUniqueIDs(episode.placeIDs, label: "Episode.placeIDs")
+
             for tagID in episode.tagIDs where !tagIDs.contains(tagID) {
                 throw ManualBackupError.validationFailed(reason: "Episode が存在しない Tag を参照しています。")
             }

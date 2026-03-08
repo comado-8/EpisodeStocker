@@ -98,7 +98,7 @@ final class EncryptedManualBackupServiceTests: XCTestCase {
             backupDirectory: tempDirectory,
             now: now,
             appVersionProvider: { "1.0.0" },
-            fileCodec: ManualBackupFileCodec(now: now)
+            fileCodec: ManualBackupFileCodec()
         )
     }
 

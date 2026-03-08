@@ -44,14 +44,26 @@ enum ManualBackupCrypto {
         passphrase: String,
         associatedData: Data? = nil
     ) throws -> Data {
+        guard ciphertext.salt.count == saltSizeInBytes,
+              !ciphertext.sealedBoxCombined.isEmpty
+        else {
+            throw ManualBackupError.invalidFormat
+        }
+
         let key = try deriveKey(
             passphrase: passphrase,
             salt: ciphertext.salt,
             iterations: ciphertext.iterations
         )
 
+        let sealedBox: AES.GCM.SealedBox
         do {
-            let sealedBox = try AES.GCM.SealedBox(combined: ciphertext.sealedBoxCombined)
+            sealedBox = try AES.GCM.SealedBox(combined: ciphertext.sealedBoxCombined)
+        } catch {
+            throw ManualBackupError.invalidFormat
+        }
+
+        do {
             return try AES.GCM.open(sealedBox, using: key, authenticating: associatedData ?? Data())
         } catch {
             throw ManualBackupError.decryptFailed

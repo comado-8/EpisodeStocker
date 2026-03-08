@@ -5,13 +5,14 @@ import XCTest
 final class ManualBackupFileCodecTests: XCTestCase {
     func testEncodeDecodeRoundTrip() throws {
         let now = Date(timeIntervalSince1970: 1_000)
-        let codec = ManualBackupFileCodec(now: { now })
+        let codec = ManualBackupFileCodec()
         let payload = makePayload()
 
         let encoded = try codec.encode(
             payload: payload,
             passphrase: "backup-passphrase",
-            appVersion: "1.0.0"
+            appVersion: "1.0.0",
+            createdAt: now
         )
         let decoded = try codec.decode(encoded, passphrase: "backup-passphrase")
 
@@ -23,10 +24,12 @@ final class ManualBackupFileCodecTests: XCTestCase {
 
     func testDecodeWithWrongPassphraseThrowsWrongPassphrase() throws {
         let codec = ManualBackupFileCodec()
+        let now = Date(timeIntervalSince1970: 2_000)
         let encoded = try codec.encode(
             payload: makePayload(),
             passphrase: "correct-passphrase",
-            appVersion: "1.0.0"
+            appVersion: "1.0.0",
+            createdAt: now
         )
 
         XCTAssertThrowsError(try codec.decode(encoded, passphrase: "wrong-passphrase")) { error in
@@ -36,10 +39,12 @@ final class ManualBackupFileCodecTests: XCTestCase {
 
     func testDecodeWithUnsupportedVersionThrowsUnsupportedVersion() throws {
         let codec = ManualBackupFileCodec()
+        let now = Date(timeIntervalSince1970: 3_000)
         let encoded = try codec.encode(
             payload: makePayload(),
             passphrase: "backup-passphrase",
-            appVersion: "1.0.0"
+            appVersion: "1.0.0",
+            createdAt: now
         )
 
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
@@ -55,10 +60,12 @@ final class ManualBackupFileCodecTests: XCTestCase {
 
     func testDecodeWithTooLargeIterationsThrowsInvalidFormat() throws {
         let codec = ManualBackupFileCodec()
+        let now = Date(timeIntervalSince1970: 4_000)
         let encoded = try codec.encode(
             payload: makePayload(),
             passphrase: "backup-passphrase",
-            appVersion: "1.0.0"
+            appVersion: "1.0.0",
+            createdAt: now
         )
 
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])

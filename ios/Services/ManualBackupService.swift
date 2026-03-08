@@ -4,6 +4,12 @@ struct ManualBackupManifest: Codable, Equatable {
     let schemaVersion: Int
     let createdAt: Date
     let appVersion: String?
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case createdAt
+        case appVersion
+    }
 }
 
 struct ManualBackupEncryptionInfo: Codable, Equatable {
@@ -11,12 +17,25 @@ struct ManualBackupEncryptionInfo: Codable, Equatable {
     let keyDerivation: String
     let iterations: Int
     let salt: Data
+
+    enum CodingKeys: String, CodingKey {
+        case algorithm
+        case keyDerivation
+        case iterations
+        case salt
+    }
 }
 
 struct ManualBackupEnvelope: Codable, Equatable {
     let manifest: ManualBackupManifest
     let encryption: ManualBackupEncryptionInfo
     let sealedBoxCombined: Data
+
+    enum CodingKeys: String, CodingKey {
+        case manifest
+        case encryption
+        case sealedBoxCombined
+    }
 }
 
 struct ManualBackupPayloadV1: Codable, Equatable {
@@ -36,6 +55,24 @@ struct ManualBackupPayloadV1: Codable, Equatable {
         let projectIDs: [UUID]
         let emotionIDs: [UUID]
         let placeIDs: [UUID]
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case date
+            case title
+            case body
+            case unlockDate
+            case type
+            case createdAt
+            case updatedAt
+            case isSoftDeleted
+            case deletedAt
+            case tagIDs
+            case personIDs
+            case projectIDs
+            case emotionIDs
+            case placeIDs
+        }
     }
 
     struct UnlockLogRecord: Codable, Equatable {
@@ -51,6 +88,21 @@ struct ManualBackupPayloadV1: Codable, Equatable {
         let isSoftDeleted: Bool
         let deletedAt: Date?
         let episodeID: UUID
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case talkedAt
+            case mediaPublicAt
+            case mediaType
+            case projectNameText
+            case reaction
+            case memo
+            case createdAt
+            case updatedAt
+            case isSoftDeleted
+            case deletedAt
+            case episodeID
+        }
     }
 
     struct TagRecord: Codable, Equatable {
@@ -61,6 +113,16 @@ struct ManualBackupPayloadV1: Codable, Equatable {
         let updatedAt: Date
         let isSoftDeleted: Bool
         let deletedAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case nameNormalized
+            case createdAt
+            case updatedAt
+            case isSoftDeleted
+            case deletedAt
+        }
     }
 
     struct PersonRecord: Codable, Equatable {
@@ -71,6 +133,16 @@ struct ManualBackupPayloadV1: Codable, Equatable {
         let updatedAt: Date
         let isSoftDeleted: Bool
         let deletedAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case nameNormalized
+            case createdAt
+            case updatedAt
+            case isSoftDeleted
+            case deletedAt
+        }
     }
 
     struct ProjectRecord: Codable, Equatable {
@@ -81,6 +153,16 @@ struct ManualBackupPayloadV1: Codable, Equatable {
         let updatedAt: Date
         let isSoftDeleted: Bool
         let deletedAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case nameNormalized
+            case createdAt
+            case updatedAt
+            case isSoftDeleted
+            case deletedAt
+        }
     }
 
     struct EmotionRecord: Codable, Equatable {
@@ -91,6 +173,16 @@ struct ManualBackupPayloadV1: Codable, Equatable {
         let updatedAt: Date
         let isSoftDeleted: Bool
         let deletedAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case nameNormalized
+            case createdAt
+            case updatedAt
+            case isSoftDeleted
+            case deletedAt
+        }
     }
 
     struct PlaceRecord: Codable, Equatable {
@@ -101,6 +193,16 @@ struct ManualBackupPayloadV1: Codable, Equatable {
         let updatedAt: Date
         let isSoftDeleted: Bool
         let deletedAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case nameNormalized
+            case createdAt
+            case updatedAt
+            case isSoftDeleted
+            case deletedAt
+        }
     }
 
     let episodes: [EpisodeRecord]
@@ -110,6 +212,16 @@ struct ManualBackupPayloadV1: Codable, Equatable {
     let projects: [ProjectRecord]
     let emotions: [EmotionRecord]
     let places: [PlaceRecord]
+
+    enum CodingKeys: String, CodingKey {
+        case episodes
+        case unlockLogs
+        case tags
+        case persons
+        case projects
+        case emotions
+        case places
+    }
 }
 
 struct ManualBackupPreview: Equatable {

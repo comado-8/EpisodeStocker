@@ -12,22 +12,20 @@ struct ManualBackupFileCodec {
 
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
-    private let now: () -> Date
 
     init(
         encoder: JSONEncoder = JSONEncoder(),
-        decoder: JSONDecoder = JSONDecoder(),
-        now: @escaping () -> Date = Date.init
+        decoder: JSONDecoder = JSONDecoder()
     ) {
         self.encoder = encoder
         self.decoder = decoder
-        self.now = now
     }
 
     func encode(
         payload: ManualBackupPayloadV1,
         passphrase: String,
-        appVersion: String?
+        appVersion: String?,
+        createdAt: Date
     ) throws -> Data {
         let payloadData: Data
         do {
@@ -38,7 +36,7 @@ struct ManualBackupFileCodec {
 
         let manifest = ManualBackupManifest(
             schemaVersion: Self.currentSchemaVersion,
-            createdAt: now(),
+            createdAt: createdAt,
             appVersion: appVersion
         )
         let associatedData = try Self.makeManifestAssociatedData(manifest)

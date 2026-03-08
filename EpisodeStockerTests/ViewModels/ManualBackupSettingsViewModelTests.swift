@@ -4,6 +4,49 @@ import XCTest
 
 @MainActor
 final class ManualBackupSettingsViewModelTests: XCTestCase {
+    func testLoadRefreshesTimestampsFromSettingsRepository() async {
+        let settings = InMemoryManualBackupSettingsRepository()
+        let initialExportAt = Date(timeIntervalSince1970: 10)
+        let initialRestoreAt = Date(timeIntervalSince1970: 20)
+        settings.set(initialExportAt, for: .manualBackupLastExportAt)
+        settings.set(initialRestoreAt, for: .manualBackupLastRestoreAt)
+        let viewModel = ManualBackupSettingsViewModel(
+            manualBackupService: FakeManualBackupService(),
+            settingsRepository: settings
+        )
+
+        let updatedExportAt = Date(timeIntervalSince1970: 30)
+        let updatedRestoreAt = Date(timeIntervalSince1970: 40)
+        settings.set(updatedExportAt, for: .manualBackupLastExportAt)
+        settings.set(updatedRestoreAt, for: .manualBackupLastRestoreAt)
+
+        viewModel.load()
+
+        XCTAssertEqual(viewModel.lastExportAt, updatedExportAt)
+        XCTAssertEqual(viewModel.lastRestoreAt, updatedRestoreAt)
+    }
+
+    func testExportBackupRejectsTooShortPassphrase() async {
+        let settings = InMemoryManualBackupSettingsRepository()
+        let service = FakeManualBackupService()
+        let viewModel = ManualBackupSettingsViewModel(
+            manualBackupService: service,
+            settingsRepository: settings
+        )
+
+        let output = await viewModel.exportBackup(
+            passphrase: "short",
+            confirmation: "short"
+        )
+
+        XCTAssertNil(output)
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            ManualBackupError.invalidPassphrase.localizedDescription
+        )
+        XCTAssertFalse(service.didCallExport)
+    }
+
     func testExportBackupRequiresMatchingConfirmation() async {
         let settings = InMemoryManualBackupSettingsRepository()
         let service = FakeManualBackupService()
@@ -48,6 +91,48 @@ final class ManualBackupSettingsViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.errorMessage)
     }
 
+    func testInspectBackupRejectsTooShortPassphrase() async {
+        let settings = InMemoryManualBackupSettingsRepository()
+        let viewModel = ManualBackupSettingsViewModel(
+            manualBackupService: FakeManualBackupService(),
+            settingsRepository: settings
+        )
+        let url = URL(fileURLWithPath: "/tmp/restore.esbackup")
+
+        let inspected = await viewModel.inspectBackup(at: url, passphrase: "short")
+
+        XCTAssertFalse(inspected)
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            ManualBackupError.invalidPassphrase.localizedDescription
+        )
+        XCTAssertNil(viewModel.pendingRestorePreview)
+    }
+
+    func testInspectBackupFailureSetsErrorMessage() async {
+        struct DummyError: LocalizedError {
+            var errorDescription: String? { "inspect failed" }
+        }
+
+        let settings = InMemoryManualBackupSettingsRepository()
+        let url = URL(fileURLWithPath: "/tmp/restore.esbackup")
+        let service = FakeManualBackupService(
+            inspectHandler: { _, _ in
+                throw DummyError()
+            }
+        )
+        let viewModel = ManualBackupSettingsViewModel(
+            manualBackupService: service,
+            settingsRepository: settings
+        )
+
+        let inspected = await viewModel.inspectBackup(at: url, passphrase: "passphrase-123")
+
+        XCTAssertFalse(inspected)
+        XCTAssertEqual(viewModel.errorMessage, "inspect failed")
+        XCTAssertNil(viewModel.pendingRestorePreview)
+    }
+
     func testInspectAndRestoreFlow() async {
         let settings = InMemoryManualBackupSettingsRepository()
         let preview = ManualBackupPreview(
@@ -85,6 +170,56 @@ final class ManualBackupSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.lastRestoreAt, restoredAt)
         XCTAssertNil(viewModel.pendingRestorePreview)
         XCTAssertNil(viewModel.errorMessage)
+    }
+
+    func testRestorePendingBackupWithoutSelectionReturnsNil() async {
+        let viewModel = ManualBackupSettingsViewModel(
+            manualBackupService: FakeManualBackupService(),
+            settingsRepository: InMemoryManualBackupSettingsRepository()
+        )
+
+        let result = await viewModel.restorePendingBackup()
+
+        XCTAssertNil(result)
+        XCTAssertEqual(viewModel.errorMessage, "復元対象のバックアップが選択されていません。")
+    }
+
+    func testRestorePendingBackupFailureSetsErrorMessage() async {
+        struct DummyError: LocalizedError {
+            var errorDescription: String? { "restore failed" }
+        }
+
+        let settings = InMemoryManualBackupSettingsRepository()
+        let preview = ManualBackupPreview(
+            manifest: ManualBackupManifest(schemaVersion: 1, createdAt: Date(timeIntervalSince1970: 100), appVersion: "1.0.0"),
+            episodeCount: 1,
+            unlockLogCount: 0,
+            tagCount: 0,
+            personCount: 0,
+            projectCount: 0,
+            emotionCount: 0,
+            placeCount: 0
+        )
+        let url = URL(fileURLWithPath: "/tmp/restore.esbackup")
+        let service = FakeManualBackupService(
+            inspectHandler: { _, _ in preview },
+            restoreHandler: { _, _ in
+                throw DummyError()
+            }
+        )
+        let viewModel = ManualBackupSettingsViewModel(
+            manualBackupService: service,
+            settingsRepository: settings
+        )
+
+        let inspected = await viewModel.inspectBackup(at: url, passphrase: "passphrase-123")
+        XCTAssertTrue(inspected)
+
+        let result = await viewModel.restorePendingBackup()
+
+        XCTAssertNil(result)
+        XCTAssertEqual(viewModel.errorMessage, "restore failed")
+        XCTAssertEqual(viewModel.pendingRestorePreview, preview)
     }
 }
 

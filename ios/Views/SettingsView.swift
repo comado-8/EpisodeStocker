@@ -616,7 +616,7 @@ private struct BackupSettingsView: View {
     }()
 
     private static let manualBackupContentType: UTType = {
-        UTType(filenameExtension: "esbackup") ?? .data
+        UTType(filenameExtension: "esbackup") ?? UTType(exportedAs: "com.episodestocker.manual-backup")
     }()
 
     private var manualLastExportText: String {
@@ -807,7 +807,7 @@ private struct BackupSettingsView: View {
             }
         }
         .sheet(isPresented: $showsShareSheet, onDismiss: {
-            shareItems = []
+            cleanupSharedBackupFiles()
         }) {
             ActivityView(activityItems: shareItems)
         }
@@ -821,12 +821,17 @@ private struct BackupSettingsView: View {
         }
         .fileImporter(
             isPresented: $showsFileImporter,
-            allowedContentTypes: [Self.manualBackupContentType, .data],
+            allowedContentTypes: [Self.manualBackupContentType],
             allowsMultipleSelection: false
         ) { result in
             switch result {
             case .success(let urls):
                 guard let firstURL = urls.first else { return }
+                guard Self.isManualBackupFileURL(firstURL) else {
+                    discardSelectedImportFile()
+                    manualBackupViewModel.errorMessage = "拡張子 .esbackup のバックアップファイルを選択してください。"
+                    return
+                }
                 do {
                     discardSelectedImportFile()
                     selectedImportURL = try copyImportedBackupToTemporaryDirectory(from: firstURL)
@@ -909,6 +914,29 @@ private struct BackupSettingsView: View {
         }
         self.selectedImportURL = nil
     }
+
+    private func cleanupSharedBackupFiles() {
+        for item in shareItems {
+            guard let url = item as? URL,
+                  url.isFileURL,
+                  Self.isManualBackupFileURL(url)
+            else {
+                continue
+            }
+            do {
+                try FileManager.default.removeItem(at: url)
+            } catch {
+                #if DEBUG
+                print("Failed to remove shared backup file: \(error)")
+                #endif
+            }
+        }
+        shareItems = []
+    }
+
+    private static func isManualBackupFileURL(_ url: URL) -> Bool {
+        url.pathExtension.lowercased() == "esbackup"
+    }
 }
 
 #if canImport(RevenueCatUI)
@@ -973,14 +1001,15 @@ private struct SecuritySettingsView: View {
 
 private struct DisplaySettingsView: View {
     @EnvironmentObject private var appPreferences: AppPreferencesStore
+    private let themeModes: [AppPreferencesStore.ThemeMode] = [.system, .light, .dark]
     private let themeModeOptions = ["自動", "ライトモード", "ダークモード"]
 
     private var themeModeIndexBinding: Binding<Int> {
         Binding(
-            get: { appPreferences.themeMode.rawValue },
+            get: { themeModes.firstIndex(of: appPreferences.themeMode) ?? 0 },
             set: { newValue in
-                guard let mode = AppPreferencesStore.ThemeMode(rawValue: newValue) else { return }
-                appPreferences.themeMode = mode
+                guard themeModes.indices.contains(newValue) else { return }
+                appPreferences.themeMode = themeModes[newValue]
             }
         )
     }
