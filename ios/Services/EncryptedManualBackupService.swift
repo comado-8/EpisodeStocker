@@ -12,6 +12,10 @@ final class EncryptedManualBackupService: ManualBackupService {
     private let now: () -> Date
     private let appVersionProvider: () -> String?
     private let fileCodec: ManualBackupFileCodec
+    private let backgroundQueue = DispatchQueue(
+        label: "com.episodestocker.manual-backup.background",
+        qos: .userInitiated
+    )
 
     init(
         modelContext: ModelContext,
@@ -90,9 +94,10 @@ final class EncryptedManualBackupService: ManualBackupService {
         try await stageRestoreValidation(payload: decoded.payload)
 
         do {
-            try Self.deleteAllExistingData(in: modelContext)
-            try Self.restore(payload: decoded.payload, in: modelContext)
-            try modelContext.save()
+            let restoreContext = ModelContext(modelContext.container)
+            try Self.deleteAllExistingData(in: restoreContext)
+            try Self.restore(payload: decoded.payload, in: restoreContext)
+            try restoreContext.save()
         } catch let error as ManualBackupError {
             throw error
         } catch {
@@ -490,7 +495,7 @@ final class EncryptedManualBackupService: ManualBackupService {
 
     private func runInBackground<T>(_ work: @escaping () throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
+            backgroundQueue.async {
                 do {
                     continuation.resume(returning: try work())
                 } catch {

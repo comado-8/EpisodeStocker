@@ -1,11 +1,110 @@
 import SwiftData
 import SwiftUI
 
+@MainActor
+final class AppPreferencesStore: ObservableObject {
+    enum ThemeMode: Int, CaseIterable {
+        case system
+        case light
+        case dark
+
+        var preferredColorScheme: ColorScheme? {
+            switch self {
+            case .system:
+                return nil
+            case .light:
+                return .light
+            case .dark:
+                return .dark
+            }
+        }
+    }
+
+    enum AutoLockInterval: Int, CaseIterable, Identifiable {
+        case immediately = 0
+        case seconds30 = 30
+        case minutes1 = 60
+        case minutes2 = 120
+        case minutes5 = 300
+        case minutes10 = 600
+
+        var id: Int { rawValue }
+
+        var label: String {
+            switch self {
+            case .immediately:
+                return "すぐに"
+            case .seconds30:
+                return "30秒"
+            case .minutes1:
+                return "1分"
+            case .minutes2:
+                return "2分"
+            case .minutes5:
+                return "5分"
+            case .minutes10:
+                return "10分"
+            }
+        }
+    }
+
+    private enum Key {
+        static let passcodeEnabled = "settings.security.passcodeEnabled"
+        static let biometricEnabled = "settings.security.biometricEnabled"
+        static let autoLockInterval = "settings.security.autoLockIntervalSeconds"
+        static let themeMode = "settings.display.themeMode"
+    }
+
+    private let userDefaults: UserDefaults
+
+    @Published var passcodeEnabled: Bool {
+        didSet { userDefaults.set(passcodeEnabled, forKey: Key.passcodeEnabled) }
+    }
+    @Published var biometricEnabled: Bool {
+        didSet { userDefaults.set(biometricEnabled, forKey: Key.biometricEnabled) }
+    }
+    @Published var autoLockInterval: AutoLockInterval {
+        didSet { userDefaults.set(autoLockInterval.rawValue, forKey: Key.autoLockInterval) }
+    }
+    @Published var themeMode: ThemeMode {
+        didSet { userDefaults.set(themeMode.rawValue, forKey: Key.themeMode) }
+    }
+
+    init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+        passcodeEnabled = userDefaults.object(forKey: Key.passcodeEnabled) as? Bool ?? true
+        biometricEnabled = userDefaults.object(forKey: Key.biometricEnabled) as? Bool ?? false
+        if let storedInterval = AutoLockInterval(rawValue: userDefaults.integer(forKey: Key.autoLockInterval)),
+           userDefaults.object(forKey: Key.autoLockInterval) != nil
+        {
+            autoLockInterval = storedInterval
+        } else {
+            autoLockInterval = .minutes2
+        }
+        if let storedThemeMode = ThemeMode(rawValue: userDefaults.integer(forKey: Key.themeMode)),
+           userDefaults.object(forKey: Key.themeMode) != nil
+        {
+            themeMode = storedThemeMode
+        } else {
+            themeMode = .system
+        }
+    }
+
+    var preferredColorScheme: ColorScheme? {
+        themeMode.preferredColorScheme
+    }
+
+    var isAutoLockConfigEnabled: Bool {
+        passcodeEnabled || biometricEnabled
+    }
+}
+
 @main
 struct EpisodeStockerApp: App {
     @StateObject private var store = EpisodeStore()
     @StateObject private var router = AppRouter()
     @StateObject private var premiumAccess = PremiumAccessViewModel()
+    @StateObject private var appPreferences = AppPreferencesStore()
     private let modelContainer: ModelContainer
     private let seedProfile: SeedData.Profile
     private var effectiveCloudSyncEnabled: Bool
@@ -103,6 +202,7 @@ struct EpisodeStockerApp: App {
                 .environmentObject(store)
                 .environmentObject(router)
                 .environmentObject(premiumAccess)
+                .environmentObject(appPreferences)
                 .modelContainer(modelContainer)
         }
     }
@@ -111,12 +211,13 @@ struct EpisodeStockerApp: App {
 private struct RootTabContainer: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
+    @EnvironmentObject private var appPreferences: AppPreferencesStore
     let seedProfile: SeedData.Profile
     let effectiveCloudSyncEnabled: Bool
 
     var body: some View {
         RootTabView()
-            .preferredColorScheme(.light)
+            .preferredColorScheme(appPreferences.preferredColorScheme)
             .task {
                 SeedData.seedIfNeeded(
                     context: modelContext,

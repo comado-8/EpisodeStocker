@@ -252,6 +252,7 @@ struct RootTabView_Previews: PreviewProvider {
             .environmentObject(EpisodeStore())
             .environmentObject(AppRouter())
             .environmentObject(PremiumAccessViewModel())
+            .environmentObject(AppPreferencesStore())
     }
 }
 

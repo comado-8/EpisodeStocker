@@ -42,7 +42,7 @@ struct BackupPassphraseSheet: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .padding(12)
-                        .background(Color.white)
+                        .background(Color(.systemBackground))
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -59,7 +59,7 @@ struct BackupPassphraseSheet: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .padding(12)
-                            .background(Color.white)
+                            .background(Color(.systemBackground))
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)

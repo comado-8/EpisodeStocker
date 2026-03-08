@@ -7,6 +7,8 @@ struct DecodedManualBackup {
 
 struct ManualBackupFileCodec {
     static let currentSchemaVersion = 1
+    static let algorithmIdentifier = "AES-GCM"
+    static let keyDerivationIdentifier = "PBKDF2-HMAC-SHA256"
 
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
@@ -42,8 +44,8 @@ struct ManualBackupFileCodec {
                 appVersion: appVersion
             ),
             encryption: ManualBackupEncryptionInfo(
-                algorithm: "AES-GCM",
-                keyDerivation: "PBKDF2-HMAC-SHA256",
+                algorithm: Self.algorithmIdentifier,
+                keyDerivation: Self.keyDerivationIdentifier,
                 iterations: ciphertext.iterations,
                 salt: ciphertext.salt
             ),
@@ -72,8 +74,8 @@ struct ManualBackupFileCodec {
             throw ManualBackupError.unsupportedVersion(envelope.manifest.schemaVersion)
         }
 
-        guard envelope.encryption.algorithm == "AES-GCM",
-              envelope.encryption.keyDerivation == "PBKDF2-HMAC-SHA256"
+        guard envelope.encryption.algorithm == Self.algorithmIdentifier,
+              envelope.encryption.keyDerivation == Self.keyDerivationIdentifier
         else {
             throw ManualBackupError.invalidFormat
         }

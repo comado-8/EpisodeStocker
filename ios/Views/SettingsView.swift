@@ -578,11 +578,8 @@ private struct BackupSettingsView: View {
         switch viewModel.availability {
         case .available:
             return "利用可能"
-        case .unavailable(let reason):
-            if reason == "iCloudにサインインしてください。" {
-                return "未サインイン"
-            }
-            return "利用できません"
+        case .unavailable:
+            return viewModel.needsAppleAccountSignIn ? "未サインイン" : "利用できません"
         }
     }
 
@@ -591,7 +588,7 @@ private struct BackupSettingsView: View {
         case .available:
             return nil
         case .unavailable(let reason):
-            if reason == "iCloudにサインインしてください。" {
+            if viewModel.needsAppleAccountSignIn {
                 return "『設定』アプリのApple Accountからサインインしてください。"
             }
             return reason
@@ -758,13 +755,13 @@ private struct BackupSettingsView: View {
                 isProcessing: manualBackupViewModel.isInspecting,
                 minimumLength: ManualBackupSettingsViewModel.minimumPassphraseLength,
                 onSubmit: { passphrase, _ in
-                    showsImportPassphraseSheet = false
                     guard let selectedImportURL else { return }
                     Task {
                         let isPrepared = await manualBackupViewModel.inspectBackup(
                             at: selectedImportURL,
                             passphrase: passphrase
                         )
+                        showsImportPassphraseSheet = false
                         if isPrepared {
                             showsRestoreConfirmationSheet = true
                         } else {
@@ -777,6 +774,7 @@ private struct BackupSettingsView: View {
                     discardSelectedImportFile()
                 }
             )
+            .interactiveDismissDisabled(true)
         }
         .sheet(isPresented: $showsRestoreConfirmationSheet, onDismiss: {
             manualBackupViewModel.clearPendingRestore()
@@ -855,9 +853,7 @@ private struct BackupSettingsView: View {
             return
         }
 
-        if case .unavailable(let reason) = viewModel.availability,
-           reason == "iCloudにサインインしてください。"
-        {
+        if viewModel.needsAppleAccountSignIn {
             showsAppleAccountSignInAlert = true
             return
         }
@@ -927,41 +923,7 @@ private struct RevenueCatCustomerCenterContainer: View {
 #endif
 
 private struct SecuritySettingsView: View {
-    @State private var passcodeEnabled = true
-    @State private var biometricEnabled = false
-    @State private var selectedAutoLockInterval: AutoLockInterval = .minutes2
-
-    private var isAutoLockConfigEnabled: Bool {
-        passcodeEnabled || biometricEnabled
-    }
-
-    private enum AutoLockInterval: Int, CaseIterable, Identifiable {
-        case immediately = 0
-        case seconds30 = 30
-        case minutes1 = 60
-        case minutes2 = 120
-        case minutes5 = 300
-        case minutes10 = 600
-
-        var id: Int { rawValue }
-
-        var label: String {
-            switch self {
-            case .immediately:
-                return "すぐに"
-            case .seconds30:
-                return "30秒"
-            case .minutes1:
-                return "1分"
-            case .minutes2:
-                return "2分"
-            case .minutes5:
-                return "5分"
-            case .minutes10:
-                return "10分"
-            }
-        }
-    }
+    @EnvironmentObject private var appPreferences: AppPreferencesStore
 
     var body: some View {
         SettingsDetailContainerView(
@@ -969,14 +931,14 @@ private struct SecuritySettingsView: View {
             subtitle: "パスコードと生体認証"
         ) {
             SettingsSectionCard(title: "ロック設定", subtitle: "アプリ起動時の保護") {
-                Toggle(isOn: $passcodeEnabled) {
+                Toggle(isOn: $appPreferences.passcodeEnabled) {
                     Text("パスコードを使用")
                         .font(SettingsDetailStyle.rowTitleFont)
                         .foregroundColor(SettingsDetailStyle.rowTitleText)
                 }
                 .toggleStyle(SwitchToggleStyle(tint: SettingsDetailStyle.toggleTint))
 
-                Toggle(isOn: $biometricEnabled) {
+                Toggle(isOn: $appPreferences.biometricEnabled) {
                     Text("Face ID / Touch ID")
                         .font(SettingsDetailStyle.rowTitleFont)
                         .foregroundColor(SettingsDetailStyle.rowTitleText)
@@ -990,14 +952,14 @@ private struct SecuritySettingsView: View {
                         .font(SettingsDetailStyle.rowTitleFont)
                         .foregroundColor(SettingsDetailStyle.rowTitleText)
                     Spacer(minLength: 0)
-                    Picker("自動ロックまで", selection: $selectedAutoLockInterval) {
-                        ForEach(AutoLockInterval.allCases) { interval in
+                    Picker("自動ロックまで", selection: $appPreferences.autoLockInterval) {
+                        ForEach(AppPreferencesStore.AutoLockInterval.allCases) { interval in
                             Text(interval.label).tag(interval)
                         }
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .disabled(!isAutoLockConfigEnabled)
+                    .disabled(!appPreferences.isAutoLockConfigEnabled)
                 }
             }
         }
@@ -1005,8 +967,18 @@ private struct SecuritySettingsView: View {
 }
 
 private struct DisplaySettingsView: View {
-    @State private var themeModeIndex = 0
+    @EnvironmentObject private var appPreferences: AppPreferencesStore
     private let themeModeOptions = ["自動", "ライトモード", "ダークモード"]
+
+    private var themeModeIndexBinding: Binding<Int> {
+        Binding(
+            get: { appPreferences.themeMode.rawValue },
+            set: { newValue in
+                guard let mode = AppPreferencesStore.ThemeMode(rawValue: newValue) else { return }
+                appPreferences.themeMode = mode
+            }
+        )
+    }
 
     var body: some View {
         SettingsDetailContainerView(
@@ -1014,7 +986,7 @@ private struct DisplaySettingsView: View {
             subtitle: "テーマを選択"
         ) {
             SettingsSectionCard(title: "テーマ", subtitle: "表示モード") {
-                SettingsSegmentedControl(options: themeModeOptions, selection: $themeModeIndex)
+                SettingsSegmentedControl(options: themeModeOptions, selection: themeModeIndexBinding)
                 Text("ダークモード表示は今後対応予定です。")
                     .font(SettingsDetailStyle.rowMetaFont)
                     .foregroundColor(SettingsDetailStyle.rowMetaText)
@@ -1284,5 +1256,6 @@ struct SettingsView_Previews: PreviewProvider {
         SettingsView()
             .environmentObject(AppRouter())
             .environmentObject(PremiumAccessViewModel())
+            .environmentObject(AppPreferencesStore())
     }
 }
