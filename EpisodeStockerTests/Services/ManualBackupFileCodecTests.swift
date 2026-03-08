@@ -58,6 +58,27 @@ final class ManualBackupFileCodecTests: XCTestCase {
         }
     }
 
+    func testDecodeWithTamperedManifestCreatedAtFailsAuthentication() throws {
+        let codec = ManualBackupFileCodec()
+        let now = Date(timeIntervalSince1970: 3_100)
+        let encoded = try codec.encode(
+            payload: makePayload(),
+            passphrase: "backup-passphrase",
+            appVersion: "1.0.0",
+            createdAt: now
+        )
+
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var manifest = try XCTUnwrap(json["manifest"] as? [String: Any])
+        manifest["createdAt"] = Date(timeIntervalSince1970: 9_999).timeIntervalSince1970
+        json["manifest"] = manifest
+        let modified = try JSONSerialization.data(withJSONObject: json, options: [])
+
+        XCTAssertThrowsError(try codec.decode(modified, passphrase: "backup-passphrase")) { error in
+            XCTAssertEqual(error as? ManualBackupError, .wrongPassphrase)
+        }
+    }
+
     func testDecodeWithTooLargeIterationsThrowsInvalidFormat() throws {
         let codec = ManualBackupFileCodec()
         let now = Date(timeIntervalSince1970: 4_000)
