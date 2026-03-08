@@ -1,5 +1,9 @@
 import Foundation
 
+enum ManualBackupPassphrasePolicy {
+    static let minimumLength = 8
+}
+
 struct ManualBackupManifest: Codable, Equatable {
     let schemaVersion: Int
     let createdAt: Date
@@ -265,7 +269,7 @@ enum ManualBackupError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidPassphrase:
-            return "パスフレーズは8文字以上で入力してください。"
+            return "パスフレーズは\(ManualBackupPassphrasePolicy.minimumLength)文字以上で入力してください。"
         case .invalidFormat:
             return "バックアップファイルの形式が不正です。"
         case .unsupportedVersion(let version):

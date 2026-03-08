@@ -504,7 +504,7 @@ private struct BackupSettingsView: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
     @StateObject private var viewModel: BackupSettingsViewModel
-    @StateObject private var manualBackupViewModel: ManualBackupSettingsViewModel
+    @ObservedObject private var manualBackupViewModel: ManualBackupSettingsViewModel
     @State private var showsExportPassphraseSheet = false
     @State private var showsImportPassphraseSheet = false
     @State private var showsImportFileGuide = false
@@ -555,7 +555,7 @@ private struct BackupSettingsView: View {
                 isEntitlementCheckEnabled: Self.isBackupPaywallEnabled
             )
         )
-        _manualBackupViewModel = StateObject(wrappedValue: manualBackupViewModel)
+        self.manualBackupViewModel = manualBackupViewModel
     }
 
     private var backupBinding: Binding<Bool> {
@@ -616,7 +616,7 @@ private struct BackupSettingsView: View {
     }()
 
     private static let manualBackupContentType: UTType = {
-        UTType(filenameExtension: "esbackup") ?? UTType(exportedAs: "com.episodestocker.manual-backup")
+        UTType(exportedAs: "com.episodestocker.manual-backup")
     }()
 
     private var manualLastExportText: String {
@@ -806,6 +806,7 @@ private struct BackupSettingsView: View {
                 EmptyView()
             }
         }
+        .interactiveDismissDisabled(manualBackupViewModel.isRestoring)
         .sheet(isPresented: $showsShareSheet, onDismiss: {
             cleanupSharedBackupFiles()
         }) {

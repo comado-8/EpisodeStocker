@@ -3,7 +3,7 @@ import SwiftData
 
 @MainActor
 final class EncryptedManualBackupService: ManualBackupService {
-    static let minimumPassphraseLength = 8
+    static let minimumPassphraseLength = ManualBackupPassphrasePolicy.minimumLength
 
     private let modelContext: ModelContext
     private let settingsRepository: SettingsRepository
@@ -514,27 +514,15 @@ final class EncryptedManualBackupService: ManualBackupService {
         }
     }
 
-    private func makeFilename(now: Date) -> String {
-        "EpisodeStockerBackup_\(Self.filenameTimestampFormatter.string(from: now)).esbackup"
+    private func makeFilename(now: Date, uniqueSuffix: String) -> String {
+        "EpisodeStockerBackup_\(Self.filenameTimestampFormatter.string(from: now))_\(uniqueSuffix).esbackup"
     }
 
     private func uniqueBackupURL(for date: Date) -> URL {
-        let baseURL = backupDirectory.appendingPathComponent(makeFilename(now: date))
-        guard fileManager.fileExists(atPath: baseURL.path) else {
-            return baseURL
-        }
-
-        let directory = baseURL.deletingLastPathComponent()
-        let stem = baseURL.deletingPathExtension().lastPathComponent
-        let ext = baseURL.pathExtension
-        var candidateURL = baseURL
-        repeat {
-            candidateURL = directory
-                .appendingPathComponent("\(stem)_\(UUID().uuidString)")
-                .appendingPathExtension(ext)
-        } while fileManager.fileExists(atPath: candidateURL.path)
-
-        return candidateURL
+        let uniqueSuffix = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        return backupDirectory.appendingPathComponent(
+            makeFilename(now: date, uniqueSuffix: uniqueSuffix)
+        )
     }
 
     private static let filenameTimestampFormatter: DateFormatter = {

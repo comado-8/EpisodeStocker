@@ -2,7 +2,7 @@ import Foundation
 
 @MainActor
 final class ManualBackupSettingsViewModel: ObservableObject {
-    static let minimumPassphraseLength = 8
+    static let minimumPassphraseLength = ManualBackupPassphrasePolicy.minimumLength
 
     @Published private(set) var isExporting = false
     @Published private(set) var isInspecting = false
