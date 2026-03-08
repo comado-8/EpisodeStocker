@@ -22,6 +22,25 @@ final class ManualBackupFileCodecTests: XCTestCase {
         XCTAssertEqual(decoded.payload, payload)
     }
 
+    func testEncodeDecodeRoundTripWithoutAppVersion() throws {
+        let now = Date(timeIntervalSince1970: 1_500)
+        let codec = ManualBackupFileCodec()
+        let payload = makePayload()
+
+        let encoded = try codec.encode(
+            payload: payload,
+            passphrase: "backup-passphrase",
+            appVersion: nil,
+            createdAt: now
+        )
+        let decoded = try codec.decode(encoded, passphrase: "backup-passphrase")
+
+        XCTAssertEqual(decoded.manifest.schemaVersion, ManualBackupFileCodec.currentSchemaVersion)
+        XCTAssertEqual(decoded.manifest.createdAt, now)
+        XCTAssertNil(decoded.manifest.appVersion)
+        XCTAssertEqual(decoded.payload, payload)
+    }
+
     func testDecodeWithWrongPassphraseThrowsWrongPassphrase() throws {
         let codec = ManualBackupFileCodec()
         let now = Date(timeIntervalSince1970: 2_000)
