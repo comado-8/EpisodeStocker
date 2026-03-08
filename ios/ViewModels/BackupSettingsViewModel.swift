@@ -68,6 +68,13 @@ final class BackupSettingsViewModel: ObservableObject {
         }
     }
 
+    var needsAppleAccountSignIn: Bool {
+        if case .unavailable(let reason) = availability {
+            return reason == CloudKitBackupService.appleAccountSignInRequiredReason
+        }
+        return false
+    }
+
     var lastSyncAt: Date? {
         lastBackupAt
     }

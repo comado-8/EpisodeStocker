@@ -12,6 +12,8 @@ struct NoopCloudBackupJobRunner: CloudBackupJobRunner {
 }
 
 final class CloudKitBackupService: CloudBackupService {
+    static let appleAccountSignInRequiredReason = "iCloudにサインインしてください。"
+
     private let cloudKitClient: CloudKitClient
     private let preferenceRepository: CloudSyncPreferenceRepository
     private let cloudSyncModeResolver: CloudSyncModeResolving
@@ -45,7 +47,7 @@ final class CloudKitBackupService: CloudBackupService {
             case .available:
                 return .available
             case .noAccount:
-                return .unavailable(reason: "iCloudにサインインしてください。")
+                return .unavailable(reason: Self.appleAccountSignInRequiredReason)
             case .restricted:
                 return .unavailable(reason: "このデバイスではiCloudが制限されています。")
             case .couldNotDetermine:

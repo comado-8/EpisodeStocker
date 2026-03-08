@@ -80,6 +80,15 @@ final class AppRouterTests: XCTestCase {
         XCTAssertEqual(router.tagRootResetSignal, initial + 1)
     }
 
+    func testRequestSettingsRootResetIncrementsSignal() {
+        let router = AppRouter()
+        let initial = router.settingsRootResetSignal
+
+        router.requestSettingsRootReset()
+
+        XCTAssertEqual(router.settingsRootResetSignal, initial + 1)
+    }
+
     func testPaywallLifecycle() {
         let router = AppRouter()
 

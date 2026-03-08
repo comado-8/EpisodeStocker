@@ -42,9 +42,7 @@ struct RootTabView: View {
                     .tag(RootTab.tags)
                 AnalyticsNavigationContainer()
                     .tag(RootTab.analytics)
-                NavigationStack {
-                    SettingsView()
-                }
+                SettingsView()
                 .tag(RootTab.settings)
             }
             .toolbar(.hidden, for: .tabBar)
@@ -157,7 +155,9 @@ struct RootTabView: View {
             return !router.path.isEmpty
         case .tags:
             return router.hasTagDetailPath
-        case .analytics, .settings:
+        case .settings:
+            return router.hasSettingsDetailPath
+        case .analytics:
             return false
         }
     }
@@ -173,7 +173,9 @@ struct RootTabView: View {
             router.path.removeAll()
         case .tags:
             router.requestTagRootReset()
-        case .analytics, .settings:
+        case .settings:
+            router.requestSettingsRootReset()
+        case .analytics:
             break
         }
     }
@@ -250,6 +252,7 @@ struct RootTabView_Previews: PreviewProvider {
             .environmentObject(EpisodeStore())
             .environmentObject(AppRouter())
             .environmentObject(PremiumAccessViewModel())
+            .environmentObject(AppPreferencesStore())
     }
 }
 

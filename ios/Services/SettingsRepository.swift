@@ -8,6 +8,8 @@ enum SettingsKey: String {
     case cloudSyncRequested
     case cloudSyncLastSuccessAt
     case hasPremiumAccessCached
+    case manualBackupLastExportAt
+    case manualBackupLastRestoreAt
 }
 
 /// Persistence boundary for settings values used by backup and subscription-related flows.

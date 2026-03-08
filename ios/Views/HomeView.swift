@@ -241,65 +241,78 @@ struct HomeView: View {
                     }
                     .frame(width: contentWidth, alignment: .top)
 
-                    ScrollView {
-                        VStack(spacing: HomeStyle.sectionSpacing) {
-                            if isShowingSearchResults {
-                                HStack(spacing: 8) {
-                                    Text("検索結果")
-                                        .font(HomeFont.labelLarge())
-                                        .foregroundColor(HomeStyle.segmentSelectedText)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(HomeStyle.segmentSelectedFill)
-                                        .clipShape(Capsule())
+                    ScrollViewReader { scrollProxy in
+                        ScrollView {
+                            VStack(spacing: 0) {
+                                Color.clear
+                                    .frame(height: 0)
+                                    .id(HomeScrollAnchor.top)
 
-                                    let searchSummaryText = buildSearchSummaryText()
-                                    if !searchSummaryText.isEmpty {
-                                        Text(searchSummaryText)
-                                            .font(HomeFont.bodyMedium())
-                                            .foregroundColor(HomeStyle.subtitle)
-                                            .lineLimit(1)
+                                VStack(spacing: HomeStyle.sectionSpacing) {
+                                    if isShowingSearchResults {
+                                        HStack(spacing: 8) {
+                                            Text("検索結果")
+                                                .font(HomeFont.labelLarge())
+                                                .foregroundColor(HomeStyle.segmentSelectedText)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background(HomeStyle.segmentSelectedFill)
+                                                .clipShape(Capsule())
+
+                                            let searchSummaryText = buildSearchSummaryText()
+                                            if !searchSummaryText.isEmpty {
+                                                Text(searchSummaryText)
+                                                    .font(HomeFont.bodyMedium())
+                                                    .foregroundColor(HomeStyle.subtitle)
+                                                    .lineLimit(1)
+                                            }
+
+                                            Spacer(minLength: 0)
+
+                                            Text("\(filteredEpisodes.count)件")
+                                                .font(HomeFont.bodyMedium())
+                                                .foregroundColor(HomeStyle.subtitle)
+                                        }
+                                        .frame(width: contentWidth)
                                     }
 
-                                    Spacer(minLength: 0)
-
-                                    Text("\(filteredEpisodes.count)件")
-                                        .font(HomeFont.bodyMedium())
-                                        .foregroundColor(HomeStyle.subtitle)
-                                }
-                                .frame(width: contentWidth)
-                            }
-
-                            if isSearchEmpty {
-                                HomeSearchEmptyView(contentWidth: contentWidth)
-                            } else {
-                                LazyVStack(spacing: HomeStyle.listSpacing) {
-                                    ForEach(visibleEpisodes, id: \.id) { episode in
-                                        episodeListRow(episode: episode, width: contentWidth)
+                                    if isSearchEmpty {
+                                        HomeSearchEmptyView(contentWidth: contentWidth)
+                                    } else {
+                                        LazyVStack(spacing: HomeStyle.listSpacing) {
+                                            ForEach(visibleEpisodes, id: \.id) { episode in
+                                                episodeListRow(episode: episode, width: contentWidth)
+                                            }
+                                        }
+                                        .padding(.top, HomeStyle.listSpacing - HomeStyle.sectionSpacing)
                                     }
                                 }
-                                .padding(.top, HomeStyle.listSpacing - HomeStyle.sectionSpacing)
+                                .frame(width: contentWidth, alignment: .topLeading)
                             }
+                            .background(
+                                GeometryReader { geometry in
+                                    Color.clear.preference(
+                                        key: HomeScrollContentHeightPreferenceKey.self,
+                                        value: geometry.size.height
+                                    )
+                                }
+                            )
+                            .padding(.bottom, listBottomPadding)
                         }
-                        .frame(width: contentWidth, alignment: .topLeading)
                         .background(
                             GeometryReader { geometry in
                                 Color.clear.preference(
-                                    key: HomeScrollContentHeightPreferenceKey.self,
+                                    key: HomeScrollViewportHeightPreferenceKey.self,
                                     value: geometry.size.height
                                 )
                             }
                         )
-                        .padding(.bottom, listBottomPadding)
-                    }
-                    .background(
-                        GeometryReader { geometry in
-                            Color.clear.preference(
-                                key: HomeScrollViewportHeightPreferenceKey.self,
-                                value: geometry.size.height
-                            )
+                        .onChange(of: statusFilter) { _, _ in
+                            DispatchQueue.main.async {
+                                scrollProxy.scrollTo(HomeScrollAnchor.top, anchor: .top)
+                            }
                         }
-                    )
+                    }
                 }
                 .simultaneousGesture(
                     TapGesture().onEnded {
@@ -396,6 +409,10 @@ private struct HomeScrollViewportHeightPreferenceKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
     }
+}
+
+private enum HomeScrollAnchor: Hashable {
+    case top
 }
 
 private extension HomeView {
@@ -745,6 +762,17 @@ private enum HomeEpisodeSortOption: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var controlLabel: String {
+        switch self {
+        case .createdAtDescending:
+            return "エピソード日付（新）"
+        case .createdAtAscending:
+            return "エピソード日付（古）"
+        case .recentlyTalked, .longTimeNoTalk, .talkedCountDescending, .talkedCountAscending:
+            return rawValue
+        }
+    }
+
     var requiresPremium: Bool {
         switch self {
         case .createdAtDescending, .createdAtAscending:
@@ -764,8 +792,8 @@ private struct HomeEpisodeSortControl: View {
 
     private var widestLabel: String {
         HomeEpisodeSortOption.allCases
-            .map(\.rawValue)
-            .max(by: { $0.count < $1.count }) ?? selection.rawValue
+            .map(\.controlLabel)
+            .max(by: { $0.count < $1.count }) ?? selection.controlLabel
     }
 
     var body: some View {
@@ -790,7 +818,7 @@ private struct HomeEpisodeSortControl: View {
                     .accessibilityHidden(true)
 
                     HStack(spacing: 6) {
-                        Text(selection.rawValue)
+                        Text(selection.controlLabel)
                             .font(AppTypography.subtextEmphasis)
                             .foregroundColor(HomeStyle.searchChipText)
                             .lineLimit(1)
@@ -886,7 +914,7 @@ private struct HomeEpisodeSortControl: View {
             }
             .frame(width: HomeStyle.sortOptionAccessoryWidth, alignment: .center)
 
-            Text(option.rawValue)
+            Text(option.controlLabel)
                 .font(AppTypography.bodyEmphasis)
                 .foregroundColor(isLockedOption ? HomeStyle.sortLockedOptionText : HomeStyle.searchChipText)
                 .lineLimit(1)
