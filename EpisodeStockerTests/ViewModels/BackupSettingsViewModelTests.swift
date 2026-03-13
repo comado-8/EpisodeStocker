@@ -139,7 +139,7 @@ final class BackupSettingsViewModelTests: XCTestCase {
         XCTAssertNil(vm.errorMessage)
     }
 
-    func testLoadAppliesDowngradePolicyForFreePlan() async {
+    func testLoadDoesNotApplyDowngradePolicyBeforeSubscriptionStatusResolution() async {
         let service = FakeCloudBackupService(
             availabilityValue: .available,
             enabled: true,
@@ -155,9 +155,59 @@ final class BackupSettingsViewModelTests: XCTestCase {
 
         await vm.load()
 
-        XCTAssertFalse(vm.isBackupEnabled)
-        XCTAssertTrue(vm.requiresAppRestartNotice)
+        XCTAssertTrue(vm.isBackupEnabled)
+        XCTAssertFalse(vm.requiresAppRestartNotice)
         XCTAssertEqual(monitor.startCallCount, 1)
+    }
+
+    func testLoadInitialStateResolvesInitialLoadingOnSuccessfulFetch() async {
+        let service = FakeCloudBackupService(
+            availabilityValue: .available,
+            enabled: false,
+            manualBackupResult: .success(Date(timeIntervalSince1970: 1)),
+            lastBackupAt: nil
+        )
+        let vm = BackupSettingsViewModel(
+            cloudBackupService: service,
+            cloudSyncStatusMonitor: FakeCloudSyncStatusMonitor(),
+            subscriptionStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil)
+        )
+
+        await vm.loadInitialState(
+            using: FakeSubscriptionServiceForBackupSettings(
+                fetchStatusResult: .success(.init(plan: .monthly, expiryDate: nil, trialEndDate: nil))
+            )
+        )
+
+        XCTAssertFalse(vm.isInitialSubscriptionResolving)
+        XCTAssertFalse(vm.isInitialLoadingOverlayVisible)
+        XCTAssertFalse(vm.isSyncInteractionDisabled)
+    }
+
+    func testLoadInitialStateHidesOverlayAfterTimeoutAndKeepsControlsDisabledWhenUnresolved() async {
+        let vm = BackupSettingsViewModel(
+            cloudBackupService: FakeCloudBackupService(
+                availabilityValue: .available,
+                enabled: false,
+                manualBackupResult: .success(Date()),
+                lastBackupAt: nil
+            ),
+            cloudSyncStatusMonitor: FakeCloudSyncStatusMonitor(),
+            initialLoadingOverlayTimeout: .milliseconds(10),
+            subscriptionStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil)
+        )
+
+        await vm.loadInitialState(
+            using: FakeSubscriptionServiceForBackupSettings(
+                fetchStatusResult: .failure(DummyError(message: "fetch failed"))
+            )
+        )
+        try? await Task.sleep(for: .milliseconds(40))
+
+        XCTAssertTrue(vm.isInitialSubscriptionResolving)
+        XCTAssertFalse(vm.isInitialLoadingOverlayVisible)
+        XCTAssertTrue(vm.isSyncInteractionDisabled)
+        XCTAssertEqual(vm.errorMessage, "fetch failed")
     }
 
     func testDeinitStopsCloudSyncStatusMonitor() async {
@@ -530,7 +580,7 @@ private final class FakeSubscriptionServiceForBackupSettings: SubscriptionServic
         self.fetchStatusResult = fetchStatusResult
     }
 
-    func fetchStatus() async throws -> SubscriptionStatus {
+    func fetchStatus(forceRefresh _: Bool) async throws -> SubscriptionStatus {
         try fetchStatusResult.get()
     }
 

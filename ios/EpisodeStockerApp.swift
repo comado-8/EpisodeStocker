@@ -107,6 +107,7 @@ struct EpisodeStockerApp: App {
     @StateObject private var appPreferences = AppPreferencesStore()
     private let modelContainer: ModelContainer
     private let seedProfile: SeedData.Profile
+    private let shouldSeedSampleData: Bool
     private var effectiveCloudSyncEnabled: Bool
 
     init() {
@@ -114,9 +115,25 @@ struct EpisodeStockerApp: App {
 
         let environment = ProcessInfo.processInfo.environment
         let isRunningTests = environment["XCTestConfigurationFilePath"] != nil
+        let settingsRepository = UserDefaultsSettingsRepository()
+        if !isRunningTests {
+            settingsRepository.set(false, for: .cloudSyncRuntimeDisabled)
+        }
         let cloudSyncModeResolver = DefaultCloudSyncModeResolver()
         var resolvedEffectiveCloudSyncEnabled =
             !isRunningTests && cloudSyncModeResolver.resolveEffectiveCloudSyncEnabled()
+        if !settingsRepository.bool(for: .cloudSyncMigrationPrepared) {
+            resolvedEffectiveCloudSyncEnabled = false
+        }
+        #if targetEnvironment(simulator)
+        let isSimulatorEnvironment = true
+        #else
+        let isSimulatorEnvironment = false
+        #endif
+        let shouldSeedOnCurrentDevice = Self.shouldSeedSampleData(
+            isRunningTests: isRunningTests,
+            isSimulator: isSimulatorEnvironment
+        )
         #if DEBUG
         #if targetEnvironment(simulator)
         if isRunningTests {
@@ -138,32 +155,75 @@ struct EpisodeStockerApp: App {
                 effectiveCloudSyncEnabled: resolvedEffectiveCloudSyncEnabled
             )
         } catch {
-            #if DEBUG
-            #if targetEnvironment(simulator)
-            if !isRunningTests {
+            if resolvedEffectiveCloudSyncEnabled {
                 NSLog(
-                    "Persistent ModelContainer load failed on simulator. Falling back to in-memory: \(String(describing: error))"
+                    "Cloud-enabled ModelContainer load failed. Falling back to local-only store: %@",
+                    String(describing: error)
                 )
                 do {
                     resolvedModelContainer = try Self.makeContainer(
-                        isStoredInMemoryOnly: true,
+                        isStoredInMemoryOnly: isRunningTests,
                         effectiveCloudSyncEnabled: false
                     )
                     resolvedEffectiveCloudSyncEnabled = false
+                    if !isRunningTests {
+                        settingsRepository.set(true, for: .cloudSyncRuntimeDisabled)
+                    }
                 } catch {
-                    fatalError("Failed to create fallback in-memory ModelContainer: \(error)")
+                    #if DEBUG
+                    #if targetEnvironment(simulator)
+                    if !isRunningTests {
+                        NSLog(
+                            "Persistent ModelContainer load failed on simulator. Falling back to in-memory: \(String(describing: error))"
+                        )
+                        do {
+                            resolvedModelContainer = try Self.makeContainer(
+                                isStoredInMemoryOnly: true,
+                                effectiveCloudSyncEnabled: false
+                            )
+                            resolvedEffectiveCloudSyncEnabled = false
+                        } catch {
+                            fatalError("Failed to create fallback in-memory ModelContainer: \(error)")
+                        }
+                    } else {
+                        fatalError("Failed to create ModelContainer: \(error)")
+                    }
+                    #else
+                    fatalError("Failed to create ModelContainer: \(error)")
+                    #endif
+                    #else
+                    fatalError("Failed to create ModelContainer: \(error)")
+                    #endif
                 }
             } else {
+                #if DEBUG
+                #if targetEnvironment(simulator)
+                if !isRunningTests {
+                    NSLog(
+                        "Persistent ModelContainer load failed on simulator. Falling back to in-memory: \(String(describing: error))"
+                    )
+                    do {
+                        resolvedModelContainer = try Self.makeContainer(
+                            isStoredInMemoryOnly: true,
+                            effectiveCloudSyncEnabled: false
+                        )
+                        resolvedEffectiveCloudSyncEnabled = false
+                    } catch {
+                        fatalError("Failed to create fallback in-memory ModelContainer: \(error)")
+                    }
+                } else {
+                    fatalError("Failed to create ModelContainer: \(error)")
+                }
+                #else
                 fatalError("Failed to create ModelContainer: \(error)")
+                #endif
+                #else
+                fatalError("Failed to create ModelContainer: \(error)")
+                #endif
             }
-            #else
-            fatalError("Failed to create ModelContainer: \(error)")
-            #endif
-            #else
-            fatalError("Failed to create ModelContainer: \(error)")
-            #endif
         }
         self.modelContainer = resolvedModelContainer
+        self.shouldSeedSampleData = shouldSeedOnCurrentDevice
         self.effectiveCloudSyncEnabled = resolvedEffectiveCloudSyncEnabled
     }
 
@@ -193,10 +253,15 @@ struct EpisodeStockerApp: App {
         )
     }
 
+    static func shouldSeedSampleData(isRunningTests: Bool, isSimulator: Bool) -> Bool {
+        isRunningTests || isSimulator
+    }
+
     var body: some Scene {
         WindowGroup {
             RootTabContainer(
                 seedProfile: seedProfile,
+                shouldSeedSampleData: shouldSeedSampleData,
                 effectiveCloudSyncEnabled: effectiveCloudSyncEnabled
             )
                 .environmentObject(store)
@@ -209,22 +274,49 @@ struct EpisodeStockerApp: App {
 }
 
 private struct RootTabContainer: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
     @EnvironmentObject private var appPreferences: AppPreferencesStore
+    @StateObject private var cloudSyncStatusKeeper = CloudSyncStatusKeeper()
     let seedProfile: SeedData.Profile
+    let shouldSeedSampleData: Bool
     let effectiveCloudSyncEnabled: Bool
 
     var body: some View {
         RootTabView()
             .preferredColorScheme(appPreferences.preferredColorScheme)
             .task {
-                SeedData.seedIfNeeded(
-                    context: modelContext,
-                    profile: seedProfile,
-                    isCloudSyncEnabled: effectiveCloudSyncEnabled
-                )
+                let preparationService = CloudSyncDataPreparationService(modelContext: modelContext)
+                preparationService.prepareIfNeeded()
+                if shouldSeedSampleData {
+                    SeedData.seedIfNeeded(
+                        context: modelContext,
+                        profile: seedProfile,
+                        isCloudSyncEnabled: effectiveCloudSyncEnabled
+                    )
+                }
+            }
+            .task {
+                cloudSyncStatusKeeper.start()
             }
             .task { await premiumAccess.ensureStatusLoaded() }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                Task { await premiumAccess.refresh(forceRefresh: true) }
+            }
+    }
+}
+
+@MainActor
+private final class CloudSyncStatusKeeper: ObservableObject {
+    private let monitor: CloudSyncStatusMonitoring
+
+    init(monitor: CloudSyncStatusMonitoring = CloudSyncStatusMonitor()) {
+        self.monitor = monitor
+    }
+
+    func start() {
+        monitor.start()
     }
 }

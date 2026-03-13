@@ -49,7 +49,7 @@ struct TagListView: View {
   var body: some View {
     NavigationStack(path: $navigationPath) {
       GeometryReader { proxy in
-        let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
+        let contentWidth = HomeStyle.primaryScreenContentWidth(for: proxy.size.width)
         let topPadding = max(0, TagStyle.figmaTopInset - proxy.safeAreaInsets.top)
         let fabBottomPadding =
           HomeStyle.tabBarHeight + TagStyle.fabBottomOffset
@@ -74,8 +74,6 @@ struct TagListView: View {
               Rectangle()
                 .fill(HomeStyle.outline)
                 .frame(width: contentWidth, height: HomeStyle.dividerHeight)
-
-              TagCaptionView()
 
               if isSearching {
                 TagSearchSummaryView(query: trimmedQuery, count: filteredTags.count)
@@ -173,9 +171,14 @@ struct TagListView: View {
           }
         }
         .navigationTitle(context.title)
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .toolbar {
+          ToolbarItem(placement: .principal) {
+            Text(context.title)
+              .font(TagStyle.cardHeaderFont)
+              .foregroundColor(TagStyle.headerText)
+          }
           ToolbarItem(placement: .topBarTrailing) {
             Button("閉じる") {
               editorContext = nil
@@ -204,28 +207,6 @@ private struct TagHeaderView: View {
       Text("タグ管理")
         .font(TagStyle.headerFont)
         .foregroundColor(TagStyle.headerText)
-    }
-  }
-}
-
-private struct TagCaptionView: View {
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text("左スワイプで削除できます。")
-        .font(TagStyle.subheaderFont)
-        .foregroundColor(TagStyle.subheaderText)
-        .fixedSize(horizontal: false, vertical: true)
-
-      HStack(alignment: .top, spacing: 6) {
-        Image(systemName: "info.circle")
-          .font(.system(size: 12, weight: .semibold))
-          .foregroundColor(TagStyle.noticeIconText)
-          .padding(.top, 1)
-        Text("タグを削除すると、紐づくエピソードからもタグが外れます。")
-          .font(TagStyle.noticeFont)
-          .foregroundColor(TagStyle.noticeText)
-          .fixedSize(horizontal: false, vertical: true)
-      }
     }
   }
 }
@@ -304,18 +285,39 @@ private struct TagCardHeaderView: View {
   let count: Int
 
   var body: some View {
-    HStack(spacing: 8) {
-      Image(systemName: "tag")
-        .font(.system(size: 16, weight: .semibold))
-        .foregroundColor(TagStyle.headerIconTint)
-      Text("全\(count)件のタグ")
-        .font(TagStyle.cardHeaderFont)
-        .foregroundColor(TagStyle.headerText)
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(spacing: 8) {
+        Image(systemName: "tag")
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundColor(TagStyle.headerIconTint)
+        Text("全\(count)件のタグ")
+          .font(TagStyle.cardHeaderFont)
+          .foregroundColor(TagStyle.headerText)
 
-      Spacer(minLength: 0)
+        Spacer(minLength: 0)
+      }
+
+      VStack(alignment: .leading, spacing: 6) {
+        Text("左スワイプで削除できます。")
+          .font(TagStyle.subheaderFont)
+          .foregroundColor(TagStyle.subheaderText)
+          .fixedSize(horizontal: false, vertical: true)
+
+        HStack(alignment: .top, spacing: 6) {
+          Image(systemName: "info.circle")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(TagStyle.noticeIconText)
+            .padding(.top, 1)
+          Text("タグを削除すると、紐づくエピソードからもタグが外れます。")
+            .font(TagStyle.noticeFont)
+            .foregroundColor(TagStyle.noticeText)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
     }
     .padding(.horizontal, TagStyle.cardHorizontalPadding)
-    .frame(height: TagStyle.cardHeaderHeight)
+    .padding(.top, 12)
+    .padding(.bottom, 10)
     .overlay(alignment: .bottom) {
       Rectangle()
         .fill(TagStyle.rowDivider)
@@ -575,7 +577,8 @@ private struct TagEditorSheet: View {
           .opacity(canSave ? 1 : 0.5)
         }
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(maxWidth: TagStyle.editorContentMaxWidth, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: .center)
       .fixedSize(horizontal: false, vertical: true)
       .padding(.horizontal, 20)
       .padding(.vertical, 16)
@@ -762,6 +765,7 @@ private enum TagStyle {
 
   static let editorInputHeight: CGFloat = 44
   static let editorSheetMinHeight: CGFloat = 280
+  static let editorContentMaxWidth: CGFloat = 720
   static let editorInputCornerRadius: CGFloat = 10
   static let editorInputBorderWidth: CGFloat = 0.66
   static let editorButtonHeight: CGFloat = 48

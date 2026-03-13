@@ -36,7 +36,7 @@ struct AnalyticsView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
+            let contentWidth = HomeStyle.primaryScreenContentWidth(for: proxy.size.width)
             let topPadding = max(0, AnalyticsStyle.figmaTopInset - proxy.safeAreaInsets.top)
 
             ZStack {

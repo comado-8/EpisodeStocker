@@ -88,6 +88,34 @@ final class StoreKitSubscriptionServiceTests: XCTestCase {
 
         XCTAssertEqual(outcome, .purchasedStatusUnavailable(productID: SubscriptionCatalog.monthlyProductID))
     }
+
+    func testFetchStatusForceRefreshCallsSyncPurchases() async throws {
+        let client = FakeStoreKitClient(
+            products: [],
+            purchaseState: .pending,
+            status: .init(plan: .monthly, expiryDate: Date(), trialEndDate: nil),
+            statusError: nil
+        )
+        let service = StoreKitSubscriptionService(client: client)
+
+        _ = try await service.fetchStatus(forceRefresh: true)
+
+        XCTAssertTrue(client.didCallSync)
+    }
+
+    func testFetchStatusWithoutForceRefreshDoesNotCallSyncPurchases() async throws {
+        let client = FakeStoreKitClient(
+            products: [],
+            purchaseState: .pending,
+            status: .init(plan: .monthly, expiryDate: Date(), trialEndDate: nil),
+            statusError: nil
+        )
+        let service = StoreKitSubscriptionService(client: client)
+
+        _ = try await service.fetchStatus(forceRefresh: false)
+
+        XCTAssertFalse(client.didCallSync)
+    }
 }
 
 private final class FakeStoreKitClient: StoreKitClient {

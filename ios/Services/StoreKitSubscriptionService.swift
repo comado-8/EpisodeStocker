@@ -7,8 +7,20 @@ final class StoreKitSubscriptionService: SubscriptionService {
         self.client = client
     }
 
-    func fetchStatus() async throws -> SubscriptionStatus {
-        try await client.fetchActiveSubscriptionStatus(
+    func fetchStatus(forceRefresh: Bool) async throws -> SubscriptionStatus {
+        if forceRefresh {
+            // In StoreKit fallback mode, syncing helps reflect external account/subscription changes
+            // without requiring an app restart.
+            do {
+                try await client.syncPurchases()
+            } catch {
+                #if DEBUG
+                NSLog("StoreKit syncPurchases on forceRefresh failed: %@", String(describing: error))
+                #endif
+            }
+        }
+
+        return try await client.fetchActiveSubscriptionStatus(
             monthlyProductID: SubscriptionCatalog.monthlyProductID,
             yearlyProductID: SubscriptionCatalog.yearlyProductID
         )
@@ -39,7 +51,7 @@ final class StoreKitSubscriptionService: SubscriptionService {
         switch state {
         case .purchased(let purchasedProductID):
             do {
-                return .purchased(try await fetchStatus())
+                return .purchased(try await fetchStatus(forceRefresh: true))
             } catch {
                 return .purchasedStatusUnavailable(productID: purchasedProductID)
             }
@@ -52,7 +64,7 @@ final class StoreKitSubscriptionService: SubscriptionService {
 
     func restorePurchases() async throws -> SubscriptionStatus {
         try await client.syncPurchases()
-        return try await fetchStatus()
+        return try await fetchStatus(forceRefresh: true)
     }
 
     private func plan(for productID: String) -> SubscriptionStatus.Plan? {

@@ -7,6 +7,8 @@ enum SettingsKey: String {
     // Current keys for CloudKit sync settings.
     case cloudSyncRequested
     case cloudSyncLastSuccessAt
+    case cloudSyncMigrationPrepared
+    case cloudSyncRuntimeDisabled
     case hasPremiumAccessCached
     case manualBackupLastExportAt
     case manualBackupLastRestoreAt

@@ -165,20 +165,21 @@ final class EncryptedManualBackupService: ManualBackupService {
             )
         }
 
-        let unlockLogRecords = unlockLogs.map {
-            ManualBackupPayloadV1.UnlockLogRecord(
-                id: $0.id,
-                talkedAt: $0.talkedAt,
-                mediaPublicAt: $0.mediaPublicAt,
-                mediaType: $0.mediaType,
-                projectNameText: $0.projectNameText,
-                reaction: $0.reaction,
-                memo: $0.memo,
-                createdAt: $0.createdAt,
-                updatedAt: $0.updatedAt,
-                isSoftDeleted: $0.isSoftDeleted,
-                deletedAt: $0.deletedAt,
-                episodeID: $0.episode.id
+        let unlockLogRecords: [ManualBackupPayloadV1.UnlockLogRecord] = unlockLogs.compactMap { log in
+            guard let episodeID = log.episodeOrNil?.id else { return nil }
+            return ManualBackupPayloadV1.UnlockLogRecord(
+                id: log.id,
+                talkedAt: log.talkedAt,
+                mediaPublicAt: log.mediaPublicAt,
+                mediaType: log.mediaType,
+                projectNameText: log.projectNameText,
+                reaction: log.reaction,
+                memo: log.memo,
+                createdAt: log.createdAt,
+                updatedAt: log.updatedAt,
+                isSoftDeleted: log.isSoftDeleted,
+                deletedAt: log.deletedAt,
+                episodeID: episodeID
             )
         }
 

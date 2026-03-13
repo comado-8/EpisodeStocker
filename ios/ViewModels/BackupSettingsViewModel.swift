@@ -12,21 +12,35 @@ final class BackupSettingsViewModel: ObservableObject {
     @Published private(set) var isSyncing = false
     @Published private(set) var requiresAppRestartNotice = false
     @Published private(set) var isRunningBackup = false
+    @Published private(set) var isInitialSubscriptionResolving = true
+    @Published private(set) var isInitialLoadingOverlayVisible = true
     @Published var errorMessage: String?
 
     private let cloudBackupService: CloudBackupService
     private let cloudSyncStatusMonitor: CloudSyncStatusMonitoring
     private let isEntitlementCheckEnabled: Bool
+    private let initialLoadingOverlayTimeout: Duration
+    private let minimumInitialLoadingVisibleDuration: Duration
+    private let clock = ContinuousClock()
+    private var hasResolvedSubscriptionStatus = false
+    private var hasStartedInitialResolution = false
+    private var initialResolutionStartedAt: ContinuousClock.Instant?
+    private var initialLoadingTimeoutTask: Task<Void, Never>?
+    private var initialResolutionCompletionTask: Task<Void, Never>?
 
     init(
         cloudBackupService: CloudBackupService,
         cloudSyncStatusMonitor: CloudSyncStatusMonitoring = CloudSyncStatusMonitor(),
         isEntitlementCheckEnabled: Bool = true,
+        initialLoadingOverlayTimeout: Duration = .seconds(8),
+        minimumInitialLoadingVisibleDuration: Duration = .zero,
         subscriptionStatus: SubscriptionStatus = SubscriptionStatus(plan: .free, expiryDate: nil, trialEndDate: nil)
     ) {
         self.cloudBackupService = cloudBackupService
         self.cloudSyncStatusMonitor = cloudSyncStatusMonitor
         self.isEntitlementCheckEnabled = isEntitlementCheckEnabled
+        self.initialLoadingOverlayTimeout = initialLoadingOverlayTimeout
+        self.minimumInitialLoadingVisibleDuration = minimumInitialLoadingVisibleDuration
         self.subscriptionStatus = subscriptionStatus
         self.isBackupEnabled = cloudBackupService.isBackupEnabled()
         self.lastBackupAt = cloudBackupService.lastBackupAt()
@@ -43,6 +57,8 @@ final class BackupSettingsViewModel: ObservableObject {
     }
 
     deinit {
+        initialLoadingTimeoutTask?.cancel()
+        initialResolutionCompletionTask?.cancel()
         cloudSyncStatusMonitor.stop()
     }
 
@@ -79,12 +95,27 @@ final class BackupSettingsViewModel: ObservableObject {
         lastBackupAt
     }
 
+    var isSyncInteractionDisabled: Bool {
+        isInitialSubscriptionResolving
+    }
+
+    func loadInitialState(using service: SubscriptionService) async {
+        beginInitialSubscriptionResolutionIfNeeded()
+        await load()
+        await refreshSubscriptionStatus(using: service)
+    }
+
     func updateSubscriptionStatus(_ status: SubscriptionStatus) {
         subscriptionStatus = status
+        hasResolvedSubscriptionStatus = true
+        completeInitialSubscriptionResolution()
         applyDowngradePolicyIfNeeded()
     }
 
     func refreshSubscriptionStatus(using service: SubscriptionService) async {
+        if !hasResolvedSubscriptionStatus {
+            beginInitialSubscriptionResolutionIfNeeded()
+        }
         do {
             let status = try await service.fetchStatus()
             updateSubscriptionStatus(status)
@@ -171,6 +202,9 @@ final class BackupSettingsViewModel: ObservableObject {
     }
 
     private func applyDowngradePolicyIfNeeded() {
+        // Avoid writing user preferences based on the initializer's placeholder status.
+        // We only enforce downgrade after an actual subscription status has been resolved.
+        guard hasResolvedSubscriptionStatus else { return }
         guard !canUseBackup, isBackupEnabled else { return }
         do {
             try cloudBackupService.setBackupEnabled(false)
@@ -178,6 +212,67 @@ final class BackupSettingsViewModel: ObservableObject {
             requiresAppRestartNotice = true
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func beginInitialSubscriptionResolutionIfNeeded() {
+        guard !hasStartedInitialResolution else { return }
+        hasStartedInitialResolution = true
+        initialResolutionStartedAt = clock.now
+        isInitialSubscriptionResolving = true
+        isInitialLoadingOverlayVisible = true
+        startInitialLoadingTimeout()
+    }
+
+    private func completeInitialSubscriptionResolution() {
+        initialLoadingTimeoutTask?.cancel()
+        initialLoadingTimeoutTask = nil
+        initialResolutionCompletionTask?.cancel()
+
+        let startedAt = initialResolutionStartedAt
+        let minimumVisibleDuration = minimumInitialLoadingVisibleDuration
+        let clock = self.clock
+        let remainingDuration: Duration
+        if let startedAt {
+            let elapsed = clock.now - startedAt
+            if elapsed < minimumVisibleDuration {
+                remainingDuration = minimumVisibleDuration - elapsed
+            } else {
+                remainingDuration = .zero
+            }
+        } else {
+            remainingDuration = .zero
+        }
+
+        if remainingDuration == .zero {
+            isInitialSubscriptionResolving = false
+            isInitialLoadingOverlayVisible = false
+            initialResolutionCompletionTask = nil
+            return
+        }
+
+        initialResolutionCompletionTask = Task { [weak self] in
+            try? await Task.sleep(for: remainingDuration)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self else { return }
+                self.isInitialSubscriptionResolving = false
+                self.isInitialLoadingOverlayVisible = false
+                self.initialResolutionCompletionTask = nil
+            }
+        }
+    }
+
+    private func startInitialLoadingTimeout() {
+        initialLoadingTimeoutTask?.cancel()
+        let timeout = initialLoadingOverlayTimeout
+        initialLoadingTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self, self.isInitialSubscriptionResolving else { return }
+                self.isInitialLoadingOverlayVisible = false
+            }
         }
     }
 }

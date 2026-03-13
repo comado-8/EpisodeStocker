@@ -251,7 +251,7 @@ private final class FakeSubscriptionServiceForPremiumAccess: SubscriptionService
         self.status = status
     }
 
-    func fetchStatus() async throws -> SubscriptionStatus {
+    func fetchStatus(forceRefresh _: Bool) async throws -> SubscriptionStatus {
         fetchStatusCallCount += 1
         return status
     }
@@ -312,7 +312,7 @@ private final class FakeSequenceSubscriptionService: SubscriptionService {
         self.results = results
     }
 
-    func fetchStatus() async throws -> SubscriptionStatus {
+    func fetchStatus(forceRefresh _: Bool) async throws -> SubscriptionStatus {
         fetchStatusCallCount += 1
         guard !results.isEmpty else {
             throw NSError(domain: "FakeSequenceSubscriptionService", code: 1)
@@ -344,7 +344,7 @@ private final class FakeDelayedSubscriptionService: SubscriptionService {
         self.delayNanoseconds = delayNanoseconds
     }
 
-    func fetchStatus() async throws -> SubscriptionStatus {
+    func fetchStatus(forceRefresh _: Bool) async throws -> SubscriptionStatus {
         fetchStatusCallCount += 1
         try await Task.sleep(nanoseconds: delayNanoseconds)
         return status

@@ -11,28 +11,6 @@ struct RootTabView: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
 
-    private var paywallTriggerBinding: Binding<PaywallTrigger?> {
-        Binding(
-            get: { router.paywallTrigger },
-            set: { _ in router.dismissPaywall() }
-        )
-    }
-
-    private var shouldBlockAnalyticsTab: Bool {
-        isAnalyticsPaywallEnabled && !premiumAccess.hasAccess(to: .analyticsTab)
-    }
-
-    private var isAnalyticsPaywallEnabled: Bool {
-        // TODO(TAX-COMPLIANCE): 税務情報フォーム対応後にこのDEBUGバイパスを削除する。
-        // 一時対応: 税務情報フォーム対応待ちのため、Debugのみ分析タブ課金ゲートを無効化する。
-        // 課金テスト再開時は、このフラグを削除するか DEBUG でも true を返して復帰する。
-        #if DEBUG
-        return false
-        #else
-        return true
-        #endif
-    }
-
     var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selection) {
@@ -55,15 +33,6 @@ struct RootTabView: View {
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .onChange(of: selection) { oldValue, newValue in
-            if newValue == .analytics,
-               shouldBlockAnalyticsTab
-            {
-                withTransaction(Transaction(animation: nil)) {
-                    selection = oldValue
-                }
-                router.presentPaywall(.analyticsTab)
-                return
-            }
             guard oldValue == .home, newValue != .home else { return }
             guard router.hasUnsavedHomeStackChanges else { return }
             withTransaction(Transaction(animation: nil)) {
@@ -73,13 +42,6 @@ struct RootTabView: View {
         }
         .onChange(of: router.committedRootTabSwitch) { _, destination in
             guard let destination else { return }
-            if destination == .analytics,
-               shouldBlockAnalyticsTab
-            {
-                router.presentPaywall(.analyticsTab)
-                router.consumeCommittedRootTabSwitch()
-                return
-            }
             clearReselectionArm()
             router.hasUnsavedEpisodeDetailChanges = false
             router.hasUnsavedNewEpisodeChanges = false
@@ -87,32 +49,21 @@ struct RootTabView: View {
             selection = destination
             router.consumeCommittedRootTabSwitch()
         }
-        .sheet(item: paywallTriggerBinding) { trigger in
-            PremiumPaywallSheet(
-                trigger: trigger,
-                onOpenSubscription: openSubscriptionScreen,
-                onClose: router.dismissPaywall
-            )
-            .presentationDetents([.height(340)])
-            .presentationDragIndicator(.visible)
+        .onChange(of: router.paywallTrigger) { _, trigger in
+            guard trigger != nil else { return }
+            openSubscriptionScreen()
         }
         #if canImport(RevenueCatUI)
         .sheet(isPresented: $showsRevenueCatPaywall) {
             RevenueCatFeatureGatePaywallContainer()
                 .onDisappear {
-                    Task { await premiumAccess.refresh() }
+                    Task { await premiumAccess.refresh(forceRefresh: true) }
                 }
         }
         #endif
     }
 
     private func handleTabTap(_ tab: RootTab) {
-        if tab == .analytics,
-           shouldBlockAnalyticsTab
-        {
-            router.presentPaywall(.analyticsTab)
-            return
-        }
         if tab == selection {
             handleReselectedTab(tab)
             return
@@ -122,11 +73,20 @@ struct RootTabView: View {
     }
 
     private func openSubscriptionScreen() {
-        #if canImport(RevenueCatUI)
         router.dismissPaywall()
+        if Self.shouldForceRevenueCatFallback {
+            openSubscriptionFallbackSettings()
+            return
+        }
+        #if canImport(RevenueCatUI)
         showsRevenueCatPaywall = true
         #else
-        router.dismissPaywall()
+        openSubscriptionFallbackSettings()
+        #endif
+    }
+
+    private func openSubscriptionFallbackSettings() {
+        router.requestSettingsDeepLink(.subscription)
         if router.hasUnsavedHomeStackChanges {
             router.requestRootTabSwitch(.settings)
             return
@@ -134,7 +94,52 @@ struct RootTabView: View {
         clearReselectionArm()
         router.path.removeAll()
         selection = .settings
+    }
+
+    // For manual QA, set FORCE_RC_FALLBACK=1 to force settings fallback.
+    private static var shouldForceRevenueCatFallback: Bool {
+        #if DEBUG
+        let processInfo = ProcessInfo.processInfo
+
+        if let rawFlag = processInfo.environment["FORCE_RC_FALLBACK"],
+           let parsed = parseEnvironmentBoolean(rawFlag)
+        {
+            return parsed
+        }
+
+        let arguments = processInfo.arguments
+        if let argumentValue = parseFallbackValue(from: arguments) {
+            return argumentValue
+        }
         #endif
+        return false
+    }
+
+    private static func parseEnvironmentBoolean(_ raw: String) -> Bool? {
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "true", "yes", "on":
+            return true
+        case "0", "false", "no", "off":
+            return false
+        default:
+            return nil
+        }
+    }
+
+    private static func parseFallbackValue(from arguments: [String]) -> Bool? {
+        if arguments.contains("-FORCE_RC_FALLBACK") {
+            return true
+        }
+        if let pairArgument = arguments.first(where: { $0.hasPrefix("FORCE_RC_FALLBACK=") }) {
+            let rawValue = String(pairArgument.dropFirst("FORCE_RC_FALLBACK=".count))
+            return parseEnvironmentBoolean(rawValue)
+        }
+        if let index = arguments.firstIndex(of: "-FORCE_RC_FALLBACK_VALUE"),
+           arguments.indices.contains(index + 1)
+        {
+            return parseEnvironmentBoolean(arguments[index + 1])
+        }
+        return nil
     }
 
     private func handleReselectedTab(_ tab: RootTab) {
@@ -233,10 +238,26 @@ private struct HomeNavigationContainer: View {
 
 private struct AnalyticsNavigationContainer: View {
     @EnvironmentObject private var store: EpisodeStore
+    @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
+
+    private var isAnalyticsLocked: Bool {
+        premiumAccess.hasLoadedStatus && !premiumAccess.hasAccess(to: .analyticsTab)
+    }
 
     var body: some View {
         NavigationStack {
-            AnalyticsView()
+            ZStack {
+                AnalyticsView()
+                    .blur(radius: isAnalyticsLocked ? 1.4 : 0)
+                    .allowsHitTesting(!isAnalyticsLocked)
+
+                if isAnalyticsLocked {
+                    AnalyticsLockedOverlay {
+                        router.presentPaywall(.analyticsTab)
+                    }
+                }
+            }
                 .navigationDestination(for: UUID.self) { episodeID in
                     EpisodeDetailContainer(episodeId: episodeID)
                         .environmentObject(store)
@@ -256,56 +277,50 @@ struct RootTabView_Previews: PreviewProvider {
     }
 }
 
-private struct PremiumPaywallSheet: View {
-    let trigger: PaywallTrigger
-    let onOpenSubscription: () -> Void
-    let onClose: () -> Void
+private struct AnalyticsLockedOverlay: View {
+    let onUpgrade: () -> Void
+    private enum Style {
+        static let cardCornerRadius: CGFloat = 16
+        static let buttonHeight: CGFloat = 52
+        static let buttonHorizontalInset: CGFloat = 10
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Premium")
+        VStack(spacing: 12) {
+            Text("分析はProで利用できます")
                 .font(AppTypography.sectionTitle)
-                .foregroundColor(HomeStyle.fabRed)
-            Text(trigger.title)
-                .font(AppTypography.bodyEmphasis)
                 .foregroundColor(HomeStyle.textPrimary)
-            Text(trigger.message)
-                .font(AppTypography.body)
+            Text("履歴の傾向分析・掘り起こし候補・タグ分析を使うには、Proプランへアップグレードしてください。")
+                .font(AppTypography.subtext)
                 .foregroundColor(HomeStyle.textSecondary)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Spacer(minLength: 0)
-
             Button {
-                onOpenSubscription()
+                onUpgrade()
             } label: {
-                Text("サブスクリプションを見る")
+                Text("Proで分析を使う")
                     .font(AppTypography.bodyEmphasis)
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 44)
+                    .frame(height: Style.buttonHeight)
                     .background(HomeStyle.fabRed)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipShape(Capsule())
             }
             .buttonStyle(.plain)
-
-            Button {
-                onClose()
-            } label: {
-                Text("閉じる")
-                    .font(AppTypography.bodyEmphasis)
-                    .foregroundColor(HomeStyle.fabRed)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .background(Color.white)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(HomeStyle.fabRed.opacity(0.35), lineWidth: 1)
-                    )
-            }
-            .buttonStyle(.plain)
+            .padding(.horizontal, Style.buttonHorizontalInset)
         }
         .padding(20)
-        .background(HomeStyle.background.ignoresSafeArea())
+        .frame(maxWidth: 320)
+        .background(
+            RoundedRectangle(cornerRadius: Style.cardCornerRadius, style: .continuous)
+                .fill(Color(.systemBackground).opacity(0.94))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Style.cardCornerRadius, style: .continuous)
+                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 14, x: 0, y: 6)
+        .padding(.horizontal, 20)
     }
 }

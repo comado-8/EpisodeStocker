@@ -212,6 +212,33 @@ final class HomeSearchQueryEngineTests: XCTestCase {
         XCTAssertEqual(result.map(\.id), [match.id])
     }
 
+    func testStructuredSearchStillUsesPartialMatchAfterSuggestionChange() {
+        let match = Episode(
+            date: Date(),
+            title: "部分一致",
+            body: "",
+            emotions: [Emotion(name: "かわいい", nameNormalized: "かわいい")]
+        )
+        let noMatch = Episode(
+            date: Date(),
+            title: "不一致",
+            body: "",
+            emotions: [Emotion(name: "いらいら", nameNormalized: "いらいら")]
+        )
+
+        let token = HomeSearchFilterToken(field: .emotion, value: "わい")!
+        let search = HomeSearchQueryState(freeText: "", tokens: [token], activeField: nil)
+        let result = [match, noMatch].filter { episode in
+            HomeSearchQueryEngine.matches(
+                episode: episode,
+                statusFilter: .all,
+                search: search
+            )
+        }
+
+        XCTAssertEqual(result.map(\.id), [match.id])
+    }
+
     func testFieldAndSuggestionPresentationProperties() {
         for field in HomeSearchField.allCases {
             XCTAssertFalse(field.symbolName.isEmpty)
@@ -354,6 +381,46 @@ final class HomeSearchQueryEngineTests: XCTestCase {
             return nil
         }
         XCTAssertTrue(values.contains("仕事"))
+    }
+
+    func testEmotionSuggestionsUsePrefixMatchOnly() {
+        _ = makeEpisode(title: "1", body: "", emotions: ["かわいい"])
+        _ = makeEpisode(title: "2", body: "", emotions: ["悔しい"])
+        _ = makeEpisode(title: "3", body: "", emotions: ["いらいら"])
+
+        let search = HomeSearchQueryState(freeText: "い", tokens: [], activeField: .emotion)
+        let items = HomeSearchQueryEngine.suggestions(for: search, episodes: fetchEpisodes())
+        let values = items.compactMap { item -> String? in
+            if case let .value(field: .emotion, value: value) = item.kind {
+                return value
+            }
+            return nil
+        }
+
+        XCTAssertTrue(values.contains("いらいら"))
+        XCTAssertFalse(values.contains("かわいい"))
+        XCTAssertFalse(values.contains("悔しい"))
+    }
+
+    func testMediaTypeSuggestionsKeepContainsMatch() {
+        let episode = makeEpisode(title: "1", body: "")
+        _ = addUnlockLog(
+            to: episode,
+            talkedAt: Date(),
+            mediaType: ReleaseLogMediaPreset.radio.rawValue,
+            reaction: ReleaseLogOutcome.hit.rawValue
+        )
+
+        let search = HomeSearchQueryState(freeText: "ジオ", tokens: [], activeField: .mediaType)
+        let items = HomeSearchQueryEngine.suggestions(for: search, episodes: fetchEpisodes())
+        let values = items.compactMap { item -> String? in
+            if case let .value(field: .mediaType, value: value) = item.kind {
+                return value
+            }
+            return nil
+        }
+
+        XCTAssertTrue(values.contains(ReleaseLogMediaPreset.radio.rawValue))
     }
 
     func testTagSearchNormalizesWhitespaces() {

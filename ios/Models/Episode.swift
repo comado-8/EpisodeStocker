@@ -3,35 +3,65 @@ import SwiftData
 
 @Model
 final class Episode {
-    @Attribute(.unique) var id: UUID
-    var date: Date
-    var title: String
+    var id: UUID = UUID()
+    var date: Date = Date()
+    var title: String = ""
     var body: String?
     var unlockDate: Date?
     var type: String?
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
 
     @Relationship(deleteRule: .nullify)
-    var tags: [Tag]
+    fileprivate var tagsStorage: [Tag]? = []
     @Relationship(deleteRule: .nullify)
-    var persons: [Person]
+    fileprivate var personsStorage: [Person]? = []
     @Relationship(deleteRule: .nullify)
-    var projects: [Project]
+    fileprivate var projectsStorage: [Project]? = []
     @Relationship(deleteRule: .nullify)
-    var emotions: [Emotion]
+    fileprivate var emotionsStorage: [Emotion]? = []
     @Relationship(deleteRule: .nullify)
-    var places: [Place]
+    fileprivate var placesStorage: [Place]? = []
 
     @Relationship(deleteRule: .nullify)
-    var unlockLogs: [UnlockLog]
+    fileprivate var unlockLogsStorage: [UnlockLog]? = []
+
+    var tags: [Tag] {
+        get { tagsStorage ?? [] }
+        set { tagsStorage = newValue }
+    }
+
+    var persons: [Person] {
+        get { personsStorage ?? [] }
+        set { personsStorage = newValue }
+    }
+
+    var projects: [Project] {
+        get { projectsStorage ?? [] }
+        set { projectsStorage = newValue }
+    }
+
+    var emotions: [Emotion] {
+        get { emotionsStorage ?? [] }
+        set { emotionsStorage = newValue }
+    }
+
+    var places: [Place] {
+        get { placesStorage ?? [] }
+        set { placesStorage = newValue }
+    }
+
+    var unlockLogs: [UnlockLog] {
+        get { unlockLogsStorage ?? [] }
+        set { unlockLogsStorage = newValue }
+    }
 
     init(
         id: UUID = UUID(),
-        date: Date,
-        title: String,
+        date: Date = Date(),
+        title: String = "",
         body: String? = nil,
         unlockDate: Date? = nil,
         type: String? = nil,
@@ -56,12 +86,12 @@ final class Episode {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
-        self.tags = tags
-        self.persons = persons
-        self.projects = projects
-        self.emotions = emotions
-        self.places = places
-        self.unlockLogs = unlockLogs
+        self.tagsStorage = tags
+        self.personsStorage = persons
+        self.projectsStorage = projects
+        self.emotionsStorage = emotions
+        self.placesStorage = places
+        self.unlockLogsStorage = unlockLogs
     }
 
     var isUnlocked: Bool {
@@ -72,19 +102,36 @@ final class Episode {
 
 @Model
 final class UnlockLog {
-    @Attribute(.unique) var id: UUID
-    var talkedAt: Date
+    var id: UUID = UUID()
+    var talkedAt: Date = Date()
     var mediaPublicAt: Date?
     var mediaType: String?
     var projectNameText: String?
-    var reaction: String
-    var memo: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var reaction: String = ""
+    var memo: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
 
-    var episode: Episode
+    @Relationship(deleteRule: .nullify, inverse: \Episode.unlockLogsStorage)
+    fileprivate var episodeStorage: Episode?
+
+    var episode: Episode {
+        get {
+            guard let episodeStorage else {
+                fatalError("UnlockLog.episode is nil")
+            }
+            return episodeStorage
+        }
+        set {
+            episodeStorage = newValue
+        }
+    }
+
+    var episodeOrNil: Episode? {
+        episodeStorage
+    }
 
     init(
         id: UUID = UUID(),
@@ -107,7 +154,7 @@ final class UnlockLog {
         self.projectNameText = projectNameText
         self.reaction = reaction
         self.memo = memo
-        self.episode = episode
+        self.episodeStorage = episode
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
@@ -117,15 +164,20 @@ final class UnlockLog {
 
 @Model
 final class Tag {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var nameNormalized: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var id: UUID = UUID()
+    var name: String = ""
+    var nameNormalized: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
-    @Relationship(inverse: \Episode.tags)
-    var episodes: [Episode]
+    @Relationship(deleteRule: .nullify, inverse: \Episode.tagsStorage)
+    fileprivate var episodesStorage: [Episode]? = []
+
+    var episodes: [Episode] {
+        get { episodesStorage ?? [] }
+        set { episodesStorage = newValue }
+    }
 
     init(
         id: UUID = UUID(),
@@ -144,19 +196,26 @@ final class Tag {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
-        self.episodes = episodes
+        self.episodesStorage = episodes
     }
 }
 
 @Model
 final class Person {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var nameNormalized: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var id: UUID = UUID()
+    var name: String = ""
+    var nameNormalized: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
+    @Relationship(deleteRule: .nullify, inverse: \Episode.personsStorage)
+    fileprivate var episodesStorage: [Episode]? = []
+
+    var episodes: [Episode] {
+        get { episodesStorage ?? [] }
+        set { episodesStorage = newValue }
+    }
 
     init(
         id: UUID = UUID(),
@@ -165,7 +224,8 @@ final class Person {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         isSoftDeleted: Bool = false,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        episodes: [Episode] = []
     ) {
         self.id = id
         self.name = name
@@ -174,18 +234,26 @@ final class Person {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
+        self.episodesStorage = episodes
     }
 }
 
 @Model
 final class Project {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var nameNormalized: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var id: UUID = UUID()
+    var name: String = ""
+    var nameNormalized: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
+    @Relationship(deleteRule: .nullify, inverse: \Episode.projectsStorage)
+    fileprivate var episodesStorage: [Episode]? = []
+
+    var episodes: [Episode] {
+        get { episodesStorage ?? [] }
+        set { episodesStorage = newValue }
+    }
 
     init(
         id: UUID = UUID(),
@@ -194,7 +262,8 @@ final class Project {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         isSoftDeleted: Bool = false,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        episodes: [Episode] = []
     ) {
         self.id = id
         self.name = name
@@ -203,18 +272,26 @@ final class Project {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
+        self.episodesStorage = episodes
     }
 }
 
 @Model
 final class Emotion {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var nameNormalized: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var id: UUID = UUID()
+    var name: String = ""
+    var nameNormalized: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
+    @Relationship(deleteRule: .nullify, inverse: \Episode.emotionsStorage)
+    fileprivate var episodesStorage: [Episode]? = []
+
+    var episodes: [Episode] {
+        get { episodesStorage ?? [] }
+        set { episodesStorage = newValue }
+    }
 
     init(
         id: UUID = UUID(),
@@ -223,7 +300,8 @@ final class Emotion {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         isSoftDeleted: Bool = false,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        episodes: [Episode] = []
     ) {
         self.id = id
         self.name = name
@@ -232,18 +310,26 @@ final class Emotion {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
+        self.episodesStorage = episodes
     }
 }
 
 @Model
 final class Place {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var nameNormalized: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var id: UUID = UUID()
+    var name: String = ""
+    var nameNormalized: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
+    @Relationship(deleteRule: .nullify, inverse: \Episode.placesStorage)
+    fileprivate var episodesStorage: [Episode]? = []
+
+    var episodes: [Episode] {
+        get { episodesStorage ?? [] }
+        set { episodesStorage = newValue }
+    }
 
     init(
         id: UUID = UUID(),
@@ -252,7 +338,8 @@ final class Place {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         isSoftDeleted: Bool = false,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        episodes: [Episode] = []
     ) {
         self.id = id
         self.name = name
@@ -261,6 +348,7 @@ final class Place {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
+        self.episodesStorage = episodes
     }
 }
 
@@ -308,6 +396,9 @@ struct SubscriptionStatus: Codable, Equatable {
     var plan: Plan
     var expiryDate: Date?
     var trialEndDate: Date?
+    var nextPlan: Plan? = nil
+    var nextPlanEffectiveDate: Date? = nil
+    var willAutoRenew: Bool? = nil
 
     enum Plan: String, Codable, CaseIterable {
         case free

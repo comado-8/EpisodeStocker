@@ -103,12 +103,12 @@ struct EpisodeDetailView: View {
 
   var body: some View {
     GeometryReader { proxy in
-      let contentWidth = min(
-        DetailStyle.baseContentWidth, proxy.size.width - DetailStyle.horizontalPadding * 2)
+      let contentWidth = DetailStyle.contentWidth(for: proxy.size.width)
       let horizontalPadding = max(
         DetailStyle.horizontalPadding, (proxy.size.width - contentWidth) / 2)
       let topPadding = max(0, DetailStyle.figmaTopInset - proxy.safeAreaInsets.top)
-      let tabBarOffset = max(0, HomeStyle.tabBarHeight - 48)
+      let isRegularWidth = proxy.size.width >= HomeStyle.regularLayoutThreshold
+      let tabBarOffset = isRegularWidth ? HomeStyle.tabBarHeight : max(0, HomeStyle.tabBarHeight - 48)
 
       ZStack {
         VStack(spacing: 0) {
@@ -298,14 +298,7 @@ struct EpisodeDetailView: View {
   }
 
   private var isExportPaywallEnabled: Bool {
-    // TODO(TAX-COMPLIANCE): 税務情報フォーム対応後にこのDEBUGバイパスを削除する。
-    // 一時対応: 分析タブと同じく、Debugのみエクスポート課金ゲートを無効化する。
-    // 課金テスト再開時は、このフラグを削除するか DEBUG でも true を返して復帰する。
-    #if DEBUG
-      return false
-    #else
-      return true
-    #endif
+    true
   }
 
   private var showsExportLockBadge: Bool {
@@ -874,6 +867,7 @@ struct EpisodeDetailView: View {
         }
       } catch {
         let nsError = error as NSError
+        #if DEBUG
         NSLog(
           "Episode export failed (%@): type=%@ domain=%@ code=%ld",
           format.fileExtension,
@@ -881,6 +875,7 @@ struct EpisodeDetailView: View {
           nsError.domain,
           nsError.code
         )
+        #endif
         DispatchQueue.main.async {
           self.exportErrorMessage = error.localizedDescription
           self.showsExportErrorAlert = true
@@ -1604,6 +1599,8 @@ private struct DetailEditBaseline: Equatable {
 
 private enum DetailStyle {
   static let baseContentWidth: CGFloat = 374
+  static let regularContentWidth: CGFloat = 760
+  static let regularLayoutThreshold: CGFloat = 700
   static let horizontalPadding: CGFloat = 14
   static let figmaTopInset: CGFloat = 61
   static let sectionSpacing: CGFloat = 20
@@ -1668,6 +1665,14 @@ private enum DetailStyle {
   static let editButtonBorder = HomeStyle.fabRed.opacity(0.45)
   static let copyAccent = HomeStyle.fabRed
   static let modalBackground = Color.white
+
+  static func contentWidth(for totalWidth: CGFloat) -> CGFloat {
+    let availableWidth = totalWidth - horizontalPadding * 2
+    guard totalWidth >= regularLayoutThreshold else {
+      return min(baseContentWidth, availableWidth)
+    }
+    return min(regularContentWidth, availableWidth)
+  }
   static let modalPrimaryFill = HomeStyle.fabRed
   static let modalButtonBorder = Color(hex: "D1D5DC")
   static let modalDestructiveText = HomeStyle.destructiveRed

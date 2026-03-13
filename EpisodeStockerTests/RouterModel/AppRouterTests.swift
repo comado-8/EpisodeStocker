@@ -98,4 +98,14 @@ final class AppRouterTests: XCTestCase {
         router.dismissPaywall()
         XCTAssertNil(router.paywallTrigger)
     }
+
+    func testSettingsDeepLinkLifecycle() {
+        let router = AppRouter()
+
+        router.requestSettingsDeepLink(.subscription)
+        XCTAssertEqual(router.settingsDeepLink, .subscription)
+
+        router.consumeSettingsDeepLink()
+        XCTAssertNil(router.settingsDeepLink)
+    }
 }

@@ -37,7 +37,7 @@ final class SubscriptionSettingsViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
-            async let currentStatus = service.fetchStatus()
+            async let currentStatus = service.fetchStatus(forceRefresh: false)
             async let currentProducts = service.fetchProducts()
             let (newStatus, newProducts) = try await (currentStatus, currentProducts)
             status = newStatus
@@ -56,9 +56,17 @@ final class SubscriptionSettingsViewModel: ObservableObject {
             switch outcome {
             case .purchased(let newStatus):
                 status = newStatus
+                if let refreshedStatus = try? await service.fetchStatus(forceRefresh: true) {
+                    status = refreshedStatus
+                }
                 errorMessage = nil
             case .purchasedStatusUnavailable(let productID):
-                errorMessage = "購入は完了しましたが、最新状態の取得に失敗しました。(商品ID: \(productID))"
+                if let refreshedStatus = try? await service.fetchStatus(forceRefresh: true) {
+                    status = refreshedStatus
+                    errorMessage = nil
+                } else {
+                    errorMessage = "購入は完了しましたが、最新状態の取得に失敗しました。(商品ID: \(productID))"
+                }
             case .userCancelled:
                 errorMessage = "購入はキャンセルされました。"
             case .pending:
@@ -73,7 +81,28 @@ final class SubscriptionSettingsViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
-            status = try await service.restorePurchases()
+            _ = try await service.restorePurchases()
+            status = try await service.fetchStatus(forceRefresh: true)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func refreshStatus(forceRefresh: Bool = false) async {
+        guard !isLoading else { return }
+        do {
+            status = try await service.fetchStatus(forceRefresh: forceRefresh)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func refreshProducts() async {
+        guard !isLoading else { return }
+        do {
+            products = try await service.fetchProducts()
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

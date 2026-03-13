@@ -5,6 +5,10 @@ enum AppRoute: Hashable {
     case episodeDetail(UUID)
 }
 
+enum SettingsDeepLink: Equatable {
+    case subscription
+}
+
 @MainActor
 final class AppRouter: ObservableObject {
     @Published var path: [AppRoute] = []
@@ -17,6 +21,7 @@ final class AppRouter: ObservableObject {
     @Published var pendingRootTabSwitch: RootTab?
     @Published var committedRootTabSwitch: RootTab?
     @Published var paywallTrigger: PaywallTrigger?
+    @Published var settingsDeepLink: SettingsDeepLink?
 
     var hasUnsavedHomeStackChanges: Bool {
         hasUnsavedEpisodeDetailChanges || hasUnsavedNewEpisodeChanges
@@ -61,5 +66,13 @@ final class AppRouter: ObservableObject {
 
     func dismissPaywall() {
         paywallTrigger = nil
+    }
+
+    func requestSettingsDeepLink(_ deepLink: SettingsDeepLink) {
+        settingsDeepLink = deepLink
+    }
+
+    func consumeSettingsDeepLink() {
+        settingsDeepLink = nil
     }
 }

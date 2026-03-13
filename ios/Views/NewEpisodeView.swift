@@ -147,12 +147,12 @@ struct NewEpisodeView: View {
 
   var body: some View {
     GeometryReader { proxy in
-      let contentWidth = min(
-        NewEpisodeStyle.baseContentWidth, proxy.size.width - NewEpisodeStyle.horizontalPadding * 2)
+      let contentWidth = NewEpisodeStyle.contentWidth(for: proxy.size.width)
       let horizontalPadding = max(
         NewEpisodeStyle.horizontalPadding, (proxy.size.width - contentWidth) / 2)
       let topPadding = max(0, NewEpisodeStyle.figmaTopInset - proxy.safeAreaInsets.top)
-      let tabBarOffset = max(0, HomeStyle.tabBarHeight - 48)
+      let isRegularWidth = proxy.size.width >= HomeStyle.regularLayoutThreshold
+      let tabBarOffset = isRegularWidth ? HomeStyle.tabBarHeight : max(0, HomeStyle.tabBarHeight - 48)
 
       let actionBarHeight = NewEpisodeStyle.actionBarContentHeight + 1
 
@@ -968,6 +968,8 @@ struct NewEpisodeView: View {
 
 private enum NewEpisodeStyle {
   static let baseContentWidth: CGFloat = 360
+  static let regularContentWidth: CGFloat = 760
+  static let regularLayoutThreshold: CGFloat = 700
   static let horizontalPadding: CGFloat = 21
   static let figmaTopInset: CGFloat = 61
   static let sectionSpacing: CGFloat = 16
@@ -1059,6 +1061,14 @@ private enum NewEpisodeStyle {
     formatter.dateFormat = "yyyy/MM/dd"
     return formatter
   }()
+
+  static func contentWidth(for totalWidth: CGFloat) -> CGFloat {
+    let availableWidth = totalWidth - horizontalPadding * 2
+    guard totalWidth >= regularLayoutThreshold else {
+      return min(baseContentWidth, availableWidth)
+    }
+    return min(regularContentWidth, availableWidth)
+  }
 
   static let registeredTagSelectionSheetStyle = RegisteredTagSelectionSheetStyle(
     labelText: labelText,

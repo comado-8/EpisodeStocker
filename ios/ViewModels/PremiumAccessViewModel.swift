@@ -22,15 +22,15 @@ enum PaywallTrigger: String, Identifiable {
     var title: String {
         switch self {
         case .analyticsTab:
-            return "分析タブは有料機能です"
+            return "分析ダッシュボードはPro機能です"
         case .advancedSort:
-            return "この並び替えは有料機能です"
+            return "この並び替えはPro機能です"
         case .advancedSearch:
-            return "詳細検索の条件設定は有料機能です"
+            return "この詳細検索はPro機能です"
         case .export:
-            return "エクスポートは有料機能です"
+            return "エクスポートはPro機能です"
         case .backup:
-            return "クラウド同期は有料機能です"
+            return "バックアップはPro機能です"
         case .episodeQuotaOver50:
             return "無料プランは50件までです"
         }
@@ -39,17 +39,17 @@ enum PaywallTrigger: String, Identifiable {
     var message: String {
         switch self {
         case .analyticsTab:
-            return "分析ダッシュボードを利用するにはサブスクリプション登録が必要です。"
+            return "掘り起こし候補・傾向分析・タグ分析を使うには、Proプランへアップグレードしてください。"
         case .advancedSort:
-            return "最近話した順や話した回数順はサブスクリプションで利用できます。"
+            return "最近話した順・話した回数順などの履歴ベース並び替えは、Proプランで利用できます。"
         case .advancedSearch:
-            return "詳細検索シート内の条件検索（回数/日付/媒体/リアクション）を使うにはサブスクリプション登録が必要です。"
+            return "回数・日付・媒体・リアクションを使った詳細検索は、Proプランで利用できます。"
         case .export:
-            return "PDF/txtエクスポートはサブスクリプションで利用できます。"
+            return "PDF/txt エクスポートを利用するには、Proプランへのアップグレードが必要です。"
         case .backup:
-            return "クラウド同期機能はサブスクリプションで利用できます。"
+            return "iCloud同期と暗号化バックアップ機能は、Proプランで利用できます。"
         case .episodeQuotaOver50:
-            return "51件目を登録するにはサブスクリプション登録が必要です。"
+            return "51件目以降を登録するには、Proプランへのアップグレードが必要です。"
         }
     }
 
@@ -109,13 +109,13 @@ final class PremiumAccessViewModel: ObservableObject {
         subscriptionStatus.plan != .free || trialRemainingDays > 0
     }
 
-    func refresh() async {
+    func refresh(forceRefresh: Bool = false) async {
         guard !isLoadingStatus else { return }
         isLoadingStatus = true
         defer { isLoadingStatus = false }
 
         do {
-            let status = try await service.fetchStatus()
+            let status = try await service.fetchStatus(forceRefresh: forceRefresh)
             subscriptionStatus = status
             let hasPremium = Self.hasPremiumAccess(status: status, now: now)
             entitlementCache.setPremiumAccessCachedState(hasPremium ? .granted : .denied)
@@ -131,7 +131,7 @@ final class PremiumAccessViewModel: ObservableObject {
 
     func ensureStatusLoaded() async {
         guard !hasLoadedStatus, !isLoadingStatus else { return }
-        await refresh()
+        await refresh(forceRefresh: false)
     }
 
     func hasAccess(to _: PremiumFeature) -> Bool {
