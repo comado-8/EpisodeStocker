@@ -94,6 +94,7 @@ final class CloudKitBackupServiceTests: XCTestCase {
     func testRunManualBackupReturnsExecutionDateWithoutPersistingLastRunDate() async throws {
         let settings = InMemorySettingsRepository()
         settings.set(true, for: .cloudBackupEnabled)
+        settings.set(true, for: .cloudSyncMigrationPrepared)
         settings.setOptionalBool(true, for: .hasPremiumAccessCached)
         let expectedDate = Date(timeIntervalSince1970: 54_321)
         let service = CloudKitBackupService(
@@ -112,6 +113,7 @@ final class CloudKitBackupServiceTests: XCTestCase {
     func testRunManualBackupThrowsUnavailableWhenCloudKitUnavailable() async {
         let settings = InMemorySettingsRepository()
         settings.set(true, for: .cloudBackupEnabled)
+        settings.set(true, for: .cloudSyncMigrationPrepared)
         settings.setOptionalBool(true, for: .hasPremiumAccessCached)
         let service = CloudKitBackupService(
             cloudKitClient: FakeCloudKitClient(result: .success(.restricted)),
@@ -151,6 +153,7 @@ final class CloudKitBackupServiceTests: XCTestCase {
     func testRunManualBackupMapsRunnerFailure() async {
         let settings = InMemorySettingsRepository()
         settings.set(true, for: .cloudBackupEnabled)
+        settings.set(true, for: .cloudSyncMigrationPrepared)
         settings.setOptionalBool(true, for: .hasPremiumAccessCached)
         let service = CloudKitBackupService(
             cloudKitClient: FakeCloudKitClient(result: .success(.available)),
@@ -171,6 +174,7 @@ final class CloudKitBackupServiceTests: XCTestCase {
     func testRunManualBackupPassesThroughCloudBackupErrorFromRunner() async {
         let settings = InMemorySettingsRepository()
         settings.set(true, for: .cloudBackupEnabled)
+        settings.set(true, for: .cloudSyncMigrationPrepared)
         settings.setOptionalBool(true, for: .hasPremiumAccessCached)
         let service = CloudKitBackupService(
             cloudKitClient: FakeCloudKitClient(result: .success(.available)),
@@ -191,6 +195,7 @@ final class CloudKitBackupServiceTests: XCTestCase {
     func testRunManualBackupThrowsNotEntitledWhenRequestedButPremiumDenied() async {
         let settings = InMemorySettingsRepository()
         settings.set(true, for: .cloudBackupEnabled)
+        settings.set(true, for: .cloudSyncMigrationPrepared)
         settings.setOptionalBool(false, for: .hasPremiumAccessCached)
         let service = CloudKitBackupService(
             cloudKitClient: FakeCloudKitClient(result: .success(.available)),
@@ -211,6 +216,7 @@ final class CloudKitBackupServiceTests: XCTestCase {
     func testRunManualBackupThrowsBackupDisabledWhenRequestedButPremiumUnknown() async {
         let settings = InMemorySettingsRepository()
         settings.set(true, for: .cloudBackupEnabled)
+        settings.set(true, for: .cloudSyncMigrationPrepared)
         let service = CloudKitBackupService(
             cloudKitClient: FakeCloudKitClient(result: .success(.available)),
             settingsRepository: settings,
@@ -225,6 +231,21 @@ final class CloudKitBackupServiceTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
+    }
+
+    func testAvailabilityReturnsMigrationPendingReasonWhenPreparationIncomplete() async {
+        let settings = InMemorySettingsRepository()
+        settings.set(true, for: .cloudBackupEnabled)
+        settings.set(false, for: .cloudSyncMigrationPrepared)
+        let service = CloudKitBackupService(
+            cloudKitClient: FakeCloudKitClient(result: .success(.available)),
+            settingsRepository: settings,
+            backupJobRunner: FakeBackupJobRunner(result: .success(()))
+        )
+
+        let availability = await service.availability()
+
+        XCTAssertEqual(availability, .unavailable(reason: CloudKitBackupService.migrationPendingReason))
     }
 }
 

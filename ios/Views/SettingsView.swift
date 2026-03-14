@@ -1,5 +1,7 @@
 import SwiftData
+import StoreKit
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 #if canImport(RevenueCatUI)
 import RevenueCatUI
@@ -20,7 +22,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             GeometryReader { proxy in
-                let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
+                let contentWidth = HomeStyle.primaryScreenContentWidth(for: proxy.size.width)
                 let bottomInset = baseSafeAreaBottom()
                 let topPadding = max(0, SettingsStyle.figmaTopInset - proxy.safeAreaInsets.top)
 
@@ -59,6 +61,7 @@ struct SettingsView: View {
         }
         .onAppear {
             router.hasSettingsDetailPath = !navigationPath.isEmpty
+            applyDeepLinkIfNeeded()
         }
         .onChange(of: navigationPath) { _, newValue in
             router.hasSettingsDetailPath = !newValue.isEmpty
@@ -69,6 +72,18 @@ struct SettingsView: View {
                 navigationPath.removeAll()
             }
         }
+        .onChange(of: router.settingsDeepLink) { _, _ in
+            applyDeepLinkIfNeeded()
+        }
+    }
+
+    private func applyDeepLinkIfNeeded() {
+        guard let deepLink = router.settingsDeepLink else { return }
+        switch deepLink {
+        case .subscription:
+            navigationPath = [.subscription]
+        }
+        router.consumeSettingsDeepLink()
     }
 }
 
@@ -375,9 +390,28 @@ private struct ProFeatureBadge: View {
 
 @MainActor
 private struct SubscriptionSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
     @StateObject private var viewModel: SubscriptionSettingsViewModel
-    @State private var showsRevenueCatPaywall = false
     @State private var showsCustomerCenter = false
+    @State private var manageSubscriptionsErrorMessage: String?
+    @State private var restoreSupportMessage: String?
+    @State private var activePurchaseProductID: String?
+    private static let loadingPriceText = "価格情報を取得中..."
+    private static let termsURLString = "https://episodestocker.com/terms"
+    private static let privacyURLString = "https://episodestocker.com/privacy"
+    private static var currentYear: Int {
+        Calendar.current.component(.year, from: Date())
+    }
+    private static let proFeatures: [String] = [
+        "高度分析ダッシュボード",
+        "エピソード登録件数無制限",
+        "詳細履歴検索",
+        "エピソードエクスポート",
+        "クラウド同期"
+    ]
 
     init(viewModel: SubscriptionSettingsViewModel? = nil) {
         _viewModel = StateObject(
@@ -386,14 +420,47 @@ private struct SubscriptionSettingsView: View {
     }
 
     private var planLabel: String {
-        switch viewModel.status.plan {
+        planLabel(for: viewModel.status.plan)
+    }
+
+    private func planLabel(for plan: SubscriptionStatus.Plan) -> String {
+        switch plan {
         case .free:
             return "Free"
         case .monthly:
-            return "月額"
+            return "Pro Monthly"
         case .yearly:
-            return "年額"
+            return "Pro Yearly"
         }
+    }
+
+    private var pendingPlanChangeText: String? {
+        guard let nextPlan = viewModel.status.nextPlan else { return nil }
+        guard nextPlan != viewModel.status.plan else { return nil }
+
+        let nextPlanLabel = planLabel(for: nextPlan)
+        if let effectiveDate = viewModel.status.nextPlanEffectiveDate {
+            return "次回更新時（\(Self.dateFormatter.string(from: effectiveDate))）に\(nextPlanLabel)へ切り替わります。"
+        }
+        return "次回更新時に\(nextPlanLabel)へ切り替わります。"
+    }
+
+    private var isCancellationScheduled: Bool {
+        guard viewModel.status.plan != .free else { return false }
+        guard viewModel.status.nextPlan == nil else { return false }
+        return viewModel.status.willAutoRenew == false
+    }
+
+    private var renewalDateLabel: String {
+        isCancellationScheduled ? "有効期限" : "更新日"
+    }
+
+    private var cancellationNoticeText: String? {
+        guard isCancellationScheduled else { return nil }
+        if expiryDateText != "-" {
+            return "解約済みです。\(expiryDateText) まで現在のプランを利用できます。"
+        }
+        return "解約済みです。次回更新はありません。"
     }
 
     private var expiryDateText: String {
@@ -410,6 +477,34 @@ private struct SubscriptionSettingsView: View {
         return "\(viewModel.trialRemainingDays)日"
     }
 
+    private var monthlyProduct: SubscriptionProduct? {
+        viewModel.products.first(where: { $0.plan == .monthly })
+    }
+
+    private var yearlyProduct: SubscriptionProduct? {
+        viewModel.products.first(where: { $0.plan == .yearly })
+    }
+
+    private func isCurrentPlan(_ plan: SubscriptionStatus.Plan) -> Bool {
+        viewModel.status.plan == plan
+    }
+
+    private var monthlyPriceText: String {
+        monthlyProduct?.displayPrice ?? Self.loadingPriceText
+    }
+
+    private var yearlyPriceText: String {
+        yearlyProduct?.displayPrice ?? Self.loadingPriceText
+    }
+
+    private var yearlyMonthlyEquivalentText: String? {
+        yearlyProduct?.monthlyEquivalentText
+    }
+
+    private var isPurchaseInteractionDisabled: Bool {
+        viewModel.isLoading || activePurchaseProductID != nil
+    }
+
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ja_JP")
@@ -417,68 +512,439 @@ private struct SubscriptionSettingsView: View {
         return formatter
     }()
 
+    private func handlePurchaseTap(_ product: SubscriptionProduct) {
+        guard activePurchaseProductID == nil && !viewModel.isLoading else { return }
+
+        activePurchaseProductID = product.id
+        Task {
+            await viewModel.purchase(productID: product.id)
+            await viewModel.refreshProducts()
+            await premiumAccess.refresh(forceRefresh: true)
+            await MainActor.run {
+                activePurchaseProductID = nil
+            }
+        }
+    }
+
+    private func handleRestoreTap() {
+        restoreSupportMessage = nil
+
+        #if canImport(RevenueCatUI)
+        if RevenueCatConfig.hasPublicAPIKey {
+            showsCustomerCenter = true
+            return
+        }
+
+        restoreSupportMessage = "Customer Centerを開けないため、アプリ内で購入を復元します。"
+        #endif
+
+        Task {
+            await viewModel.restorePurchases()
+            await viewModel.refreshStatus(forceRefresh: true)
+            await viewModel.refreshProducts()
+            await premiumAccess.refresh(forceRefresh: true)
+            if viewModel.errorMessage == nil {
+                restoreSupportMessage = nil
+            }
+        }
+    }
+
     var body: some View {
-        SettingsDetailContainerView(
-            title: "サブスクリプション",
-            subtitle: "プラン情報と更新日を確認"
-        ) {
-            SettingsSectionCard(title: "現在のプラン", subtitle: "利用中のプランと更新スケジュール") {
-                VStack(spacing: 10) {
-                    SettingsKeyValueRow(title: "プラン", value: planLabel)
-                    SettingsKeyValueRow(title: "更新日", value: expiryDateText)
-                    if let trialText {
-                        SettingsKeyValueRow(title: "試用残日数", value: trialText)
-                    }
-                }
-                .padding(.top, 4)
-            }
+        GeometryReader { proxy in
+            let contentWidth = HomeStyle.primaryScreenContentWidth(for: proxy.size.width)
+            let bottomInset = baseSafeAreaBottom()
+            let topPadding = max(0, SettingsStyle.figmaTopInset - proxy.safeAreaInsets.top)
 
-            SettingsSectionCard(title: "プランの管理", subtitle: "アップグレードや解約の操作") {
-                VStack(spacing: 10) {
-                    SettingsActionButton(title: "月額プランに変更", isPrimary: true) {
-                        Task { await viewModel.purchase(productID: SubscriptionCatalog.monthlyProductID) }
+            ZStack(alignment: .top) {
+                HomeStyle.screenBackground.ignoresSafeArea()
+
+                VStack(spacing: SettingsDetailStyle.sectionSpacing) {
+                    VStack(spacing: SettingsDetailStyle.sectionSpacing) {
+                        SettingsDetailHeader(
+                            title: "サブスクリプション",
+                            subtitle: "プラン情報と更新日を確認"
+                        )
+                        .frame(width: contentWidth, alignment: .leading)
+
+                        Rectangle()
+                            .fill(HomeStyle.outline)
+                            .frame(width: contentWidth, height: HomeStyle.dividerHeight)
                     }
-                    .disabled(viewModel.isLoading)
-                    SettingsActionButton(title: "年額プランに変更", isPrimary: false) {
-                        Task { await viewModel.purchase(productID: SubscriptionCatalog.yearlyProductID) }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, topPadding)
+                    .background(HomeStyle.screenBackground)
+                    .zIndex(1)
+
+                    ScrollView {
+                        VStack(spacing: SettingsDetailStyle.sectionSpacing) {
+                            subscriptionSections
+                        }
+                        .frame(width: contentWidth)
+                        .padding(.bottom, HomeStyle.tabBarHeight + 12 + bottomInset)
                     }
-                    .disabled(viewModel.isLoading)
-                    SettingsActionButton(title: "購入を復元", isPrimary: false) {
-                        Task { await viewModel.restorePurchases() }
-                    }
-                    .disabled(viewModel.isLoading)
-                    #if canImport(RevenueCatUI)
-                    SettingsActionButton(title: "RevenueCat Paywallを開く", isPrimary: false) {
-                        showsRevenueCatPaywall = true
-                    }
-                    .disabled(viewModel.isLoading)
-                    SettingsActionButton(title: "Customer Centerを開く", isPrimary: false) {
-                        showsCustomerCenter = true
-                    }
-                    .disabled(viewModel.isLoading)
-                    #endif
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .scrollClipDisabled()
+                    .scrollBounceBehavior(.basedOnSize)
+                    .zIndex(0)
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+
+                Rectangle()
+                    .fill(HomeStyle.screenBackground)
+                    .frame(height: proxy.safeAreaInsets.top)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .ignoresSafeArea(edges: .top)
+                    .allowsHitTesting(false)
+                    .zIndex(2)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .edgeSwipeBack {
+                dismiss()
+            }
+        }
+        .task {
+            await viewModel.load()
+            await premiumAccess.refresh(forceRefresh: true)
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            Task {
+                await viewModel.refreshStatus(forceRefresh: true)
+                await viewModel.refreshProducts()
+                await premiumAccess.refresh(forceRefresh: true)
+            }
+        }
+        #if canImport(RevenueCatUI)
+        .sheet(isPresented: $showsCustomerCenter, onDismiss: {
+            Task {
+                await viewModel.refreshStatus(forceRefresh: true)
+                await viewModel.refreshProducts()
+                await premiumAccess.refresh(forceRefresh: true)
+            }
+        }) {
+            RevenueCatCustomerCenterContainer()
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private var subscriptionSections: some View {
+        SubscriptionPlainSection(title: "現在のプラン", subtitle: "") {
+            Text(planLabel)
+                .font(SettingsDetailStyle.rowTitleFont)
+                .foregroundColor(SettingsDetailStyle.rowTitleText)
+            if let trialText {
+                Text("試用残日数: \(trialText)")
+                    .font(SettingsDetailStyle.rowMetaFont)
+                    .foregroundColor(SettingsDetailStyle.rowMetaText)
+            } else if expiryDateText != "-" {
+                Text("\(renewalDateLabel): \(expiryDateText)")
+                    .font(SettingsDetailStyle.rowMetaFont)
+                    .foregroundColor(SettingsDetailStyle.rowMetaText)
+            }
+            if let pendingPlanChangeText {
+                Text(pendingPlanChangeText)
+                    .font(SettingsDetailStyle.rowMetaFont)
+                    .foregroundColor(HomeStyle.fabRed)
+            } else if let cancellationNoticeText {
+                Text(cancellationNoticeText)
+                    .font(SettingsDetailStyle.rowMetaFont)
+                    .foregroundColor(HomeStyle.fabRed)
+            }
+        }
+
+        SubscriptionPlainSection(title: "Proでできること", subtitle: "Proプランで利用できる機能") {
+            SubscriptionBenefitsBlock(features: Self.proFeatures)
+        }
+
+        SubscriptionPlainSection(title: "プランを選択", subtitle: "継続利用の場合、年額プランがお得です") {
+            VStack(spacing: 12) {
+                SubscriptionPlanCard(
+                    title: "Pro Yearly",
+                    badgeText: "おすすめ",
+                    isRecommended: true,
+                    priceText: yearlyPriceText,
+                    priceSuffix: "年",
+                    secondaryPriceText: yearlyMonthlyEquivalentText,
+                    isPrimaryAction: true,
+                    isActionInProgress: activePurchaseProductID == yearlyProduct?.id,
+                    isInteractionDisabled: isPurchaseInteractionDisabled,
+                    isPurchaseAvailable: yearlyProduct != nil,
+                    isSelectable: !isCurrentPlan(.yearly)
+                ) {
+                    guard let product = yearlyProduct else { return }
+                    handlePurchaseTap(product)
+                }
+                SubscriptionPlanCard(
+                    title: "Pro Monthly",
+                    badgeText: nil,
+                    isRecommended: false,
+                    priceText: monthlyPriceText,
+                    priceSuffix: "月",
+                    secondaryPriceText: nil,
+                    isPrimaryAction: false,
+                    isActionInProgress: activePurchaseProductID == monthlyProduct?.id,
+                    isInteractionDisabled: isPurchaseInteractionDisabled,
+                    isPurchaseAvailable: monthlyProduct != nil,
+                    isSelectable: !isCurrentPlan(.monthly)
+                ) {
+                    guard let product = monthlyProduct else { return }
+                    handlePurchaseTap(product)
                 }
             }
+        }
 
-            if let errorMessage = viewModel.errorMessage {
-                SettingsSectionCard(title: "課金状態", subtitle: "実行結果") {
-                    Text(errorMessage)
+        SubscriptionPlainSection(title: "サブスクリプションについて", subtitle: "") {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("・サブスクリプションは期間終了の24時間前までにキャンセルされない限り自動更新されます。")
+                    .font(SettingsDetailStyle.rowMetaFont)
+                    .foregroundColor(SettingsDetailStyle.rowMetaText)
+                Text("・サブスクリプションは以下から管理・解約できます。")
+                    .font(SettingsDetailStyle.rowMetaFont)
+                    .foregroundColor(SettingsDetailStyle.rowMetaText)
+                SettingsLinkRow(title: "設定＞Apple Account＞サブスクリプション") {
+                    openManageSubscriptions()
+                }
+                if let manageSubscriptionsErrorMessage {
+                    Text(manageSubscriptionsErrorMessage)
                         .font(SettingsDetailStyle.rowMetaFont)
                         .foregroundColor(.red)
                 }
             }
         }
-        .task {
-            await viewModel.load()
+
+        SubscriptionPlainSection(title: "購入サポート", subtitle: "復元や購読管理の操作", showsDivider: false) {
+            VStack(alignment: .leading, spacing: 12) {
+                SubscriptionPillButton(title: "購入を復元", isPrimary: false) {
+                    handleRestoreTap()
+                }
+                .disabled(viewModel.isLoading)
+
+                if let restoreSupportMessage {
+                    Text(restoreSupportMessage)
+                        .font(SettingsDetailStyle.rowMetaFont)
+                        .foregroundColor(HomeStyle.fabRed)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Rectangle()
+                    .fill(HomeStyle.outline)
+                    .frame(height: HomeStyle.dividerHeight)
+                    .padding(.top, 2)
+
+                SettingsLinkRow(title: "利用規約") {
+                    guard let url = URL(string: Self.termsURLString) else { return }
+                    openURL(url)
+                }
+                SettingsLinkRow(title: "プライバシーポリシー") {
+                    guard let url = URL(string: Self.privacyURLString) else { return }
+                    openURL(url)
+                }
+
+                Text("© \(Self.currentYear) comado.studio All rights reserved.")
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundColor(SettingsDetailStyle.rowMetaText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
+            }
         }
-        #if canImport(RevenueCatUI)
-        .sheet(isPresented: $showsRevenueCatPaywall) {
-            RevenueCatPaywallContainer()
+
+        if let errorMessage = viewModel.errorMessage {
+            Text(errorMessage)
+                .font(SettingsDetailStyle.rowMetaFont)
+                .foregroundColor(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .sheet(isPresented: $showsCustomerCenter) {
-            RevenueCatCustomerCenterContainer()
+    }
+
+    private func openManageSubscriptions() {
+        Task { @MainActor in
+            do {
+                guard let scene = activeWindowScene else {
+                    throw URLError(.badURL)
+                }
+                try await AppStore.showManageSubscriptions(in: scene)
+                manageSubscriptionsErrorMessage = nil
+            } catch {
+                manageSubscriptionsErrorMessage = "サブスクリプション管理画面を開けませんでした。"
+            }
         }
-        #endif
+    }
+
+    private var activeWindowScene: UIWindowScene? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive })
+    }
+}
+
+private struct SubscriptionPlanCard: View {
+    let title: String
+    let badgeText: String?
+    let isRecommended: Bool
+    let priceText: String
+    let priceSuffix: String
+    let secondaryPriceText: String?
+    let isPrimaryAction: Bool
+    let isActionInProgress: Bool
+    let isInteractionDisabled: Bool
+    let isPurchaseAvailable: Bool
+    let isSelectable: Bool
+    let onTap: () -> Void
+    private static let loadingPriceText = "価格情報を取得中..."
+
+    private var displayedPrice: String {
+        guard priceText != Self.loadingPriceText else { return Self.loadingPriceText }
+        return "\(priceText) / \(priceSuffix)"
+    }
+
+    private var buttonTitle: String {
+        isActionInProgress ? "処理中..." : "このプランを選択"
+    }
+
+    private var isDisabled: Bool {
+        isInteractionDisabled || isActionInProgress || !isPurchaseAvailable
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title)
+                    .font(SettingsDetailStyle.rowTitleFont)
+                    .foregroundColor(SettingsDetailStyle.rowTitleText)
+                if let badgeText {
+                    Text(badgeText)
+                        .font(SettingsDetailStyle.rowMetaFont)
+                        .foregroundColor(Color.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(HomeStyle.fabRed)
+                        .clipShape(Capsule())
+                }
+                Spacer(minLength: 0)
+            }
+
+            Text(displayedPrice)
+                .font(AppTypography.sectionTitle)
+                .foregroundColor(SettingsDetailStyle.rowTitleText)
+
+            if let secondaryPriceText {
+                Text(secondaryPriceText)
+                    .font(SettingsDetailStyle.rowMetaFont)
+                    .foregroundColor(SettingsDetailStyle.rowMetaText)
+            }
+
+            if isSelectable {
+                SubscriptionPillButton(title: buttonTitle, isPrimary: isPrimaryAction) {
+                    onTap()
+                }
+                .disabled(isDisabled)
+            }
+        }
+        .padding(14)
+        .background(isRecommended ? HomeStyle.fabRed.opacity(0.08) : Color(hex: "FAFAFB"))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(isRecommended ? HomeStyle.fabRed.opacity(0.55) : HomeStyle.fabRed.opacity(0.75), lineWidth: isRecommended ? 1.2 : 1.1)
+        )
+        .shadow(
+            color: isRecommended ? HomeStyle.fabRed.opacity(0.18) : Color.black.opacity(0.06),
+            radius: isRecommended ? 10 : 4,
+            x: 0,
+            y: isRecommended ? 5 : 2
+        )
+    }
+}
+
+private struct SubscriptionPillButton: View {
+    let title: String
+    let isPrimary: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(SettingsDetailStyle.actionFont)
+                .foregroundColor(isPrimary ? SettingsDetailStyle.actionPrimaryText : SettingsDetailStyle.actionSecondaryText)
+                .frame(maxWidth: .infinity)
+                .frame(height: SettingsDetailStyle.actionHeight)
+                .background(
+                    Capsule()
+                        .fill(isPrimary ? SettingsDetailStyle.actionPrimaryFill : SettingsDetailStyle.actionSecondaryFill)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(SettingsDetailStyle.actionSecondaryBorder, lineWidth: isPrimary ? 0 : 1)
+                )
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct SubscriptionPlainSection<Content: View>: View {
+    let title: String
+    let subtitle: String
+    let showsDivider: Bool
+    let content: Content
+
+    init(
+        title: String,
+        subtitle: String,
+        showsDivider: Bool = true,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.showsDivider = showsDivider
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(SettingsDetailStyle.sectionTitleFont)
+                    .foregroundColor(SettingsDetailStyle.sectionTitleText)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(SettingsDetailStyle.sectionSubtitleFont)
+                        .foregroundColor(SettingsDetailStyle.sectionSubtitleText)
+                }
+            }
+
+            content
+
+            if showsDivider {
+                Rectangle()
+                    .fill(HomeStyle.outline)
+                    .frame(height: HomeStyle.dividerHeight)
+                    .padding(.top, 2)
+            }
+        }
+    }
+}
+
+private struct SubscriptionBenefitsBlock: View {
+    let features: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(features.enumerated()), id: \.offset) { _, feature in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(HomeStyle.fabRed)
+                        .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(feature)
+                            .font(SettingsDetailStyle.rowTitleFont)
+                            .foregroundColor(SettingsDetailStyle.rowTitleText)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -502,7 +968,6 @@ private struct BackupSettingsDestinationView: View {
 @MainActor
 private struct BackupSettingsView: View {
     @EnvironmentObject private var router: AppRouter
-    @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
     @StateObject private var viewModel: BackupSettingsViewModel
     @ObservedObject private var manualBackupViewModel: ManualBackupSettingsViewModel
     @State private var showsExportPassphraseSheet = false
@@ -518,29 +983,11 @@ private struct BackupSettingsView: View {
 
     private static var isBackupPaywallEnabled: Bool {
         if let rawFlag = ProcessInfo.processInfo.environment["ENABLE_BACKUP_PAYWALL"],
-           let parsedFlag = parseEnvironmentBoolean(rawFlag)
+           let parsedFlag = EnvironmentHelpers.parseBoolean(rawFlag)
         {
             return parsedFlag
         }
-        // TODO(TAX-COMPLIANCE): 税務情報フォーム対応後にこのDEBUGバイパスを削除する。
-        // 一時対応: 分析タブ/エクスポートと同様、Debugのみバックアップ課金ゲートを無効化する。
-        // 課金テスト再開時は、このフラグを削除するか DEBUG でも true を返して復帰する。
-        #if DEBUG
-        return false
-        #else
         return true
-        #endif
-    }
-
-    private static func parseEnvironmentBoolean(_ raw: String) -> Bool? {
-        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "1", "true", "yes", "on":
-            return true
-        case "0", "false", "no", "off":
-            return false
-        default:
-            return nil
-        }
     }
 
     init(
@@ -552,7 +999,8 @@ private struct BackupSettingsView: View {
         _viewModel = StateObject(
             wrappedValue: viewModel ?? BackupSettingsViewModel(
                 cloudBackupService: CloudKitBackupService(),
-                isEntitlementCheckEnabled: Self.isBackupPaywallEnabled
+                isEntitlementCheckEnabled: Self.isBackupPaywallEnabled,
+                minimumInitialLoadingVisibleDuration: .milliseconds(1200)
             )
         )
         self.manualBackupViewModel = manualBackupViewModel
@@ -573,8 +1021,14 @@ private struct BackupSettingsView: View {
     }
 
     private var syncStateText: String {
+        if viewModel.isInitialSubscriptionResolving {
+            return "確認中"
+        }
         guard viewModel.isBackupEnabled else {
             return "オフ"
+        }
+        if case .unavailable = viewModel.availability {
+            return "利用不可"
         }
         return viewModel.isSyncing ? "同期中" : "待機中"
     }
@@ -633,6 +1087,27 @@ private struct BackupSettingsView: View {
         return Self.backupDateFormatter.string(from: date)
     }
 
+    private var isBackupLocked: Bool {
+        Self.isBackupPaywallEnabled
+            && !viewModel.isInitialSubscriptionResolving
+            && !viewModel.hasBackupAccess
+    }
+
+    private var isSyncInteractionDisabled: Bool {
+        viewModel.isSyncInteractionDisabled
+    }
+
+    private enum PremiumLockOverlayPosition {
+        case center
+        case bottom
+    }
+
+    private enum PremiumLockCTAStyle {
+        static let height: CGFloat = 52
+        static let horizontalInset: CGFloat = 16
+        static let bottomReservedSpace: CGFloat = height + 14
+    }
+
     var body: some View {
         SettingsDetailContainerView(
             title: "同期・バックアップ",
@@ -641,73 +1116,101 @@ private struct BackupSettingsView: View {
             SettingsSectionCard(
                 title: "クラウド同期",
                 subtitle: "有効化と状態",
-                headerAccessory: { ProFeatureBadge() }
-            ) {
-                Toggle(isOn: backupBinding) {
-                    Text("クラウド同期を有効にする")
-                        .font(SettingsDetailStyle.rowTitleFont)
-                        .foregroundColor(SettingsDetailStyle.rowTitleText)
+                headerAccessory: {
+                    if isBackupLocked {
+                        ProFeatureBadge()
+                    }
                 }
-                .toggleStyle(SwitchToggleStyle(tint: SettingsDetailStyle.toggleTint))
+            ) {
+                premiumLockedContent(
+                    isLocked: isBackupLocked,
+                    overlayPosition: .center,
+                    ctaTitle: "Proでクラウド同期を使う"
+                ) {
+                    SettingsToggleRow(
+                        title: "クラウド同期を有効にする",
+                        isOn: backupBinding,
+                        isDisabled: isSyncInteractionDisabled
+                    )
 
-                SettingsKeyValueRow(title: "iCloudの状態", value: iCloudStatusText)
-                if let iCloudStatusHelpText {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "info.circle.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(HomeStyle.fabRed)
-                            .padding(.top, 1)
-                        Text(iCloudStatusHelpText)
-                            .font(SettingsDetailStyle.rowMetaFont)
-                            .foregroundColor(SettingsDetailStyle.rowMetaText)
+                    if viewModel.isInitialSubscriptionResolving {
+                        syncGuideMessage("サブスク状態を確認中です。確認が完了するまで同期操作は利用できません。")
+                    }
+
+                    SettingsKeyValueRow(title: "iCloudの状態", value: iCloudStatusText)
+                    if let iCloudStatusHelpText {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "info.circle.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(HomeStyle.fabRed)
+                                .padding(.top, 1)
+                            Text(iCloudStatusHelpText)
+                                .font(SettingsDetailStyle.rowMetaFont)
+                                .foregroundColor(SettingsDetailStyle.rowMetaText)
+                        }
+                        .padding(.top, 4)
+                    }
+
+                    SettingsKeyValueRow(title: "同期状態", value: syncStateText)
+
+                    VStack(spacing: 10) {
+                        SettingsKeyValueRow(title: "最終同期日時", value: lastBackupText)
                     }
                     .padding(.top, 4)
-                }
 
-                SettingsKeyValueRow(title: "同期状態", value: syncStateText)
+                    syncGuideMessage("別端末で初めて使う場合は、その端末でも『クラウド同期を有効にする』をオンにしてください。")
+                    syncGuideMessage("同期反映まで1〜2分かかる場合があります。反映されない場合は恐れ入りますがアプリの再起動をお願いします。")
 
-                VStack(spacing: 10) {
-                    SettingsKeyValueRow(title: "最終同期日時", value: lastBackupText)
-                }
-                .padding(.top, 4)
-
-                if let visibleErrorMessage {
-                    Text(visibleErrorMessage)
-                        .font(SettingsDetailStyle.rowMetaFont)
-                        .foregroundColor(.red)
-                        .padding(.top, 2)
+                    if let visibleErrorMessage {
+                        Text(visibleErrorMessage)
+                            .font(SettingsDetailStyle.rowMetaFont)
+                            .foregroundColor(.red)
+                            .padding(.top, 2)
+                    }
                 }
             }
 
             SettingsSectionCard(
                 title: "手動バックアップ",
                 subtitle: "ダウンロード/アップロード",
-                headerAccessory: { ProFeatureBadge() }
-            ) {
-                Text("通常はiCloudでのデータ同期の利用をおすすめします。手動バックアップは必要な場合にご利用ください。")
-                    .font(SettingsDetailStyle.rowMetaFont)
-                    .foregroundColor(SettingsDetailStyle.rowMetaText)
-
-                SettingsKeyValueRow(title: "最終ダウンロード日時", value: manualLastExportText)
-                SettingsKeyValueRow(title: "最終アップロード日時", value: manualLastRestoreText)
-
-                VStack(spacing: 10) {
-                    SettingsActionButton(title: "バックアップをダウンロード", isPrimary: true) {
-                        startManualBackupExportFlow()
+                headerAccessory: {
+                    if isBackupLocked {
+                        ProFeatureBadge()
                     }
-                    .disabled(manualBackupViewModel.isExporting || manualBackupViewModel.isInspecting || manualBackupViewModel.isRestoring)
-
-                    SettingsActionButton(title: "バックアップをアップロード（復元）", isPrimary: false) {
-                        startManualBackupImportFlow()
-                    }
-                    .disabled(manualBackupViewModel.isExporting || manualBackupViewModel.isInspecting || manualBackupViewModel.isRestoring)
                 }
-
-                if let manualErrorMessage = manualBackupViewModel.errorMessage {
-                    Text(manualErrorMessage)
+            ) {
+                premiumLockedContent(
+                    isLocked: isBackupLocked,
+                    overlayPosition: .bottom,
+                    ctaTitle: "Proでバックアップを使う"
+                ) {
+                    Text("通常はiCloudでのデータ同期の利用をおすすめします。手動バックアップは必要な場合にご利用ください。")
                         .font(SettingsDetailStyle.rowMetaFont)
-                        .foregroundColor(.red)
-                        .padding(.top, 2)
+                        .foregroundColor(SettingsDetailStyle.rowMetaText)
+
+                    SettingsKeyValueRow(title: "最終ダウンロード日時", value: manualLastExportText)
+                    SettingsKeyValueRow(title: "最終アップロード日時", value: manualLastRestoreText)
+
+                    if !isBackupLocked {
+                        VStack(spacing: 10) {
+                            SettingsActionButton(title: "バックアップをダウンロード", isPrimary: true) {
+                                startManualBackupExportFlow()
+                            }
+                            .disabled(manualBackupViewModel.isExporting || manualBackupViewModel.isInspecting || manualBackupViewModel.isRestoring || isSyncInteractionDisabled)
+
+                            SettingsActionButton(title: "バックアップをアップロード（復元）", isPrimary: false) {
+                                startManualBackupImportFlow()
+                            }
+                            .disabled(manualBackupViewModel.isExporting || manualBackupViewModel.isInspecting || manualBackupViewModel.isRestoring || isSyncInteractionDisabled)
+                        }
+                    }
+
+                    if let manualErrorMessage = manualBackupViewModel.errorMessage {
+                        Text(manualErrorMessage)
+                            .font(SettingsDetailStyle.rowMetaFont)
+                            .foregroundColor(.red)
+                            .padding(.top, 2)
+                    }
                 }
             }
 
@@ -721,9 +1224,25 @@ private struct BackupSettingsView: View {
 
         }
         .task {
-            await viewModel.load()
-            await viewModel.refreshSubscriptionStatus(using: subscriptionService)
+            await viewModel.loadInitialState(using: subscriptionService)
             manualBackupViewModel.load()
+        }
+        .overlay {
+            if viewModel.isInitialLoadingOverlayVisible {
+                ZStack {
+                    Color.black.opacity(0.18)
+                        .ignoresSafeArea()
+                    ProgressView("サブスク状態を確認中...")
+                        .font(SettingsDetailStyle.rowMetaFont)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.white)
+                        )
+                }
+                .transition(.opacity)
+            }
         }
         .sheet(isPresented: $showsExportPassphraseSheet) {
             BackupPassphraseSheet(
@@ -854,12 +1373,16 @@ private struct BackupSettingsView: View {
     }
 
     private func setBackupEnabledWithPaywallGate(_ enabled: Bool) {
+        guard ensureSubscriptionResolvedOrShowMessage(
+            onError: { viewModel.errorMessage = $0 }
+        ) else { return }
+
         guard enabled else {
             viewModel.setBackupEnabled(false)
             return
         }
 
-        guard !Self.isBackupPaywallEnabled || premiumAccess.hasAccess(to: .backup) else {
+        guard !Self.isBackupPaywallEnabled || viewModel.hasBackupAccess else {
             router.presentPaywall(.backup)
             return
         }
@@ -873,7 +1396,10 @@ private struct BackupSettingsView: View {
     }
 
     private func startManualBackupExportFlow() {
-        guard !Self.isBackupPaywallEnabled || premiumAccess.hasAccess(to: .backup) else {
+        guard ensureSubscriptionResolvedOrShowMessage(
+            onError: { manualBackupViewModel.errorMessage = $0 }
+        ) else { return }
+        guard !Self.isBackupPaywallEnabled || viewModel.hasBackupAccess else {
             router.presentPaywall(.backup)
             return
         }
@@ -882,13 +1408,27 @@ private struct BackupSettingsView: View {
     }
 
     private func startManualBackupImportFlow() {
-        guard !Self.isBackupPaywallEnabled || premiumAccess.hasAccess(to: .backup) else {
+        guard ensureSubscriptionResolvedOrShowMessage(
+            onError: { manualBackupViewModel.errorMessage = $0 }
+        ) else { return }
+        guard !Self.isBackupPaywallEnabled || viewModel.hasBackupAccess else {
             router.presentPaywall(.backup)
             return
         }
         manualBackupViewModel.errorMessage = nil
         discardSelectedImportFile()
         showsImportFileGuide = true
+    }
+
+    private func ensureSubscriptionResolvedOrShowMessage(onError: (String) -> Void) -> Bool {
+        guard viewModel.isSyncInteractionDisabled else {
+            return true
+        }
+        onError("サブスク状態を確認中です。確認完了後に再度お試しください。")
+        Task {
+            await viewModel.refreshSubscriptionStatus(using: subscriptionService)
+        }
+        return false
     }
 
     private func copyImportedBackupToTemporaryDirectory(from sourceURL: URL) throws -> URL {
@@ -910,7 +1450,7 @@ private struct BackupSettingsView: View {
             try FileManager.default.removeItem(at: selectedImportURL)
         } catch {
             #if DEBUG
-            print("Failed to remove temporary backup file: \(error)")
+            NSLog("Failed to remove temporary backup file: %@", String(describing: error))
             #endif
         }
         self.selectedImportURL = nil
@@ -928,7 +1468,7 @@ private struct BackupSettingsView: View {
                 try FileManager.default.removeItem(at: url)
             } catch {
                 #if DEBUG
-                print("Failed to remove shared backup file: \(error)")
+                NSLog("Failed to remove shared backup file: %@", String(describing: error))
                 #endif
             }
         }
@@ -938,15 +1478,61 @@ private struct BackupSettingsView: View {
     private static func isManualBackupFileURL(_ url: URL) -> Bool {
         url.pathExtension.lowercased() == "esbackup"
     }
-}
 
-#if canImport(RevenueCatUI)
-private struct RevenueCatPaywallContainer: View {
-    var body: some View {
-        PaywallView(displayCloseButton: true)
+    @ViewBuilder
+    private func syncGuideMessage(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(HomeStyle.fabRed)
+                .padding(.top, 1)
+            Text(text)
+                .font(SettingsDetailStyle.rowMetaFont)
+                .foregroundColor(SettingsDetailStyle.rowMetaText)
+        }
+    }
+
+    private func premiumLockedContent<Content: View>(
+        isLocked: Bool,
+        overlayPosition: PremiumLockOverlayPosition,
+        ctaTitle: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        ZStack(alignment: overlayPosition == .bottom ? .bottom : .center) {
+            VStack(alignment: .leading, spacing: 10) {
+                content()
+            }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, isLocked && overlayPosition == .bottom ? PremiumLockCTAStyle.bottomReservedSpace : 0)
+                .blur(radius: isLocked ? 1.4 : 0)
+                .allowsHitTesting(!isLocked)
+                .accessibilityHidden(isLocked)
+
+            if isLocked {
+                backupLockCTAButton(title: ctaTitle)
+                    .padding(.horizontal, PremiumLockCTAStyle.horizontalInset)
+                    .padding(.bottom, overlayPosition == .bottom ? 2 : 0)
+            }
+        }
+    }
+
+    private func backupLockCTAButton(title: String) -> some View {
+        Button {
+            router.presentPaywall(.backup)
+        } label: {
+            Text(title)
+                .font(SettingsDetailStyle.actionFont)
+                .foregroundColor(SettingsDetailStyle.actionPrimaryText)
+                .frame(maxWidth: .infinity)
+                .frame(height: PremiumLockCTAStyle.height)
+                .background(SettingsDetailStyle.actionPrimaryFill)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 
+#if canImport(RevenueCatUI)
 private struct RevenueCatCustomerCenterContainer: View {
     var body: some View {
         NavigationStack {
@@ -965,19 +1551,8 @@ private struct SecuritySettingsView: View {
             subtitle: "パスコードと生体認証"
         ) {
             SettingsSectionCard(title: "ロック設定", subtitle: "アプリ起動時の保護") {
-                Toggle(isOn: $appPreferences.passcodeEnabled) {
-                    Text("パスコードを使用")
-                        .font(SettingsDetailStyle.rowTitleFont)
-                        .foregroundColor(SettingsDetailStyle.rowTitleText)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: SettingsDetailStyle.toggleTint))
-
-                Toggle(isOn: $appPreferences.biometricEnabled) {
-                    Text("Face ID / Touch ID")
-                        .font(SettingsDetailStyle.rowTitleFont)
-                        .foregroundColor(SettingsDetailStyle.rowTitleText)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: SettingsDetailStyle.toggleTint))
+                SettingsToggleRow(title: "パスコードを使用", isOn: $appPreferences.passcodeEnabled)
+                SettingsToggleRow(title: "Face ID / Touch ID", isOn: $appPreferences.biometricEnabled)
             }
 
             SettingsSectionCard(title: "自動ロック", subtitle: "非アクティブ時のロック") {
@@ -1032,6 +1607,9 @@ private struct DisplaySettingsView: View {
 
 private struct LegalSettingsView: View {
     @Environment(\.openURL) private var openURL
+    private var currentYear: Int {
+        Calendar.current.component(.year, from: Date())
+    }
 
     var body: some View {
         SettingsDetailContainerView(
@@ -1054,7 +1632,7 @@ private struct LegalSettingsView: View {
                         openURL(url)
                     }
 
-                    Text("© 2026 comado.studio All rights reserved.")
+                    Text("© \(currentYear) comado.studio All rights reserved.")
                         .font(SettingsDetailStyle.rowMetaFont)
                         .foregroundColor(SettingsDetailStyle.rowMetaText)
                         .lineLimit(1)
@@ -1125,7 +1703,9 @@ private struct SettingsLinkRow: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(SettingsDetailStyle.linkIcon)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -1157,6 +1737,28 @@ private struct SettingsSegmentedControl: View {
     }
 }
 
+private struct SettingsToggleRow: View {
+    let title: String
+    var isOn: Binding<Bool>
+    var isDisabled: Bool = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(SettingsDetailStyle.rowTitleFont)
+                .foregroundColor(SettingsDetailStyle.rowTitleText)
+
+            Spacer(minLength: 0)
+
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(SwitchToggleStyle(tint: SettingsDetailStyle.toggleTint))
+                .disabled(isDisabled)
+                .accessibilityLabel(title)
+        }
+    }
+}
+
 private struct SettingsDetailContainerView<Content: View>: View {
     let title: String
     let subtitle: String
@@ -1171,7 +1773,7 @@ private struct SettingsDetailContainerView<Content: View>: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
+            let contentWidth = HomeStyle.primaryScreenContentWidth(for: proxy.size.width)
             let bottomInset = baseSafeAreaBottom()
             let topPadding = max(0, SettingsStyle.figmaTopInset - proxy.safeAreaInsets.top)
             let fullBottomPadding = HomeStyle.tabBarHeight + 16 + bottomInset
@@ -1273,7 +1875,7 @@ private enum SettingsDetailStyle {
 
     static let actionPrimaryFill = HomeStyle.fabRed
     static let actionPrimaryText = Color.white
-    static let actionSecondaryFill = Color.white
+    static let actionSecondaryFill = HomeStyle.fabRed.opacity(0.10)
     static let actionSecondaryText = HomeStyle.fabRed
     static let actionSecondaryBorder = HomeStyle.fabRed.opacity(0.35)
 

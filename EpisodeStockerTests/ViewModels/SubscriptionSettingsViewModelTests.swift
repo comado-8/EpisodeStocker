@@ -32,13 +32,14 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(vm.status.plan, .monthly)
         XCTAssertEqual(vm.products.count, 1)
         XCTAssertEqual(vm.products.first?.id, SubscriptionCatalog.monthlyProductID)
+        XCTAssertEqual(service.fetchStatusForceRefreshInputs, [false])
         XCTAssertNil(vm.errorMessage)
     }
 
     func testPurchaseUpdatesStatusOnSuccess() async {
         let purchased = SubscriptionStatus(plan: .yearly, expiryDate: Date(), trialEndDate: nil)
         let service = FakeSubscriptionService(
-            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            status: purchased,
             products: [],
             purchaseOutcome: .purchased(purchased),
             restoredStatus: purchased,
@@ -52,6 +53,7 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
         await vm.purchase(productID: SubscriptionCatalog.yearlyProductID)
 
         XCTAssertEqual(vm.status.plan, .yearly)
+        XCTAssertEqual(service.fetchStatusForceRefreshInputs, [true])
         XCTAssertNil(vm.errorMessage)
     }
 
@@ -79,7 +81,7 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
             products: [],
             purchaseOutcome: .purchasedStatusUnavailable(productID: SubscriptionCatalog.monthlyProductID),
             restoredStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
-            fetchStatusError: nil,
+            fetchStatusError: TestServiceError.failed("refresh failed"),
             fetchProductsError: nil,
             purchaseError: nil,
             restoreError: nil
@@ -93,12 +95,34 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
             vm.errorMessage,
             "購入は完了しましたが、最新状態の取得に失敗しました。(商品ID: \(SubscriptionCatalog.monthlyProductID))"
         )
+        XCTAssertEqual(service.fetchStatusForceRefreshInputs, [true])
+    }
+
+    func testPurchaseStatusUnavailableClearsErrorWhenForcedRefreshSucceeds() async {
+        let refreshed = SubscriptionStatus(plan: .monthly, expiryDate: Date(), trialEndDate: nil)
+        let service = FakeSubscriptionService(
+            status: refreshed,
+            products: [],
+            purchaseOutcome: .purchasedStatusUnavailable(productID: SubscriptionCatalog.monthlyProductID),
+            restoredStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            fetchStatusError: nil,
+            fetchProductsError: nil,
+            purchaseError: nil,
+            restoreError: nil
+        )
+        let vm = SubscriptionSettingsViewModel(service: service)
+
+        await vm.purchase(productID: SubscriptionCatalog.monthlyProductID)
+
+        XCTAssertEqual(vm.status.plan, .monthly)
+        XCTAssertNil(vm.errorMessage)
+        XCTAssertEqual(service.fetchStatusForceRefreshInputs, [true])
     }
 
     func testRestorePurchasesUpdatesStatus() async {
         let restored = SubscriptionStatus(plan: .monthly, expiryDate: Date(), trialEndDate: nil)
         let service = FakeSubscriptionService(
-            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            status: restored,
             products: [],
             purchaseOutcome: .pending,
             restoredStatus: restored,
@@ -112,6 +136,7 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
         await vm.restorePurchases()
 
         XCTAssertEqual(vm.status.plan, .monthly)
+        XCTAssertEqual(service.fetchStatusForceRefreshInputs, [true])
         XCTAssertNil(vm.errorMessage)
     }
 
@@ -228,6 +253,50 @@ final class SubscriptionSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(vm.trialRemainingDays, 0)
         XCTAssertFalse(vm.hasPremiumAccess)
     }
+
+    func testRefreshStatusSupportsForceRefreshFlag() async {
+        let service = FakeSubscriptionService(
+            status: .init(plan: .monthly, expiryDate: Date(), trialEndDate: nil),
+            products: [],
+            purchaseOutcome: .pending,
+            restoredStatus: .init(plan: .monthly, expiryDate: Date(), trialEndDate: nil),
+            fetchStatusError: nil,
+            fetchProductsError: nil,
+            purchaseError: nil,
+            restoreError: nil
+        )
+        let vm = SubscriptionSettingsViewModel(service: service)
+
+        await vm.refreshStatus()
+        await vm.refreshStatus(forceRefresh: true)
+
+        XCTAssertEqual(service.fetchStatusForceRefreshInputs, [false, true])
+    }
+
+    func testRefreshProductsUpdatesCatalog() async {
+        let monthly = SubscriptionProduct(
+            id: SubscriptionCatalog.monthlyProductID,
+            displayName: "Monthly",
+            displayPrice: "¥1,200",
+            plan: .monthly
+        )
+        let service = FakeSubscriptionService(
+            status: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            products: [monthly],
+            purchaseOutcome: .pending,
+            restoredStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil),
+            fetchStatusError: nil,
+            fetchProductsError: nil,
+            purchaseError: nil,
+            restoreError: nil
+        )
+        let vm = SubscriptionSettingsViewModel(service: service)
+
+        await vm.refreshProducts()
+
+        XCTAssertEqual(vm.products, [monthly])
+        XCTAssertEqual(service.fetchProductsCallCount, 1)
+    }
 }
 
 private final class FakeSubscriptionService: SubscriptionService {
@@ -239,6 +308,8 @@ private final class FakeSubscriptionService: SubscriptionService {
     private let fetchProductsError: Error?
     private let purchaseError: Error?
     private let restoreError: Error?
+    private(set) var fetchStatusForceRefreshInputs: [Bool] = []
+    private(set) var fetchProductsCallCount = 0
 
     init(
         status: SubscriptionStatus,
@@ -260,7 +331,8 @@ private final class FakeSubscriptionService: SubscriptionService {
         self.restoreError = restoreError
     }
 
-    func fetchStatus() async throws -> SubscriptionStatus {
+    func fetchStatus(forceRefresh: Bool) async throws -> SubscriptionStatus {
+        fetchStatusForceRefreshInputs.append(forceRefresh)
         if let fetchStatusError {
             throw fetchStatusError
         }
@@ -268,6 +340,7 @@ private final class FakeSubscriptionService: SubscriptionService {
     }
 
     func fetchProducts() async throws -> [SubscriptionProduct] {
+        fetchProductsCallCount += 1
         if let fetchProductsError {
             throw fetchProductsError
         }

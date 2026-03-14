@@ -108,7 +108,7 @@ private final class StubSubscriptionService: SubscriptionService {
         self.restoredStatus = restoredStatus
     }
 
-    func fetchStatus() async throws -> SubscriptionStatus {
+    func fetchStatus(forceRefresh _: Bool) async throws -> SubscriptionStatus {
         status
     }
 

@@ -2,6 +2,50 @@ import XCTest
 @testable import EpisodeStocker
 
 final class EpisodeModelTests: XCTestCase {
+    func testEpisodeDefaultInitializerAndRelationshipAccessors() {
+        let episode = Episode()
+
+        XCTAssertFalse(episode.id.uuidString.isEmpty)
+        XCTAssertTrue(episode.title.isEmpty)
+        XCTAssertNil(episode.body)
+        XCTAssertNil(episode.unlockDate)
+        XCTAssertNil(episode.type)
+        XCTAssertFalse(episode.isSoftDeleted)
+        XCTAssertNil(episode.deletedAt)
+        XCTAssertTrue(episode.tags.isEmpty)
+        XCTAssertTrue(episode.persons.isEmpty)
+        XCTAssertTrue(episode.projects.isEmpty)
+        XCTAssertTrue(episode.emotions.isEmpty)
+        XCTAssertTrue(episode.places.isEmpty)
+        XCTAssertTrue(episode.unlockLogs.isEmpty)
+
+        let tag = Tag(name: "#仕事", nameNormalized: "仕事")
+        let person = Person(name: "田中", nameNormalized: "田中")
+        let project = Project(name: "朝番組", nameNormalized: "朝番組")
+        let emotion = Emotion(name: "わくわく", nameNormalized: "わくわく")
+        let place = Place(name: "渋谷", nameNormalized: "渋谷")
+        let log = UnlockLog(
+            talkedAt: Date(),
+            reaction: ReleaseLogOutcome.hit.rawValue,
+            memo: "memo",
+            episode: episode
+        )
+
+        episode.tags = [tag]
+        episode.persons = [person]
+        episode.projects = [project]
+        episode.emotions = [emotion]
+        episode.places = [place]
+        episode.unlockLogs = [log]
+
+        XCTAssertEqual(episode.tags.first?.id, tag.id)
+        XCTAssertEqual(episode.persons.first?.id, person.id)
+        XCTAssertEqual(episode.projects.first?.id, project.id)
+        XCTAssertEqual(episode.emotions.first?.id, emotion.id)
+        XCTAssertEqual(episode.places.first?.id, place.id)
+        XCTAssertEqual(episode.unlockLogs.first?.id, log.id)
+    }
+
     func testIsUnlockedReturnsFalseWhenUnlockDateIsNil() {
         let episode = Episode(date: Date(), title: "No unlock date")
         episode.unlockDate = nil
@@ -117,6 +161,50 @@ final class EpisodeModelTests: XCTestCase {
         XCTAssertEqual(episode.reactionCount(.hit), 0)
     }
 
+    func testUnlockLogInitializerAndEpisodeAccessors() {
+        let episode1 = Episode(date: makeDate(2026, 2, 1), title: "E1")
+        let episode2 = Episode(date: makeDate(2026, 2, 2), title: "E2")
+        let talkedAt = makeDate(2026, 2, 3)
+        let createdAt = makeDate(2026, 2, 4)
+        let updatedAt = makeDate(2026, 2, 5)
+        let deletedAt = makeDate(2026, 2, 6)
+
+        let log = UnlockLog(
+            id: UUID(),
+            talkedAt: talkedAt,
+            mediaPublicAt: makeDate(2026, 2, 10),
+            mediaType: ReleaseLogMediaPreset.streaming.rawValue,
+            projectNameText: "P",
+            reaction: ReleaseLogOutcome.soSo.rawValue,
+            memo: "Memo",
+            episode: episode1,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            isSoftDeleted: true,
+            deletedAt: deletedAt
+        )
+
+        XCTAssertEqual(log.talkedAt, talkedAt)
+        XCTAssertEqual(log.mediaType, ReleaseLogMediaPreset.streaming.rawValue)
+        XCTAssertEqual(log.projectNameText, "P")
+        XCTAssertEqual(log.reaction, ReleaseLogOutcome.soSo.rawValue)
+        XCTAssertEqual(log.memo, "Memo")
+        XCTAssertEqual(log.createdAt, createdAt)
+        XCTAssertEqual(log.updatedAt, updatedAt)
+        XCTAssertTrue(log.isSoftDeleted)
+        XCTAssertEqual(log.deletedAt, deletedAt)
+        XCTAssertEqual(log.episode?.id, episode1.id)
+        XCTAssertEqual(log.episode?.id, episode1.id)
+
+        log.episode = episode2
+        XCTAssertEqual(log.episode?.id, episode2.id)
+        XCTAssertEqual(log.episode?.id, episode2.id)
+
+        log.episode = nil
+        XCTAssertNil(log.episode)
+        XCTAssertNil(log.episode)
+    }
+
     func testEpisodeInitializerAssignsProvidedValues() {
         let now = makeDate(2026, 2, 20)
         let created = makeDate(2026, 2, 21)
@@ -161,6 +249,91 @@ final class EpisodeModelTests: XCTestCase {
         XCTAssertEqual(episode.places.count, 1)
     }
 
+    func testEntityInitializersAndEpisodesAccessors() {
+        let episode = Episode(date: makeDate(2026, 2, 1), title: "Target")
+        let date = makeDate(2026, 2, 2)
+
+        let tag = Tag(
+            id: UUID(),
+            name: "#学び",
+            nameNormalized: "学び",
+            createdAt: date,
+            updatedAt: date,
+            isSoftDeleted: true,
+            deletedAt: date,
+            episodes: [episode]
+        )
+        XCTAssertEqual(tag.episodes.count, 1)
+        XCTAssertEqual(tag.episodes.first?.id, episode.id)
+        XCTAssertTrue(tag.isSoftDeleted)
+        XCTAssertEqual(tag.deletedAt, date)
+
+        let person = Person(
+            id: UUID(),
+            name: "Alice",
+            nameNormalized: "alice",
+            createdAt: date,
+            updatedAt: date,
+            isSoftDeleted: true,
+            deletedAt: date,
+            episodes: [episode]
+        )
+        XCTAssertEqual(person.episodes.count, 1)
+        XCTAssertEqual(person.episodes.first?.id, episode.id)
+
+        let project = Project(
+            id: UUID(),
+            name: "Morning Show",
+            nameNormalized: "morning show",
+            createdAt: date,
+            updatedAt: date,
+            isSoftDeleted: true,
+            deletedAt: date,
+            episodes: [episode]
+        )
+        XCTAssertEqual(project.episodes.count, 1)
+        XCTAssertEqual(project.episodes.first?.id, episode.id)
+
+        let emotion = Emotion(
+            id: UUID(),
+            name: "嬉しい",
+            nameNormalized: "嬉しい",
+            createdAt: date,
+            updatedAt: date,
+            isSoftDeleted: true,
+            deletedAt: date,
+            episodes: [episode]
+        )
+        XCTAssertEqual(emotion.episodes.count, 1)
+        XCTAssertEqual(emotion.episodes.first?.id, episode.id)
+
+        let place = Place(
+            id: UUID(),
+            name: "渋谷",
+            nameNormalized: "渋谷",
+            createdAt: date,
+            updatedAt: date,
+            isSoftDeleted: true,
+            deletedAt: date,
+            episodes: [episode]
+        )
+        XCTAssertEqual(place.episodes.count, 1)
+        XCTAssertEqual(place.episodes.first?.id, episode.id)
+
+        let another = Episode(date: makeDate(2026, 2, 9), title: "Another")
+        tag.episodes = [another]
+        person.episodes = [another]
+        project.episodes = [another]
+        emotion.episodes = [another]
+        place.episodes = [another]
+
+        XCTAssertEqual(tag.episodes.first?.id, another.id)
+        XCTAssertEqual(person.episodes.first?.id, another.id)
+        XCTAssertEqual(project.episodes.first?.id, another.id)
+        XCTAssertEqual(emotion.episodes.first?.id, another.id)
+        XCTAssertEqual(place.episodes.first?.id, another.id)
+    }
+
     func testReleaseLogAndSettingIdentityProperties() {
         XCTAssertEqual(ReleaseLogOutcome.hit.id, ReleaseLogOutcome.hit.rawValue)
         XCTAssertEqual(ReleaseLogOutcome.soSo.label, ReleaseLogOutcome.soSo.rawValue)
@@ -168,6 +341,41 @@ final class EpisodeModelTests: XCTestCase {
 
         let item = SettingItem(key: "k", value: "v")
         XCTAssertFalse(item.id.uuidString.isEmpty)
+    }
+
+    func testAllReleaseMediaPresetsAndSubscriptionPlansAreCovered() {
+        let presetValues = ReleaseLogMediaPreset.allCases.map(\.rawValue)
+        XCTAssertEqual(
+            presetValues,
+            ["テレビ", "配信", "ラジオ", "雑誌", "イベント", "SNS", "その他"]
+        )
+        XCTAssertEqual(ReleaseLogMediaPreset.allCases.map(\.id), presetValues)
+
+        XCTAssertEqual(
+            SubscriptionStatus.Plan.allCases.map(\.rawValue),
+            ["free", "monthly", "yearly"]
+        )
+
+        let monthly = SubscriptionStatus(
+            plan: .monthly,
+            expiryDate: makeDate(2026, 3, 1),
+            trialEndDate: nil,
+            willAutoRenew: false
+        )
+        let yearly = SubscriptionStatus(
+            plan: .yearly,
+            expiryDate: makeDate(2027, 3, 1),
+            trialEndDate: nil,
+            willAutoRenew: false
+        )
+        XCTAssertEqual(monthly.plan, .monthly)
+        XCTAssertNil(monthly.nextPlan)
+        XCTAssertNil(monthly.nextPlanEffectiveDate)
+        XCTAssertEqual(monthly.willAutoRenew, false)
+        XCTAssertEqual(yearly.plan, .yearly)
+        XCTAssertNil(yearly.nextPlan)
+        XCTAssertNil(yearly.nextPlanEffectiveDate)
+        XCTAssertEqual(yearly.willAutoRenew, false)
     }
 }
 

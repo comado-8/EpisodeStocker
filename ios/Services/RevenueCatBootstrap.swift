@@ -18,7 +18,9 @@ enum RevenueCatBootstrap {
                 return
             }
 
+            #if DEBUG
             NSLog("RevenueCat disabled: REVENUECAT_API_KEY is missing.")
+            #endif
             return
         }
 

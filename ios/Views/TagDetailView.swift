@@ -33,7 +33,7 @@ struct TagDetailView: View {
 
   var body: some View {
     GeometryReader { proxy in
-      let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
+      let contentWidth = HomeStyle.primaryScreenContentWidth(for: proxy.size.width)
 
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {

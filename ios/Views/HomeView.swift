@@ -23,6 +23,7 @@ struct HomeView: View {
     @State private var showsDeleteAlert = false
     @State private var suppressNextNavigation = false
     @State private var isRevertingSortSelection = false
+    @State private var isEpisodeLimitNoticeCollapsed = false
     @State private var scrollContentHeight: CGFloat = 0
     @State private var scrollViewportHeight: CGFloat = 0
     @FocusState private var isSearchFocused: Bool
@@ -110,9 +111,15 @@ struct HomeView: View {
         isAdvancedSearchPendingResolution || isAdvancedSearchLocked
     }
 
+    private var isFreeEpisodeLimitReached: Bool {
+        guard premiumAccess.hasLoadedStatus else { return false }
+        guard !premiumAccess.hasAccess(to: .episodeQuotaOver50) else { return false }
+        return episodes.count >= PremiumAccessViewModel.freeEpisodeLimit
+    }
+
     var body: some View {
         GeometryReader { proxy in
-            let contentWidth = HomeStyle.contentWidth(for: proxy.size.width)
+            let contentWidth = HomeStyle.primaryScreenContentWidth(for: proxy.size.width)
             let segmentedWidth = contentWidth
             let bottomInset = baseSafeAreaBottom()
             let topPadding = max(0, HomeStyle.figmaTopInset - proxy.safeAreaInsets.top)
@@ -249,6 +256,18 @@ struct HomeView: View {
                                     .id(HomeScrollAnchor.top)
 
                                 VStack(spacing: HomeStyle.sectionSpacing) {
+                                    if isFreeEpisodeLimitReached {
+                                        HomeEpisodeLimitNoticeCard(
+                                            limit: PremiumAccessViewModel.freeEpisodeLimit,
+                                            isCollapsed: isEpisodeLimitNoticeCollapsed,
+                                            onToggleCollapsed: {
+                                                isEpisodeLimitNoticeCollapsed.toggle()
+                                            },
+                                            onUpgrade: { router.presentPaywall(.episodeQuotaOver50) }
+                                        )
+                                        .frame(width: contentWidth)
+                                    }
+
                                     if isShowingSearchResults {
                                         HStack(spacing: 8) {
                                             Text("検索結果")
@@ -328,7 +347,9 @@ struct HomeView: View {
 
                 if !isSelectionMode {
                     HomeFloatingButton {
-                        router.push(.newEpisode)
+                        Task {
+                            await handleNewEpisodeTap()
+                        }
                     }
                     .padding(.trailing, max(HomeStyle.fabTrailing, HomeStyle.horizontalPadding))
                     .padding(.bottom, fabBottomPadding)
@@ -387,6 +408,11 @@ struct HomeView: View {
             sanitizeAdvancedSearchStateIfNeeded()
             sanitizeSortOptionIfNeeded()
         }
+        .onChange(of: isFreeEpisodeLimitReached) { _, reached in
+            if !reached {
+                isEpisodeLimitNoticeCollapsed = false
+            }
+        }
         .task {
             await premiumAccess.ensureStatusLoaded()
             sanitizeAdvancedSearchStateIfNeeded()
@@ -416,6 +442,17 @@ private enum HomeScrollAnchor: Hashable {
 }
 
 private extension HomeView {
+    @MainActor
+    func handleNewEpisodeTap() async {
+        await premiumAccess.ensureStatusLoaded()
+        guard premiumAccess.hasLoadedStatus else { return }
+        guard premiumAccess.canCreateEpisode(currentActiveCount: episodes.count) else {
+            router.presentPaywall(.episodeQuotaOver50)
+            return
+        }
+        router.push(.newEpisode)
+    }
+
     func hasAnySearchCondition() -> Bool {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty || !searchTokens.isEmpty
@@ -752,6 +789,76 @@ private struct HomeSelectionStatusRow: View {
     }
 }
 
+private struct HomeEpisodeLimitNoticeCard: View {
+    let limit: Int
+    let isCollapsed: Bool
+    let onToggleCollapsed: () -> Void
+    let onUpgrade: () -> Void
+
+    private enum Style {
+        static let cornerRadius: CGFloat = 14
+        static let ctaHeight: CGFloat = 46
+        static let toggleButtonSize: CGFloat = 28
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                Text("無料プランのエピソード数上限に達しています")
+                    .font(AppTypography.subtextEmphasis)
+                    .foregroundColor(HomeStyle.textPrimary)
+                    .lineLimit(isCollapsed ? 1 : nil)
+
+                Spacer(minLength: 0)
+
+                Button(action: onToggleCollapsed) {
+                    Image(systemName: isCollapsed ? "plus" : "minus")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(HomeStyle.textSecondary)
+                        .frame(width: Style.toggleButtonSize, height: Style.toggleButtonSize)
+                        .background(
+                            Circle()
+                                .fill(HomeStyle.screenBackground)
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(HomeStyle.searchModeBorder, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isCollapsed ? "上限案内を展開" : "上限案内を折りたたむ")
+            }
+
+            if !isCollapsed {
+                Text("無料ユーザーは\(limit)件まで登録できます。\(limit + 1)件目以降はProで作成できます。")
+                    .font(AppTypography.subtext)
+                    .foregroundColor(HomeStyle.textSecondary)
+
+                Button(action: onUpgrade) {
+                    Text("Proで上限を解除")
+                        .font(AppTypography.subtextEmphasis)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: Style.ctaHeight)
+                        .background(HomeStyle.fabRed)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: Style.cornerRadius, style: .continuous)
+                .fill(HomeStyle.background)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Style.cornerRadius, style: .continuous)
+                .stroke(HomeStyle.searchModeBorder, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+    }
+}
+
 private enum HomeEpisodeSortOption: String, CaseIterable, Identifiable {
     case createdAtDescending = "エピソード日付(新しい順)"
     case createdAtAscending = "エピソード日付(古い順)"
@@ -921,6 +1028,7 @@ private struct HomeEpisodeSortControl: View {
                 .truncationMode(.tail)
                 .layoutPriority(1)
                 .opacity(isPendingOption ? 0.5 : 1)
+                .blur(radius: isLockedOption ? 1.1 : 0)
 
             Spacer(minLength: 0)
         }

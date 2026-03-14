@@ -165,20 +165,33 @@ final class EncryptedManualBackupService: ManualBackupService {
             )
         }
 
-        let unlockLogRecords = unlockLogs.map {
-            ManualBackupPayloadV1.UnlockLogRecord(
-                id: $0.id,
-                talkedAt: $0.talkedAt,
-                mediaPublicAt: $0.mediaPublicAt,
-                mediaType: $0.mediaType,
-                projectNameText: $0.projectNameText,
-                reaction: $0.reaction,
-                memo: $0.memo,
-                createdAt: $0.createdAt,
-                updatedAt: $0.updatedAt,
-                isSoftDeleted: $0.isSoftDeleted,
-                deletedAt: $0.deletedAt,
-                episodeID: $0.episode.id
+        var orphanedUnlockLogIDs: [UUID] = []
+        let unlockLogRecords = unlockLogs.reduce(into: [ManualBackupPayloadV1.UnlockLogRecord]()) { records, log in
+            guard let episodeID = log.episode?.id else {
+                orphanedUnlockLogIDs.append(log.id)
+                return
+            }
+            records.append(
+                ManualBackupPayloadV1.UnlockLogRecord(
+                    id: log.id,
+                    talkedAt: log.talkedAt,
+                    mediaPublicAt: log.mediaPublicAt,
+                    mediaType: log.mediaType,
+                    projectNameText: log.projectNameText,
+                    reaction: log.reaction,
+                    memo: log.memo,
+                    createdAt: log.createdAt,
+                    updatedAt: log.updatedAt,
+                    isSoftDeleted: log.isSoftDeleted,
+                    deletedAt: log.deletedAt,
+                    episodeID: episodeID
+                )
+            )
+        }
+        if !orphanedUnlockLogIDs.isEmpty {
+            let joinedIDs = orphanedUnlockLogIDs.map(\.uuidString).joined(separator: ", ")
+            throw ManualBackupError.validationFailed(
+                reason: "UnlockLogに紐づくEpisodeが存在しません。unlockLogIDs=\(joinedIDs)"
             )
         }
 

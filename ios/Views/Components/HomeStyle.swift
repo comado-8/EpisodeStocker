@@ -2,10 +2,21 @@ import SwiftUI
 
 enum HomeStyle {
     static let baseContentWidth: CGFloat = 360
+    static let regularContentWidth: CGFloat = 760
+    static let regularLayoutThreshold: CGFloat = 700
     static let horizontalPadding: CGFloat = 16
     static func contentWidth(for totalWidth: CGFloat) -> CGFloat {
         let maxWidth = totalWidth - (horizontalPadding * 2)
         return min(baseContentWidth, maxWidth)
+    }
+    static func primaryScreenContentWidth(for totalWidth: CGFloat) -> CGFloat {
+        ScreenStyle.contentWidth(
+            totalWidth: totalWidth,
+            baseContentWidth: baseContentWidth,
+            regularContentWidth: regularContentWidth,
+            regularLayoutThreshold: regularLayoutThreshold,
+            horizontalPadding: horizontalPadding
+        )
     }
     static let figmaTopInset: CGFloat = 61
     static let sectionSpacing: CGFloat = 8

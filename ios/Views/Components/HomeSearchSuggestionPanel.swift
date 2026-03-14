@@ -12,7 +12,6 @@ struct HomeSearchSuggestionPanel: View {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     let isLocked = isItemLocked(item)
                     Button {
-                        guard !isLocked else { return }
                         onSelect(item)
                     } label: {
                         ZStack(alignment: .trailing) {
@@ -28,8 +27,9 @@ struct HomeSearchSuggestionPanel: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .buttonStyle(.plain)
-                    .disabled(isLocked)
-                    .accessibilityHint(isLocked ? "有料プランで利用できます" : "候補を追加")
+                    .accessibilityHint(
+                        isLocked ? "タップすると有料プラン案内を表示します" : "候補を追加"
+                    )
 
                     if index < items.count - 1 {
                         Rectangle()

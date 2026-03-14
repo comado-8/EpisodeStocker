@@ -562,7 +562,11 @@ enum HomeSearchQueryEngine {
             filtered = Array(values.keys)
         } else {
             filtered = values.keys.filter {
-                normalizeSuggestionValue($0, for: field).contains(normalizedQuery)
+                suggestionCandidateMatches(
+                    field: field,
+                    candidate: normalizeSuggestionValue($0, for: field),
+                    query: normalizedQuery
+                )
             }
         }
 
@@ -622,6 +626,19 @@ enum HomeSearchQueryEngine {
 
     private static func normalizeSuggestionValue(_ raw: String, for field: HomeSearchField) -> String {
         normalizeTokenValue(raw, field: field).lowercased()
+    }
+
+    private static func suggestionCandidateMatches(
+        field: HomeSearchField,
+        candidate: String,
+        query: String
+    ) -> Bool {
+        switch field {
+        case .tag, .person, .project, .emotion, .place:
+            return candidate.hasPrefix(query)
+        case .talkCount, .lastTalkedAt, .registeredDate, .mediaType, .reaction:
+            return candidate.contains(query)
+        }
     }
 
     private static func stripPersonHonorific(_ value: String) -> String {

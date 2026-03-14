@@ -59,4 +59,28 @@ final class SeedDataTests: XCTestCase {
         let episodes = try context.fetch(FetchDescriptor<Episode>())
         XCTAssertTrue(episodes.isEmpty)
     }
+
+    func testShouldSeedSampleDataIsDisabledOnPhysicalDeviceReleasePath() {
+        XCTAssertFalse(
+            EpisodeStockerApp.shouldSeedSampleData(
+                isRunningTests: false,
+                isSimulator: false
+            )
+        )
+    }
+
+    func testShouldSeedSampleDataIsEnabledOnSimulatorOrTests() {
+        XCTAssertTrue(
+            EpisodeStockerApp.shouldSeedSampleData(
+                isRunningTests: false,
+                isSimulator: true
+            )
+        )
+        XCTAssertTrue(
+            EpisodeStockerApp.shouldSeedSampleData(
+                isRunningTests: true,
+                isSimulator: false
+            )
+        )
+    }
 }

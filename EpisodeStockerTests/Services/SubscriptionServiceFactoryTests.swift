@@ -72,7 +72,7 @@ private final class MarkerSubscriptionService: SubscriptionService {
         self.marker = marker
     }
 
-    func fetchStatus() async throws -> SubscriptionStatus {
+    func fetchStatus(forceRefresh _: Bool) async throws -> SubscriptionStatus {
         .init(plan: .free, expiryDate: nil, trialEndDate: nil)
     }
 

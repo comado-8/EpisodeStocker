@@ -72,7 +72,7 @@ final class EncryptedManualBackupServiceTests: XCTestCase {
         let unlockLogs = try context.fetch(FetchDescriptor<UnlockLog>())
         XCTAssertEqual(unlockLogs.count, 1)
         XCTAssertEqual(unlockLogs.first?.id, original.unlockLogID)
-        XCTAssertEqual(unlockLogs.first?.episode.id, original.episodeID)
+        XCTAssertEqual(unlockLogs.first?.episode?.id, original.episodeID)
     }
 
     func testInspectWithWrongPassphraseThrowsWrongPassphrase() async throws {
@@ -85,6 +85,29 @@ final class EncryptedManualBackupServiceTests: XCTestCase {
             XCTFail("Expected failure")
         } catch let error as ManualBackupError {
             XCTAssertEqual(error, .wrongPassphrase)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testExportFailsWhenUnlockLogHasNoEpisodeReference() async throws {
+        let seeded = try seedPrimaryRecord()
+        let episodes = try context.fetch(FetchDescriptor<Episode>())
+        XCTAssertEqual(episodes.count, 1)
+        if let episode = episodes.first {
+            context.delete(episode)
+        }
+        try context.save()
+
+        let service = makeService(now: Date.init)
+        do {
+            _ = try await service.exportEncryptedBackup(passphrase: "passphrase-123")
+            XCTFail("Expected failure")
+        } catch let error as ManualBackupError {
+            guard case .validationFailed(let reason) = error else {
+                return XCTFail("Unexpected backup error: \(error)")
+            }
+            XCTAssertTrue(reason.contains(seeded.unlockLogID.uuidString))
         } catch {
             XCTFail("Unexpected error: \(error)")
         }

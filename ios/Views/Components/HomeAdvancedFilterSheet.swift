@@ -16,6 +16,11 @@ struct HomeAdvancedFilterSheet: View {
         mode == .preview
     }
 
+    private enum PreviewUpgradeCTAStyle {
+        static let height: CGFloat = 52
+        static let horizontalInset: CGFloat = 16
+    }
+
     private var talkedStartDateEnabled: Binding<Bool> {
         Binding(
             get: { draft.startDate != nil },
@@ -135,12 +140,13 @@ struct HomeAdvancedFilterSheet: View {
                     Text("Proで詳細検索を使う")
                         .font(AppTypography.bodyEmphasis)
                         .foregroundColor(.white)
-                        .frame(height: 44)
-                        .padding(.horizontal, 24)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: PreviewUpgradeCTAStyle.height)
                         .background(HomeStyle.fabRed)
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .padding(.horizontal, PreviewUpgradeCTAStyle.horizontalInset)
                 .onAppear {
                     assert(onUpgrade != nil, "onUpgrade must be provided in preview mode")
                 }

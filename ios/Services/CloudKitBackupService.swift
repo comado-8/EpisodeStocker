@@ -13,8 +13,11 @@ struct NoopCloudBackupJobRunner: CloudBackupJobRunner {
 
 final class CloudKitBackupService: CloudBackupService {
     static let appleAccountSignInRequiredReason = "iCloudにサインインしてください。"
+    static let migrationPendingReason = "同期準備中です。アプリを再起動して続行してください。"
+    static let runtimeDisabledReason = "このビルドではクラウド同期を開始できません。アプリ更新後に再度お試しください。"
 
     private let cloudKitClient: CloudKitClient
+    private let settingsRepository: SettingsRepository
     private let preferenceRepository: CloudSyncPreferenceRepository
     private let cloudSyncModeResolver: CloudSyncModeResolving
     private let backupJobRunner: CloudBackupJobRunner
@@ -30,6 +33,7 @@ final class CloudKitBackupService: CloudBackupService {
         let preferenceRepository = UserDefaultsCloudSyncPreferenceRepository(settingsRepository: settingsRepository)
         let entitlementCache = UserDefaultsSubscriptionEntitlementCache(settingsRepository: settingsRepository)
         self.cloudKitClient = cloudKitClient
+        self.settingsRepository = settingsRepository
         self.preferenceRepository = preferenceRepository
         self.cloudSyncModeResolver = cloudSyncModeResolver
             ?? DefaultCloudSyncModeResolver(
@@ -41,6 +45,15 @@ final class CloudKitBackupService: CloudBackupService {
     }
 
     func availability() async -> CloudBackupAvailability {
+        if settingsRepository.bool(for: .cloudSyncRuntimeDisabled) {
+            return .unavailable(reason: Self.runtimeDisabledReason)
+        }
+        if preferenceRepository.isCloudSyncRequested()
+            && !settingsRepository.bool(for: .cloudSyncMigrationPrepared)
+        {
+            return .unavailable(reason: Self.migrationPendingReason)
+        }
+
         do {
             let status = try await cloudKitClient.accountStatus()
             switch status {

@@ -39,6 +39,19 @@ Xcode で `EpisodeStocker.xcodeproj` を開き、以下を追加:
 ただし、Scheme の環境変数は **Xcode から起動したローカル実行時のみ有効** で、Archive / TestFlight / App Store ビルドには含まれません。
 本番配布向けには `xcconfig` / Build Configuration / `Info.plist` 注入などのビルド時設定、または安全なキー管理を使って注入してください。
 必要なら値は macOS Keychain で管理し、起動前に環境変数へ読み込む運用にします。
+
+### Sandbox手動テスト時の推奨運用（Xcode外再起動を含む）
+
+Sandboxで「アプリ再起動後のPaywall/復元」を確認する場合は、`Run > Environment Variables` 依存にしないでください。
+実機ホーム画面から再起動すると環境変数は失われ、RevenueCat未設定扱いになります。
+
+推奨は以下です。
+
+1. `Config/RevenueCat.Debug.xcconfig` をローカル作成（gitignore対象）
+2. `REVENUECAT_API_KEY = <public_sdk_key>` を設定
+3. Debugビルドを実機にインストールしてから、Xcode接続なしでも再起動テストを実施
+
+これにより、`1.2 Sandboxテスト` の「復元成功」「再起動後Pro状態維持」「キャンセル確認」の再現性が上がります。
 `xcconfig` を使う場合の手順:
 
 1. `Config/RevenueCat.xcconfig.example` をコピーして以下を作成:

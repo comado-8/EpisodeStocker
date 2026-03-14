@@ -3,35 +3,35 @@ import SwiftData
 
 @Model
 final class Episode {
-    @Attribute(.unique) var id: UUID
-    var date: Date
-    var title: String
+    var id: UUID = UUID()
+    var date: Date = Date()
+    var title: String = ""
     var body: String?
     var unlockDate: Date?
     var type: String?
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
 
     @Relationship(deleteRule: .nullify)
-    var tags: [Tag]
+    var tags: [Tag] = []
     @Relationship(deleteRule: .nullify)
-    var persons: [Person]
+    var persons: [Person] = []
     @Relationship(deleteRule: .nullify)
-    var projects: [Project]
+    var projects: [Project] = []
     @Relationship(deleteRule: .nullify)
-    var emotions: [Emotion]
+    var emotions: [Emotion] = []
     @Relationship(deleteRule: .nullify)
-    var places: [Place]
+    var places: [Place] = []
 
     @Relationship(deleteRule: .nullify)
-    var unlockLogs: [UnlockLog]
+    var unlockLogs: [UnlockLog] = []
 
     init(
         id: UUID = UUID(),
-        date: Date,
-        title: String,
+        date: Date = Date(),
+        title: String = "",
         body: String? = nil,
         unlockDate: Date? = nil,
         type: String? = nil,
@@ -72,19 +72,20 @@ final class Episode {
 
 @Model
 final class UnlockLog {
-    @Attribute(.unique) var id: UUID
-    var talkedAt: Date
+    var id: UUID = UUID()
+    var talkedAt: Date = Date()
     var mediaPublicAt: Date?
     var mediaType: String?
     var projectNameText: String?
-    var reaction: String
-    var memo: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var reaction: String = ""
+    var memo: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
 
-    var episode: Episode
+    @Relationship(deleteRule: .nullify, inverse: \Episode.unlockLogs)
+    var episode: Episode?
 
     init(
         id: UUID = UUID(),
@@ -117,15 +118,15 @@ final class UnlockLog {
 
 @Model
 final class Tag {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var nameNormalized: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var id: UUID = UUID()
+    var name: String = ""
+    var nameNormalized: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
-    @Relationship(inverse: \Episode.tags)
-    var episodes: [Episode]
+    @Relationship(deleteRule: .nullify, inverse: \Episode.tags)
+    var episodes: [Episode] = []
 
     init(
         id: UUID = UUID(),
@@ -150,13 +151,15 @@ final class Tag {
 
 @Model
 final class Person {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var nameNormalized: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var id: UUID = UUID()
+    var name: String = ""
+    var nameNormalized: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
+    @Relationship(deleteRule: .nullify, inverse: \Episode.persons)
+    var episodes: [Episode] = []
 
     init(
         id: UUID = UUID(),
@@ -165,7 +168,8 @@ final class Person {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         isSoftDeleted: Bool = false,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        episodes: [Episode] = []
     ) {
         self.id = id
         self.name = name
@@ -174,18 +178,21 @@ final class Person {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
+        self.episodes = episodes
     }
 }
 
 @Model
 final class Project {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var nameNormalized: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var id: UUID = UUID()
+    var name: String = ""
+    var nameNormalized: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
+    @Relationship(deleteRule: .nullify, inverse: \Episode.projects)
+    var episodes: [Episode] = []
 
     init(
         id: UUID = UUID(),
@@ -194,7 +201,8 @@ final class Project {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         isSoftDeleted: Bool = false,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        episodes: [Episode] = []
     ) {
         self.id = id
         self.name = name
@@ -203,18 +211,21 @@ final class Project {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
+        self.episodes = episodes
     }
 }
 
 @Model
 final class Emotion {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var nameNormalized: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var id: UUID = UUID()
+    var name: String = ""
+    var nameNormalized: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
+    @Relationship(deleteRule: .nullify, inverse: \Episode.emotions)
+    var episodes: [Episode] = []
 
     init(
         id: UUID = UUID(),
@@ -223,7 +234,8 @@ final class Emotion {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         isSoftDeleted: Bool = false,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        episodes: [Episode] = []
     ) {
         self.id = id
         self.name = name
@@ -232,18 +244,21 @@ final class Emotion {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
+        self.episodes = episodes
     }
 }
 
 @Model
 final class Place {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var nameNormalized: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isSoftDeleted: Bool
+    var id: UUID = UUID()
+    var name: String = ""
+    var nameNormalized: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isSoftDeleted: Bool = false
     var deletedAt: Date?
+    @Relationship(deleteRule: .nullify, inverse: \Episode.places)
+    var episodes: [Episode] = []
 
     init(
         id: UUID = UUID(),
@@ -252,7 +267,8 @@ final class Place {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         isSoftDeleted: Bool = false,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        episodes: [Episode] = []
     ) {
         self.id = id
         self.name = name
@@ -261,6 +277,7 @@ final class Place {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
+        self.episodes = episodes
     }
 }
 
@@ -308,6 +325,9 @@ struct SubscriptionStatus: Codable, Equatable {
     var plan: Plan
     var expiryDate: Date?
     var trialEndDate: Date?
+    var nextPlan: Plan? = nil
+    var nextPlanEffectiveDate: Date? = nil
+    var willAutoRenew: Bool? = nil
 
     enum Plan: String, Codable, CaseIterable {
         case free
