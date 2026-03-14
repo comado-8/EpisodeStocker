@@ -10,11 +10,13 @@ enum HomeStyle {
         return min(baseContentWidth, maxWidth)
     }
     static func primaryScreenContentWidth(for totalWidth: CGFloat) -> CGFloat {
-        let maxWidth = totalWidth - (horizontalPadding * 2)
-        guard totalWidth >= regularLayoutThreshold else {
-            return min(baseContentWidth, maxWidth)
-        }
-        return min(regularContentWidth, maxWidth)
+        ScreenStyle.contentWidth(
+            totalWidth: totalWidth,
+            baseContentWidth: baseContentWidth,
+            regularContentWidth: regularContentWidth,
+            regularLayoutThreshold: regularLayoutThreshold,
+            horizontalPadding: horizontalPadding
+        )
     }
     static let figmaTopInset: CGFloat = 61
     static let sectionSpacing: CGFloat = 8

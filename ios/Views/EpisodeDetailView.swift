@@ -1667,11 +1667,13 @@ private enum DetailStyle {
   static let modalBackground = Color.white
 
   static func contentWidth(for totalWidth: CGFloat) -> CGFloat {
-    let availableWidth = totalWidth - horizontalPadding * 2
-    guard totalWidth >= regularLayoutThreshold else {
-      return min(baseContentWidth, availableWidth)
-    }
-    return min(regularContentWidth, availableWidth)
+    ScreenStyle.contentWidth(
+      totalWidth: totalWidth,
+      baseContentWidth: baseContentWidth,
+      regularContentWidth: regularContentWidth,
+      regularLayoutThreshold: regularLayoutThreshold,
+      horizontalPadding: horizontalPadding
+    )
   }
   static let modalPrimaryFill = HomeStyle.fabRed
   static let modalButtonBorder = Color(hex: "D1D5DC")

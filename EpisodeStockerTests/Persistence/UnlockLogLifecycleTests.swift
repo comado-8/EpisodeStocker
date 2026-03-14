@@ -43,7 +43,7 @@ final class UnlockLogLifecycleTests: XCTestCase {
             memo: "メモ"
         )
 
-        XCTAssertEqual(log.episode.id, episode.id)
+        XCTAssertEqual(log.episode?.id, episode.id)
         XCTAssertTrue(episode.unlockLogs.contains(where: { $0.id == log.id }))
         XCTAssertEqual(log.mediaType, ReleaseLogMediaPreset.tv.rawValue)
 

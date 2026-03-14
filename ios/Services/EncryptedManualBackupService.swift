@@ -165,8 +165,21 @@ final class EncryptedManualBackupService: ManualBackupService {
             )
         }
 
-        let unlockLogRecords: [ManualBackupPayloadV1.UnlockLogRecord] = unlockLogs.compactMap { log in
-            guard let episodeID = log.episodeOrNil?.id else { return nil }
+        let orphanedUnlockLogIDs = unlockLogs.compactMap { log in
+            log.episodeOrNil == nil ? log.id : nil
+        }
+        if !orphanedUnlockLogIDs.isEmpty {
+            let joinedIDs = orphanedUnlockLogIDs.map(\.uuidString).joined(separator: ", ")
+            throw ManualBackupError.validationFailed(
+                reason: "UnlockLogに紐づくEpisodeが存在しません。unlockLogIDs=\(joinedIDs)"
+            )
+        }
+        let unlockLogRecords: [ManualBackupPayloadV1.UnlockLogRecord] = try unlockLogs.map { log in
+            guard let episodeID = log.episodeOrNil?.id else {
+                throw ManualBackupError.validationFailed(
+                    reason: "UnlockLogに紐づくEpisodeが存在しません。unlockLogID=\(log.id.uuidString)"
+                )
+            }
             return ManualBackupPayloadV1.UnlockLogRecord(
                 id: log.id,
                 talkedAt: log.talkedAt,

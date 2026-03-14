@@ -296,8 +296,6 @@ private struct RootTabContainer: View {
                         isCloudSyncEnabled: effectiveCloudSyncEnabled
                     )
                 }
-            }
-            .task {
                 cloudSyncStatusKeeper.start()
             }
             .task { await premiumAccess.ensureStatusLoaded() }

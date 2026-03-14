@@ -151,7 +151,7 @@ struct NewEpisodeView: View {
       let horizontalPadding = max(
         NewEpisodeStyle.horizontalPadding, (proxy.size.width - contentWidth) / 2)
       let topPadding = max(0, NewEpisodeStyle.figmaTopInset - proxy.safeAreaInsets.top)
-      let isRegularWidth = proxy.size.width >= HomeStyle.regularLayoutThreshold
+      let isRegularWidth = proxy.size.width >= NewEpisodeStyle.regularLayoutThreshold
       let tabBarOffset = isRegularWidth ? HomeStyle.tabBarHeight : max(0, HomeStyle.tabBarHeight - 48)
 
       let actionBarHeight = NewEpisodeStyle.actionBarContentHeight + 1

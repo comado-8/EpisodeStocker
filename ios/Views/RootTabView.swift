@@ -97,7 +97,7 @@ struct RootTabView: View {
     }
 
     // For manual QA, set FORCE_RC_FALLBACK=1 to force settings fallback.
-    private static var shouldForceRevenueCatFallback: Bool {
+    private static let shouldForceRevenueCatFallback: Bool = {
         #if DEBUG
         let processInfo = ProcessInfo.processInfo
 
@@ -113,7 +113,7 @@ struct RootTabView: View {
         }
         #endif
         return false
-    }
+    }()
 
     private static func parseEnvironmentBoolean(_ raw: String) -> Bool? {
         switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {

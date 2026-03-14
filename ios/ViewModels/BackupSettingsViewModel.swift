@@ -75,6 +75,10 @@ final class BackupSettingsViewModel: ObservableObject {
         return trialEndDate > Date()
     }
 
+    var hasBackupAccess: Bool {
+        canUseBackup
+    }
+
     var availabilityMessage: String {
         switch availability {
         case .available:
@@ -113,8 +117,14 @@ final class BackupSettingsViewModel: ObservableObject {
     }
 
     func refreshSubscriptionStatus(using service: SubscriptionService) async {
-        if !hasResolvedSubscriptionStatus {
+        let needsInitialResolutionCompletion = !hasResolvedSubscriptionStatus
+        if needsInitialResolutionCompletion {
             beginInitialSubscriptionResolutionIfNeeded()
+        }
+        defer {
+            if needsInitialResolutionCompletion, isInitialSubscriptionResolving {
+                completeInitialSubscriptionResolution()
+            }
         }
         do {
             let status = try await service.fetchStatus()

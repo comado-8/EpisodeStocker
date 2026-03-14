@@ -85,9 +85,8 @@ final class RevenueCatSubscriptionService: SubscriptionService {
     func restorePurchases() async throws -> SubscriptionStatus {
         try ensureConfigured()
         Purchases.shared.invalidateCustomerInfoCache()
-        _ = try await Purchases.shared.syncPurchases()
         _ = try await Purchases.shared.restorePurchases()
-        return try await fetchStatus(forceRefresh: true)
+        return try await fetchStatus(forceRefresh: false)
     }
 
     private func ensureConfigured() throws {
@@ -166,7 +165,14 @@ final class RevenueCatSubscriptionService: SubscriptionService {
         }
 
         guard let formatted = formatter.string(from: monthlyAmount) else { return nil }
-        return "月あたり \(formatted)"
+        let perMonthPrefix = NSLocalizedString(
+            "subscription.monthly_equivalent.prefix",
+            tableName: nil,
+            bundle: .main,
+            value: "月あたり",
+            comment: "Prefix for monthly equivalent subscription price label"
+        )
+        return "\(perMonthPrefix) \(formatted)"
     }
 
     private func mapStatus(from customerInfo: CustomerInfo) -> SubscriptionStatus {

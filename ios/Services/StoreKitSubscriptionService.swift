@@ -64,7 +64,7 @@ final class StoreKitSubscriptionService: SubscriptionService {
 
     func restorePurchases() async throws -> SubscriptionStatus {
         try await client.syncPurchases()
-        return try await fetchStatus(forceRefresh: true)
+        return try await fetchStatus(forceRefresh: false)
     }
 
     private func plan(for productID: String) -> SubscriptionStatus.Plan? {

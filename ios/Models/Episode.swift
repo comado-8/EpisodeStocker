@@ -15,46 +15,46 @@ final class Episode {
     var deletedAt: Date?
 
     @Relationship(deleteRule: .nullify)
-    fileprivate var tagsStorage: [Tag]? = []
+    fileprivate var tagsStorage: [Tag] = []
     @Relationship(deleteRule: .nullify)
-    fileprivate var personsStorage: [Person]? = []
+    fileprivate var personsStorage: [Person] = []
     @Relationship(deleteRule: .nullify)
-    fileprivate var projectsStorage: [Project]? = []
+    fileprivate var projectsStorage: [Project] = []
     @Relationship(deleteRule: .nullify)
-    fileprivate var emotionsStorage: [Emotion]? = []
+    fileprivate var emotionsStorage: [Emotion] = []
     @Relationship(deleteRule: .nullify)
-    fileprivate var placesStorage: [Place]? = []
+    fileprivate var placesStorage: [Place] = []
 
     @Relationship(deleteRule: .nullify)
-    fileprivate var unlockLogsStorage: [UnlockLog]? = []
+    fileprivate var unlockLogsStorage: [UnlockLog] = []
 
     var tags: [Tag] {
-        get { tagsStorage ?? [] }
+        get { tagsStorage }
         set { tagsStorage = newValue }
     }
 
     var persons: [Person] {
-        get { personsStorage ?? [] }
+        get { personsStorage }
         set { personsStorage = newValue }
     }
 
     var projects: [Project] {
-        get { projectsStorage ?? [] }
+        get { projectsStorage }
         set { projectsStorage = newValue }
     }
 
     var emotions: [Emotion] {
-        get { emotionsStorage ?? [] }
+        get { emotionsStorage }
         set { emotionsStorage = newValue }
     }
 
     var places: [Place] {
-        get { placesStorage ?? [] }
+        get { placesStorage }
         set { placesStorage = newValue }
     }
 
     var unlockLogs: [UnlockLog] {
-        get { unlockLogsStorage ?? [] }
+        get { unlockLogsStorage }
         set { unlockLogsStorage = newValue }
     }
 
@@ -117,16 +117,9 @@ final class UnlockLog {
     @Relationship(deleteRule: .nullify, inverse: \Episode.unlockLogsStorage)
     fileprivate var episodeStorage: Episode?
 
-    var episode: Episode {
-        get {
-            guard let episodeStorage else {
-                fatalError("UnlockLog.episode is nil")
-            }
-            return episodeStorage
-        }
-        set {
-            episodeStorage = newValue
-        }
+    var episode: Episode? {
+        get { episodeStorage }
+        set { episodeStorage = newValue }
     }
 
     var episodeOrNil: Episode? {
@@ -172,10 +165,10 @@ final class Tag {
     var isSoftDeleted: Bool = false
     var deletedAt: Date?
     @Relationship(deleteRule: .nullify, inverse: \Episode.tagsStorage)
-    fileprivate var episodesStorage: [Episode]? = []
+    fileprivate var episodesStorage: [Episode] = []
 
     var episodes: [Episode] {
-        get { episodesStorage ?? [] }
+        get { episodesStorage }
         set { episodesStorage = newValue }
     }
 
@@ -210,10 +203,10 @@ final class Person {
     var isSoftDeleted: Bool = false
     var deletedAt: Date?
     @Relationship(deleteRule: .nullify, inverse: \Episode.personsStorage)
-    fileprivate var episodesStorage: [Episode]? = []
+    fileprivate var episodesStorage: [Episode] = []
 
     var episodes: [Episode] {
-        get { episodesStorage ?? [] }
+        get { episodesStorage }
         set { episodesStorage = newValue }
     }
 
@@ -248,10 +241,10 @@ final class Project {
     var isSoftDeleted: Bool = false
     var deletedAt: Date?
     @Relationship(deleteRule: .nullify, inverse: \Episode.projectsStorage)
-    fileprivate var episodesStorage: [Episode]? = []
+    fileprivate var episodesStorage: [Episode] = []
 
     var episodes: [Episode] {
-        get { episodesStorage ?? [] }
+        get { episodesStorage }
         set { episodesStorage = newValue }
     }
 
@@ -286,10 +279,10 @@ final class Emotion {
     var isSoftDeleted: Bool = false
     var deletedAt: Date?
     @Relationship(deleteRule: .nullify, inverse: \Episode.emotionsStorage)
-    fileprivate var episodesStorage: [Episode]? = []
+    fileprivate var episodesStorage: [Episode] = []
 
     var episodes: [Episode] {
-        get { episodesStorage ?? [] }
+        get { episodesStorage }
         set { episodesStorage = newValue }
     }
 
@@ -324,10 +317,10 @@ final class Place {
     var isSoftDeleted: Bool = false
     var deletedAt: Date?
     @Relationship(deleteRule: .nullify, inverse: \Episode.placesStorage)
-    fileprivate var episodesStorage: [Episode]? = []
+    fileprivate var episodesStorage: [Episode] = []
 
     var episodes: [Episode] {
-        get { episodesStorage ?? [] }
+        get { episodesStorage }
         set { episodesStorage = newValue }
     }
 

@@ -959,7 +959,6 @@ private struct BackupSettingsDestinationView: View {
 @MainActor
 private struct BackupSettingsView: View {
     @EnvironmentObject private var router: AppRouter
-    @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
     @StateObject private var viewModel: BackupSettingsViewModel
     @ObservedObject private var manualBackupViewModel: ManualBackupSettingsViewModel
     @State private var showsExportPassphraseSheet = false
@@ -1092,8 +1091,8 @@ private struct BackupSettingsView: View {
 
     private var isBackupLocked: Bool {
         Self.isBackupPaywallEnabled
-            && premiumAccess.hasLoadedStatus
-            && !premiumAccess.hasAccess(to: .backup)
+            && !viewModel.isInitialSubscriptionResolving
+            && !viewModel.hasBackupAccess
     }
 
     private var isSyncInteractionDisabled: Bool {
@@ -1389,7 +1388,7 @@ private struct BackupSettingsView: View {
             return
         }
 
-        guard !Self.isBackupPaywallEnabled || premiumAccess.hasAccess(to: .backup) else {
+        guard !Self.isBackupPaywallEnabled || viewModel.hasBackupAccess else {
             router.presentPaywall(.backup)
             return
         }
@@ -1410,7 +1409,7 @@ private struct BackupSettingsView: View {
             }
             return
         }
-        guard !Self.isBackupPaywallEnabled || premiumAccess.hasAccess(to: .backup) else {
+        guard !Self.isBackupPaywallEnabled || viewModel.hasBackupAccess else {
             router.presentPaywall(.backup)
             return
         }
@@ -1426,7 +1425,7 @@ private struct BackupSettingsView: View {
             }
             return
         }
-        guard !Self.isBackupPaywallEnabled || premiumAccess.hasAccess(to: .backup) else {
+        guard !Self.isBackupPaywallEnabled || viewModel.hasBackupAccess else {
             router.presentPaywall(.backup)
             return
         }

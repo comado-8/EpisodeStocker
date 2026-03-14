@@ -44,7 +44,7 @@ final class CloudSyncDataPreparationServiceTests: XCTestCase {
         XCTAssertEqual(refreshed.tags.count, 1)
 
         let unlockLogs = try context.fetch(FetchDescriptor<UnlockLog>())
-        XCTAssertTrue(unlockLogs.allSatisfy { $0.episodeOrNil != nil })
+        XCTAssertEqual(unlockLogs.count, 0)
 
         XCTAssertTrue(settings.bool(for: .cloudSyncMigrationPrepared))
         XCTAssertFalse(settings.bool(for: .cloudSyncRuntimeDisabled))

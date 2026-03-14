@@ -298,7 +298,7 @@ private struct TagCardHeaderView: View {
       }
 
       VStack(alignment: .leading, spacing: 6) {
-        Text("左スワイプで削除できます。")
+        Text("スワイプで削除できます。")
           .font(TagStyle.subheaderFont)
           .foregroundColor(TagStyle.subheaderText)
           .fixedSize(horizontal: false, vertical: true)
