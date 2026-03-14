@@ -194,15 +194,15 @@ final class EpisodeModelTests: XCTestCase {
         XCTAssertTrue(log.isSoftDeleted)
         XCTAssertEqual(log.deletedAt, deletedAt)
         XCTAssertEqual(log.episode?.id, episode1.id)
-        XCTAssertEqual(log.episodeOrNil?.id, episode1.id)
+        XCTAssertEqual(log.episode?.id, episode1.id)
 
         log.episode = episode2
         XCTAssertEqual(log.episode?.id, episode2.id)
-        XCTAssertEqual(log.episodeOrNil?.id, episode2.id)
+        XCTAssertEqual(log.episode?.id, episode2.id)
 
         log.episode = nil
         XCTAssertNil(log.episode)
-        XCTAssertNil(log.episodeOrNil)
+        XCTAssertNil(log.episode)
     }
 
     func testEpisodeInitializerAssignsProvidedValues() {
@@ -356,10 +356,26 @@ final class EpisodeModelTests: XCTestCase {
             ["free", "monthly", "yearly"]
         )
 
-        let monthly = SubscriptionStatus(plan: .monthly, expiryDate: makeDate(2026, 3, 1), trialEndDate: nil)
-        let yearly = SubscriptionStatus(plan: .yearly, expiryDate: makeDate(2027, 3, 1), trialEndDate: nil)
+        let monthly = SubscriptionStatus(
+            plan: .monthly,
+            expiryDate: makeDate(2026, 3, 1),
+            trialEndDate: nil,
+            willAutoRenew: false
+        )
+        let yearly = SubscriptionStatus(
+            plan: .yearly,
+            expiryDate: makeDate(2027, 3, 1),
+            trialEndDate: nil,
+            willAutoRenew: false
+        )
         XCTAssertEqual(monthly.plan, .monthly)
+        XCTAssertNil(monthly.nextPlan)
+        XCTAssertNil(monthly.nextPlanEffectiveDate)
+        XCTAssertEqual(monthly.willAutoRenew, false)
         XCTAssertEqual(yearly.plan, .yearly)
+        XCTAssertNil(yearly.nextPlan)
+        XCTAssertNil(yearly.nextPlanEffectiveDate)
+        XCTAssertEqual(yearly.willAutoRenew, false)
     }
 }
 

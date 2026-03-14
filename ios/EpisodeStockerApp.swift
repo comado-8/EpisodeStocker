@@ -170,56 +170,34 @@ struct EpisodeStockerApp: App {
                         settingsRepository.set(true, for: .cloudSyncRuntimeDisabled)
                     }
                 } catch {
-                    #if DEBUG
-                    #if targetEnvironment(simulator)
-                    if !isRunningTests {
-                        NSLog(
-                            "Persistent ModelContainer load failed on simulator. Falling back to in-memory: \(String(describing: error))"
-                        )
-                        do {
-                            resolvedModelContainer = try Self.makeContainer(
-                                isStoredInMemoryOnly: true,
-                                effectiveCloudSyncEnabled: false
-                            )
-                            resolvedEffectiveCloudSyncEnabled = false
-                        } catch {
-                            fatalError("Failed to create fallback in-memory ModelContainer: \(error)")
-                        }
-                    } else {
-                        fatalError("Failed to create ModelContainer: \(error)")
-                    }
-                    #else
-                    fatalError("Failed to create ModelContainer: \(error)")
-                    #endif
-                    #else
-                    fatalError("Failed to create ModelContainer: \(error)")
-                    #endif
-                }
-            } else {
-                #if DEBUG
-                #if targetEnvironment(simulator)
-                if !isRunningTests {
-                    NSLog(
-                        "Persistent ModelContainer load failed on simulator. Falling back to in-memory: \(String(describing: error))"
-                    )
                     do {
-                        resolvedModelContainer = try Self.makeContainer(
-                            isStoredInMemoryOnly: true,
-                            effectiveCloudSyncEnabled: false
-                        )
-                        resolvedEffectiveCloudSyncEnabled = false
+                        if let fallbackContainer = try Self.createInMemoryFallbackIfSupported(
+                            isRunningTests: isRunningTests,
+                            error: error
+                        ) {
+                            resolvedModelContainer = fallbackContainer
+                            resolvedEffectiveCloudSyncEnabled = false
+                        } else {
+                            fatalError("Failed to create ModelContainer: \(error)")
+                        }
                     } catch {
                         fatalError("Failed to create fallback in-memory ModelContainer: \(error)")
                     }
-                } else {
-                    fatalError("Failed to create ModelContainer: \(error)")
                 }
-                #else
-                fatalError("Failed to create ModelContainer: \(error)")
-                #endif
-                #else
-                fatalError("Failed to create ModelContainer: \(error)")
-                #endif
+            } else {
+                do {
+                    if let fallbackContainer = try Self.createInMemoryFallbackIfSupported(
+                        isRunningTests: isRunningTests,
+                        error: error
+                    ) {
+                        resolvedModelContainer = fallbackContainer
+                        resolvedEffectiveCloudSyncEnabled = false
+                    } else {
+                        fatalError("Failed to create ModelContainer: \(error)")
+                    }
+                } catch {
+                    fatalError("Failed to create fallback in-memory ModelContainer: \(error)")
+                }
             }
         }
         self.modelContainer = resolvedModelContainer
@@ -251,6 +229,28 @@ struct EpisodeStockerApp: App {
             Place.self,
             configurations: configuration
         )
+    }
+
+    private static func createInMemoryFallbackIfSupported(
+        isRunningTests: Bool,
+        error: Error
+    ) throws -> ModelContainer? {
+        #if DEBUG
+        #if targetEnvironment(simulator)
+        guard !isRunningTests else { return nil }
+        NSLog(
+            "Persistent ModelContainer load failed on simulator. Falling back to in-memory: \(String(describing: error))"
+        )
+        return try makeContainer(
+            isStoredInMemoryOnly: true,
+            effectiveCloudSyncEnabled: false
+        )
+        #else
+        return nil
+        #endif
+        #else
+        return nil
+        #endif
     }
 
     static func shouldSeedSampleData(isRunningTests: Bool, isSimulator: Bool) -> Bool {

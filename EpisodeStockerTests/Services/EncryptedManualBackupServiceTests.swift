@@ -72,7 +72,7 @@ final class EncryptedManualBackupServiceTests: XCTestCase {
         let unlockLogs = try context.fetch(FetchDescriptor<UnlockLog>())
         XCTAssertEqual(unlockLogs.count, 1)
         XCTAssertEqual(unlockLogs.first?.id, original.unlockLogID)
-        XCTAssertEqual(unlockLogs.first?.episodeOrNil?.id, original.episodeID)
+        XCTAssertEqual(unlockLogs.first?.episode?.id, original.episodeID)
     }
 
     func testInspectWithWrongPassphraseThrowsWrongPassphrase() async throws {

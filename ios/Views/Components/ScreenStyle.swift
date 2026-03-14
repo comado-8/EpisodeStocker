@@ -8,7 +8,7 @@ enum ScreenStyle {
         regularLayoutThreshold: CGFloat,
         horizontalPadding: CGFloat
     ) -> CGFloat {
-        let maxWidth = totalWidth - (horizontalPadding * 2)
+        let maxWidth = max(0, totalWidth - (horizontalPadding * 2))
         guard totalWidth >= regularLayoutThreshold else {
             return min(baseContentWidth, maxWidth)
         }

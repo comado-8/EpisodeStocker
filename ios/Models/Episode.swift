@@ -122,10 +122,6 @@ final class UnlockLog {
         set { episodeStorage = newValue }
     }
 
-    var episodeOrNil: Episode? {
-        episodeStorage
-    }
-
     init(
         id: UUID = UUID(),
         talkedAt: Date,

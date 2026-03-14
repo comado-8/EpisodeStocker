@@ -165,34 +165,33 @@ final class EncryptedManualBackupService: ManualBackupService {
             )
         }
 
-        let orphanedUnlockLogIDs = unlockLogs.compactMap { log in
-            log.episodeOrNil == nil ? log.id : nil
+        var orphanedUnlockLogIDs: [UUID] = []
+        let unlockLogRecords = unlockLogs.reduce(into: [ManualBackupPayloadV1.UnlockLogRecord]()) { records, log in
+            guard let episodeID = log.episode?.id else {
+                orphanedUnlockLogIDs.append(log.id)
+                return
+            }
+            records.append(
+                ManualBackupPayloadV1.UnlockLogRecord(
+                    id: log.id,
+                    talkedAt: log.talkedAt,
+                    mediaPublicAt: log.mediaPublicAt,
+                    mediaType: log.mediaType,
+                    projectNameText: log.projectNameText,
+                    reaction: log.reaction,
+                    memo: log.memo,
+                    createdAt: log.createdAt,
+                    updatedAt: log.updatedAt,
+                    isSoftDeleted: log.isSoftDeleted,
+                    deletedAt: log.deletedAt,
+                    episodeID: episodeID
+                )
+            )
         }
         if !orphanedUnlockLogIDs.isEmpty {
             let joinedIDs = orphanedUnlockLogIDs.map(\.uuidString).joined(separator: ", ")
             throw ManualBackupError.validationFailed(
                 reason: "UnlockLogに紐づくEpisodeが存在しません。unlockLogIDs=\(joinedIDs)"
-            )
-        }
-        let unlockLogRecords: [ManualBackupPayloadV1.UnlockLogRecord] = try unlockLogs.map { log in
-            guard let episodeID = log.episodeOrNil?.id else {
-                throw ManualBackupError.validationFailed(
-                    reason: "UnlockLogに紐づくEpisodeが存在しません。unlockLogID=\(log.id.uuidString)"
-                )
-            }
-            return ManualBackupPayloadV1.UnlockLogRecord(
-                id: log.id,
-                talkedAt: log.talkedAt,
-                mediaPublicAt: log.mediaPublicAt,
-                mediaType: log.mediaType,
-                projectNameText: log.projectNameText,
-                reaction: log.reaction,
-                memo: log.memo,
-                createdAt: log.createdAt,
-                updatedAt: log.updatedAt,
-                isSoftDeleted: log.isSoftDeleted,
-                deletedAt: log.deletedAt,
-                episodeID: episodeID
             )
         }
 

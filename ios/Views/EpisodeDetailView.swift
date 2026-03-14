@@ -92,6 +92,15 @@ struct EpisodeDetailView: View {
   private let maxProjects = 3
   private let exportService = EpisodeExportService()
 
+  private static var exportPaywallEnabled: Bool {
+    if let rawFlag = ProcessInfo.processInfo.environment["ENABLE_EXPORT_PAYWALL"],
+       let parsedFlag = parseEnvironmentBoolean(rawFlag)
+    {
+      return parsedFlag
+    }
+    return true
+  }
+
   init(episode: Episode) {
     self.episode = episode
     _titleText = State(initialValue: episode.title)
@@ -107,8 +116,10 @@ struct EpisodeDetailView: View {
       let horizontalPadding = max(
         DetailStyle.horizontalPadding, (proxy.size.width - contentWidth) / 2)
       let topPadding = max(0, DetailStyle.figmaTopInset - proxy.safeAreaInsets.top)
-      let isRegularWidth = proxy.size.width >= HomeStyle.regularLayoutThreshold
-      let tabBarOffset = isRegularWidth ? HomeStyle.tabBarHeight : max(0, HomeStyle.tabBarHeight - 48)
+      let isRegularWidth = proxy.size.width >= DetailStyle.regularLayoutThreshold
+      let tabBarOffset = isRegularWidth
+        ? HomeStyle.tabBarHeight
+        : max(0, HomeStyle.tabBarHeight - DetailStyle.compactTabBarOffsetReduction)
 
       ZStack {
         VStack(spacing: 0) {
@@ -298,12 +309,23 @@ struct EpisodeDetailView: View {
   }
 
   private var isExportPaywallEnabled: Bool {
-    true
+    Self.exportPaywallEnabled
   }
 
   private var showsExportLockBadge: Bool {
     guard isExportPaywallEnabled, premiumAccess.hasLoadedStatus else { return false }
     return !premiumAccess.hasAccess(to: .export)
+  }
+
+  private static func parseEnvironmentBoolean(_ raw: String) -> Bool? {
+    switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+    case "1", "true", "yes", "on":
+      return true
+    case "0", "false", "no", "off":
+      return false
+    default:
+      return nil
+    }
   }
 
   private var headerView: some View {
@@ -1614,6 +1636,7 @@ private enum DetailStyle {
   static let detailToggleHeight: CGFloat = 52
   static let headerHeight: CGFloat = 56
   static let tabBarHeight: CGFloat = 48
+  static let compactTabBarOffsetReduction: CGFloat = 48
   static let tabBarBorderWidth: CGFloat = 0.66
   static let tabIndicatorHeight: CGFloat = 2
   static let chipHeight: CGFloat = 32

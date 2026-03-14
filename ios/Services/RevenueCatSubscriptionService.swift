@@ -252,8 +252,7 @@ final class RevenueCatSubscriptionService: SubscriptionService {
             candidatePool = candidates
         }
 
-        guard let best = sortCandidatesByPriority(candidatePool).first else { return nil }
-        return best
+        return sortCandidatesByPriority(candidatePool).first
     }
 
     private func derivePendingPlanFromSubscriptions(

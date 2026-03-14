@@ -208,6 +208,37 @@ final class BackupSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(subscriptionService.fetchStatusForceRefreshCalls, [false])
     }
 
+    func testLoadInitialStateTimeoutCompletesAndRestoresInteraction() async {
+        let subscriptionService = FakeSubscriptionServiceForBackupSettings(
+            fetchStatusResult: .success(.init(plan: .monthly, expiryDate: nil, trialEndDate: nil))
+        )
+        subscriptionService.shouldNeverComplete = true
+        let vm = BackupSettingsViewModel(
+            cloudBackupService: FakeCloudBackupService(
+                availabilityValue: .available,
+                enabled: false,
+                manualBackupResult: .success(Date()),
+                lastBackupAt: nil
+            ),
+            cloudSyncStatusMonitor: FakeCloudSyncStatusMonitor(),
+            initialLoadingOverlayTimeout: .milliseconds(20),
+            subscriptionStatus: .init(plan: .free, expiryDate: nil, trialEndDate: nil)
+        )
+
+        let loadTask = Task {
+            await vm.loadInitialState(using: subscriptionService)
+        }
+        try? await Task.sleep(for: .milliseconds(80))
+
+        XCTAssertFalse(vm.isInitialSubscriptionResolving)
+        XCTAssertFalse(vm.isInitialLoadingOverlayVisible)
+        XCTAssertFalse(vm.isSyncInteractionDisabled)
+        XCTAssertEqual(subscriptionService.fetchStatusForceRefreshCalls, [false])
+
+        loadTask.cancel()
+        _ = await loadTask.result
+    }
+
     func testDeinitStopsCloudSyncStatusMonitor() async {
         let service = FakeCloudBackupService(
             availabilityValue: .available,
@@ -574,6 +605,7 @@ private final class FakeCloudSyncStatusMonitor: CloudSyncStatusMonitoring {
 private final class FakeSubscriptionServiceForBackupSettings: SubscriptionService {
     let fetchStatusResult: Result<SubscriptionStatus, Error>
     private(set) var fetchStatusForceRefreshCalls: [Bool] = []
+    var shouldNeverComplete = false
 
     init(fetchStatusResult: Result<SubscriptionStatus, Error>) {
         self.fetchStatusResult = fetchStatusResult
@@ -581,6 +613,12 @@ private final class FakeSubscriptionServiceForBackupSettings: SubscriptionServic
 
     func fetchStatus(forceRefresh: Bool) async throws -> SubscriptionStatus {
         fetchStatusForceRefreshCalls.append(forceRefresh)
+        if shouldNeverComplete {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+            }
+            throw CancellationError()
+        }
         return try fetchStatusResult.get()
     }
 

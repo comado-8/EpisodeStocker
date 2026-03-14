@@ -45,7 +45,7 @@ final class CloudSyncDataPreparationService {
             episode.projects = uniqueByID(episode.projects)
             episode.emotions = uniqueByID(episode.emotions)
             episode.places = uniqueByID(episode.places)
-            episode.unlockLogs = uniqueByID(episode.unlockLogs).filter { $0.episodeOrNil?.id == episode.id }
+            episode.unlockLogs = uniqueByID(episode.unlockLogs).filter { $0.episode?.id == episode.id }
             episode.updatedAt = now()
         }
     }
@@ -53,7 +53,7 @@ final class CloudSyncDataPreparationService {
     private func removeOrphanUnlockLogs() throws {
         let logs = try modelContext.fetch(FetchDescriptor<UnlockLog>())
         for log in logs {
-            guard let episode = log.episodeOrNil else {
+            guard let episode = log.episode else {
                 modelContext.delete(log)
                 continue
             }

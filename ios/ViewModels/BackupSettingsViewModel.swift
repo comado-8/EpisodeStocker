@@ -281,7 +281,9 @@ final class BackupSettingsViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard let self, self.isInitialSubscriptionResolving else { return }
+                self.isInitialSubscriptionResolving = false
                 self.isInitialLoadingOverlayVisible = false
+                self.initialLoadingTimeoutTask = nil
             }
         }
     }

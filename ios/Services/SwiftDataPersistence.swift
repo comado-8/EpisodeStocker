@@ -420,7 +420,7 @@ extension ModelContext {
 
         // Fetch all logs and filter in Swift to avoid predicate macro limitations on nested key paths.
         let logDescriptor = FetchDescriptor<UnlockLog>()
-        let logs = ((try? fetch(logDescriptor)) ?? []).filter { $0.episodeOrNil?.id == episode.id }
+        let logs = ((try? fetch(logDescriptor)) ?? []).filter { $0.episode?.id == episode.id }
         for log in logs {
             log.isSoftDeleted = true
             log.deletedAt = now

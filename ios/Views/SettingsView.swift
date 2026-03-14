@@ -402,6 +402,9 @@ private struct SubscriptionSettingsView: View {
     private static let loadingPriceText = "価格情報を取得中..."
     private static let termsURLString = "https://episodestocker.com/terms"
     private static let privacyURLString = "https://episodestocker.com/privacy"
+    private static var currentYear: Int {
+        Calendar.current.component(.year, from: Date())
+    }
     private static let proFeatures: [String] = [
         "高度分析ダッシュボード",
         "エピソード登録件数無制限",
@@ -498,6 +501,10 @@ private struct SubscriptionSettingsView: View {
         yearlyProduct?.monthlyEquivalentText
     }
 
+    private var isPurchaseInteractionDisabled: Bool {
+        viewModel.isLoading || activePurchaseProductID != nil
+    }
+
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ja_JP")
@@ -506,8 +513,7 @@ private struct SubscriptionSettingsView: View {
     }()
 
     private func handlePurchaseTap(_ product: SubscriptionProduct) {
-        guard activePurchaseProductID == nil else { return }
-        guard !viewModel.isLoading else { return }
+        guard activePurchaseProductID == nil && !viewModel.isLoading else { return }
 
         activePurchaseProductID = product.id
         Task {
@@ -662,6 +668,7 @@ private struct SubscriptionSettingsView: View {
                     secondaryPriceText: yearlyMonthlyEquivalentText,
                     isPrimaryAction: true,
                     isActionInProgress: activePurchaseProductID == yearlyProduct?.id,
+                    isInteractionDisabled: isPurchaseInteractionDisabled,
                     isPurchaseAvailable: yearlyProduct != nil,
                     isSelectable: !isCurrentPlan(.yearly)
                 ) {
@@ -677,6 +684,7 @@ private struct SubscriptionSettingsView: View {
                     secondaryPriceText: nil,
                     isPrimaryAction: false,
                     isActionInProgress: activePurchaseProductID == monthlyProduct?.id,
+                    isInteractionDisabled: isPurchaseInteractionDisabled,
                     isPurchaseAvailable: monthlyProduct != nil,
                     isSelectable: !isCurrentPlan(.monthly)
                 ) {
@@ -733,7 +741,7 @@ private struct SubscriptionSettingsView: View {
                     openURL(url)
                 }
 
-                Text("© 2026 comado.studio All rights reserved.")
+                Text("© \(Self.currentYear) comado.studio All rights reserved.")
                     .font(.system(size: 11, weight: .regular))
                     .foregroundColor(SettingsDetailStyle.rowMetaText)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -779,6 +787,7 @@ private struct SubscriptionPlanCard: View {
     let secondaryPriceText: String?
     let isPrimaryAction: Bool
     let isActionInProgress: Bool
+    let isInteractionDisabled: Bool
     let isPurchaseAvailable: Bool
     let isSelectable: Bool
     let onTap: () -> Void
@@ -794,7 +803,7 @@ private struct SubscriptionPlanCard: View {
     }
 
     private var isDisabled: Bool {
-        isActionInProgress || !isPurchaseAvailable
+        isInteractionDisabled || isActionInProgress || !isPurchaseAvailable
     }
 
     var body: some View {
@@ -1375,13 +1384,9 @@ private struct BackupSettingsView: View {
     }
 
     private func setBackupEnabledWithPaywallGate(_ enabled: Bool) {
-        guard !viewModel.isSyncInteractionDisabled else {
-            viewModel.errorMessage = "サブスク状態を確認中です。確認完了後に再度お試しください。"
-            Task {
-                await viewModel.refreshSubscriptionStatus(using: subscriptionService)
-            }
-            return
-        }
+        guard ensureSubscriptionResolvedOrShowMessage(
+            onError: { viewModel.errorMessage = $0 }
+        ) else { return }
 
         guard enabled else {
             viewModel.setBackupEnabled(false)
@@ -1402,13 +1407,9 @@ private struct BackupSettingsView: View {
     }
 
     private func startManualBackupExportFlow() {
-        guard !viewModel.isSyncInteractionDisabled else {
-            manualBackupViewModel.errorMessage = "サブスク状態を確認中です。確認完了後に再度お試しください。"
-            Task {
-                await viewModel.refreshSubscriptionStatus(using: subscriptionService)
-            }
-            return
-        }
+        guard ensureSubscriptionResolvedOrShowMessage(
+            onError: { manualBackupViewModel.errorMessage = $0 }
+        ) else { return }
         guard !Self.isBackupPaywallEnabled || viewModel.hasBackupAccess else {
             router.presentPaywall(.backup)
             return
@@ -1418,13 +1419,9 @@ private struct BackupSettingsView: View {
     }
 
     private func startManualBackupImportFlow() {
-        guard !viewModel.isSyncInteractionDisabled else {
-            manualBackupViewModel.errorMessage = "サブスク状態を確認中です。確認完了後に再度お試しください。"
-            Task {
-                await viewModel.refreshSubscriptionStatus(using: subscriptionService)
-            }
-            return
-        }
+        guard ensureSubscriptionResolvedOrShowMessage(
+            onError: { manualBackupViewModel.errorMessage = $0 }
+        ) else { return }
         guard !Self.isBackupPaywallEnabled || viewModel.hasBackupAccess else {
             router.presentPaywall(.backup)
             return
@@ -1432,6 +1429,17 @@ private struct BackupSettingsView: View {
         manualBackupViewModel.errorMessage = nil
         discardSelectedImportFile()
         showsImportFileGuide = true
+    }
+
+    private func ensureSubscriptionResolvedOrShowMessage(onError: (String) -> Void) -> Bool {
+        guard viewModel.isSyncInteractionDisabled else {
+            return true
+        }
+        onError("サブスク状態を確認中です。確認完了後に再度お試しください。")
+        Task {
+            await viewModel.refreshSubscriptionStatus(using: subscriptionService)
+        }
+        return false
     }
 
     private func copyImportedBackupToTemporaryDirectory(from sourceURL: URL) throws -> URL {
@@ -1608,6 +1616,9 @@ private struct DisplaySettingsView: View {
 
 private struct LegalSettingsView: View {
     @Environment(\.openURL) private var openURL
+    private var currentYear: Int {
+        Calendar.current.component(.year, from: Date())
+    }
 
     var body: some View {
         SettingsDetailContainerView(
@@ -1630,7 +1641,7 @@ private struct LegalSettingsView: View {
                         openURL(url)
                     }
 
-                    Text("© 2026 comado.studio All rights reserved.")
+                    Text("© \(currentYear) comado.studio All rights reserved.")
                         .font(SettingsDetailStyle.rowMetaFont)
                         .foregroundColor(SettingsDetailStyle.rowMetaText)
                         .lineLimit(1)

@@ -152,7 +152,9 @@ struct NewEpisodeView: View {
         NewEpisodeStyle.horizontalPadding, (proxy.size.width - contentWidth) / 2)
       let topPadding = max(0, NewEpisodeStyle.figmaTopInset - proxy.safeAreaInsets.top)
       let isRegularWidth = proxy.size.width >= NewEpisodeStyle.regularLayoutThreshold
-      let tabBarOffset = isRegularWidth ? HomeStyle.tabBarHeight : max(0, HomeStyle.tabBarHeight - 48)
+      let tabBarOffset = isRegularWidth
+        ? HomeStyle.tabBarHeight
+        : max(0, HomeStyle.tabBarHeight - NewEpisodeStyle.compactTabBarOffsetReduction)
 
       let actionBarHeight = NewEpisodeStyle.actionBarContentHeight + 1
 
@@ -989,6 +991,7 @@ private enum NewEpisodeStyle {
   static let chipHeightSmall: CGFloat = 32
   static let tagGuideActionHeight: CGFloat = 32
   static let headerHeight: CGFloat = 56
+  static let compactTabBarOffsetReduction: CGFloat = 48
   static let actionButtonHeight: CGFloat = 48
   static let actionButtonWidth: CGFloat = 120
   static let actionBarContentHeight: CGFloat = 72
