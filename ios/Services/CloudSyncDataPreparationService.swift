@@ -29,8 +29,8 @@ final class CloudSyncDataPreparationService {
             try normalizeEpisodeRelationships()
             try removeOrphanUnlockLogs()
             try modelContext.save()
-            settingsRepository.set(true, for: .cloudSyncMigrationPrepared)
             settingsRepository.set(false, for: .cloudSyncRuntimeDisabled)
+            settingsRepository.set(true, for: .cloudSyncMigrationPrepared)
         } catch {
             modelContext.rollback()
             settingsRepository.set(false, for: .cloudSyncMigrationPrepared)
@@ -86,8 +86,11 @@ final class CloudSyncDataPreparationService {
         relation: ReferenceWritableKeyPath<Episode, [Entity]>
     ) throws {
         let entities = try modelContext.fetch(FetchDescriptor<Entity>())
-        let grouped = Dictionary(grouping: entities) { entity in
-            canonicalNormalizedKey(current: entity.nameNormalized, fallbackName: entity.name)
+        var grouped: [String: [Entity]] = [:]
+        for entity in entities {
+            let key = canonicalNormalizedKey(current: entity.nameNormalized, fallbackName: entity.name)
+            guard !key.isEmpty else { continue }
+            grouped[key, default: []].append(entity)
         }
 
         for group in grouped.values where group.count > 1 {

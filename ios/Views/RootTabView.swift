@@ -231,7 +231,7 @@ private struct AnalyticsNavigationContainer: View {
     @EnvironmentObject private var premiumAccess: PremiumAccessViewModel
 
     private var isAnalyticsLocked: Bool {
-        premiumAccess.hasLoadedStatus && !premiumAccess.hasAccess(to: .analyticsTab)
+        !premiumAccess.hasLoadedStatus || !premiumAccess.hasAccess(to: .analyticsTab)
     }
 
     var body: some View {

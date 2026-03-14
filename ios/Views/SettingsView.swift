@@ -1498,20 +1498,22 @@ private struct BackupSettingsView: View {
         ctaTitle: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            content()
-        }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, isLocked && overlayPosition == .bottom ? PremiumLockCTAStyle.bottomReservedSpace : 0)
-            .blur(radius: isLocked ? 1.4 : 0)
-            .allowsHitTesting(!isLocked)
-            .overlay(alignment: overlayPosition == .bottom ? .bottom : .center) {
-                if isLocked {
-                    backupLockCTAButton(title: ctaTitle)
-                        .padding(.horizontal, PremiumLockCTAStyle.horizontalInset)
-                        .padding(.bottom, overlayPosition == .bottom ? 2 : 0)
-                }
+        ZStack(alignment: overlayPosition == .bottom ? .bottom : .center) {
+            VStack(alignment: .leading, spacing: 10) {
+                content()
             }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, isLocked && overlayPosition == .bottom ? PremiumLockCTAStyle.bottomReservedSpace : 0)
+                .blur(radius: isLocked ? 1.4 : 0)
+                .allowsHitTesting(!isLocked)
+                .accessibilityHidden(isLocked)
+
+            if isLocked {
+                backupLockCTAButton(title: ctaTitle)
+                    .padding(.horizontal, PremiumLockCTAStyle.horizontalInset)
+                    .padding(.bottom, overlayPosition == .bottom ? 2 : 0)
+            }
+        }
     }
 
     private func backupLockCTAButton(title: String) -> some View {
