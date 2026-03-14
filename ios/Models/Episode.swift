@@ -15,48 +15,18 @@ final class Episode {
     var deletedAt: Date?
 
     @Relationship(deleteRule: .nullify)
-    fileprivate var tagsStorage: [Tag] = []
+    var tags: [Tag] = []
     @Relationship(deleteRule: .nullify)
-    fileprivate var personsStorage: [Person] = []
+    var persons: [Person] = []
     @Relationship(deleteRule: .nullify)
-    fileprivate var projectsStorage: [Project] = []
+    var projects: [Project] = []
     @Relationship(deleteRule: .nullify)
-    fileprivate var emotionsStorage: [Emotion] = []
+    var emotions: [Emotion] = []
     @Relationship(deleteRule: .nullify)
-    fileprivate var placesStorage: [Place] = []
+    var places: [Place] = []
 
     @Relationship(deleteRule: .nullify)
-    fileprivate var unlockLogsStorage: [UnlockLog] = []
-
-    var tags: [Tag] {
-        get { tagsStorage }
-        set { tagsStorage = newValue }
-    }
-
-    var persons: [Person] {
-        get { personsStorage }
-        set { personsStorage = newValue }
-    }
-
-    var projects: [Project] {
-        get { projectsStorage }
-        set { projectsStorage = newValue }
-    }
-
-    var emotions: [Emotion] {
-        get { emotionsStorage }
-        set { emotionsStorage = newValue }
-    }
-
-    var places: [Place] {
-        get { placesStorage }
-        set { placesStorage = newValue }
-    }
-
-    var unlockLogs: [UnlockLog] {
-        get { unlockLogsStorage }
-        set { unlockLogsStorage = newValue }
-    }
+    var unlockLogs: [UnlockLog] = []
 
     init(
         id: UUID = UUID(),
@@ -86,12 +56,12 @@ final class Episode {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
-        self.tagsStorage = tags
-        self.personsStorage = persons
-        self.projectsStorage = projects
-        self.emotionsStorage = emotions
-        self.placesStorage = places
-        self.unlockLogsStorage = unlockLogs
+        self.tags = tags
+        self.persons = persons
+        self.projects = projects
+        self.emotions = emotions
+        self.places = places
+        self.unlockLogs = unlockLogs
     }
 
     var isUnlocked: Bool {
@@ -114,13 +84,8 @@ final class UnlockLog {
     var isSoftDeleted: Bool = false
     var deletedAt: Date?
 
-    @Relationship(deleteRule: .nullify, inverse: \Episode.unlockLogsStorage)
-    fileprivate var episodeStorage: Episode?
-
-    var episode: Episode? {
-        get { episodeStorage }
-        set { episodeStorage = newValue }
-    }
+    @Relationship(deleteRule: .nullify, inverse: \Episode.unlockLogs)
+    var episode: Episode?
 
     init(
         id: UUID = UUID(),
@@ -143,7 +108,7 @@ final class UnlockLog {
         self.projectNameText = projectNameText
         self.reaction = reaction
         self.memo = memo
-        self.episodeStorage = episode
+        self.episode = episode
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
@@ -160,13 +125,8 @@ final class Tag {
     var updatedAt: Date = Date()
     var isSoftDeleted: Bool = false
     var deletedAt: Date?
-    @Relationship(deleteRule: .nullify, inverse: \Episode.tagsStorage)
-    fileprivate var episodesStorage: [Episode] = []
-
-    var episodes: [Episode] {
-        get { episodesStorage }
-        set { episodesStorage = newValue }
-    }
+    @Relationship(deleteRule: .nullify, inverse: \Episode.tags)
+    var episodes: [Episode] = []
 
     init(
         id: UUID = UUID(),
@@ -185,7 +145,7 @@ final class Tag {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
-        self.episodesStorage = episodes
+        self.episodes = episodes
     }
 }
 
@@ -198,13 +158,8 @@ final class Person {
     var updatedAt: Date = Date()
     var isSoftDeleted: Bool = false
     var deletedAt: Date?
-    @Relationship(deleteRule: .nullify, inverse: \Episode.personsStorage)
-    fileprivate var episodesStorage: [Episode] = []
-
-    var episodes: [Episode] {
-        get { episodesStorage }
-        set { episodesStorage = newValue }
-    }
+    @Relationship(deleteRule: .nullify, inverse: \Episode.persons)
+    var episodes: [Episode] = []
 
     init(
         id: UUID = UUID(),
@@ -223,7 +178,7 @@ final class Person {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
-        self.episodesStorage = episodes
+        self.episodes = episodes
     }
 }
 
@@ -236,13 +191,8 @@ final class Project {
     var updatedAt: Date = Date()
     var isSoftDeleted: Bool = false
     var deletedAt: Date?
-    @Relationship(deleteRule: .nullify, inverse: \Episode.projectsStorage)
-    fileprivate var episodesStorage: [Episode] = []
-
-    var episodes: [Episode] {
-        get { episodesStorage }
-        set { episodesStorage = newValue }
-    }
+    @Relationship(deleteRule: .nullify, inverse: \Episode.projects)
+    var episodes: [Episode] = []
 
     init(
         id: UUID = UUID(),
@@ -261,7 +211,7 @@ final class Project {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
-        self.episodesStorage = episodes
+        self.episodes = episodes
     }
 }
 
@@ -274,13 +224,8 @@ final class Emotion {
     var updatedAt: Date = Date()
     var isSoftDeleted: Bool = false
     var deletedAt: Date?
-    @Relationship(deleteRule: .nullify, inverse: \Episode.emotionsStorage)
-    fileprivate var episodesStorage: [Episode] = []
-
-    var episodes: [Episode] {
-        get { episodesStorage }
-        set { episodesStorage = newValue }
-    }
+    @Relationship(deleteRule: .nullify, inverse: \Episode.emotions)
+    var episodes: [Episode] = []
 
     init(
         id: UUID = UUID(),
@@ -299,7 +244,7 @@ final class Emotion {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
-        self.episodesStorage = episodes
+        self.episodes = episodes
     }
 }
 
@@ -312,13 +257,8 @@ final class Place {
     var updatedAt: Date = Date()
     var isSoftDeleted: Bool = false
     var deletedAt: Date?
-    @Relationship(deleteRule: .nullify, inverse: \Episode.placesStorage)
-    fileprivate var episodesStorage: [Episode] = []
-
-    var episodes: [Episode] {
-        get { episodesStorage }
-        set { episodesStorage = newValue }
-    }
+    @Relationship(deleteRule: .nullify, inverse: \Episode.places)
+    var episodes: [Episode] = []
 
     init(
         id: UUID = UUID(),
@@ -337,7 +277,7 @@ final class Place {
         self.updatedAt = updatedAt
         self.isSoftDeleted = isSoftDeleted
         self.deletedAt = deletedAt
-        self.episodesStorage = episodes
+        self.episodes = episodes
     }
 }
 

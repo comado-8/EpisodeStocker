@@ -102,7 +102,7 @@ struct RootTabView: View {
         let processInfo = ProcessInfo.processInfo
 
         if let rawFlag = processInfo.environment["FORCE_RC_FALLBACK"],
-           let parsed = parseEnvironmentBoolean(rawFlag)
+           let parsed = EnvironmentHelpers.parseBoolean(rawFlag)
         {
             return parsed
         }
@@ -115,29 +115,18 @@ struct RootTabView: View {
         return false
     }()
 
-    private static func parseEnvironmentBoolean(_ raw: String) -> Bool? {
-        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "1", "true", "yes", "on":
-            return true
-        case "0", "false", "no", "off":
-            return false
-        default:
-            return nil
-        }
-    }
-
     private static func parseFallbackValue(from arguments: [String]) -> Bool? {
         if arguments.contains("-FORCE_RC_FALLBACK") {
             return true
         }
         if let pairArgument = arguments.first(where: { $0.hasPrefix("FORCE_RC_FALLBACK=") }) {
             let rawValue = String(pairArgument.dropFirst("FORCE_RC_FALLBACK=".count))
-            return parseEnvironmentBoolean(rawValue)
+            return EnvironmentHelpers.parseBoolean(rawValue)
         }
         if let index = arguments.firstIndex(of: "-FORCE_RC_FALLBACK_VALUE"),
            arguments.indices.contains(index + 1)
         {
-            return parseEnvironmentBoolean(arguments[index + 1])
+            return EnvironmentHelpers.parseBoolean(arguments[index + 1])
         }
         return nil
     }

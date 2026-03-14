@@ -32,6 +32,7 @@ final class CloudSyncDataPreparationService {
             settingsRepository.set(true, for: .cloudSyncMigrationPrepared)
             settingsRepository.set(false, for: .cloudSyncRuntimeDisabled)
         } catch {
+            modelContext.rollback()
             settingsRepository.set(false, for: .cloudSyncMigrationPrepared)
             NSLog("Cloud sync data preparation failed: %@", String(describing: error))
         }
@@ -45,7 +46,21 @@ final class CloudSyncDataPreparationService {
             episode.projects = uniqueByID(episode.projects)
             episode.emotions = uniqueByID(episode.emotions)
             episode.places = uniqueByID(episode.places)
-            episode.unlockLogs = uniqueByID(episode.unlockLogs).filter { $0.episode?.id == episode.id }
+
+            let deduplicatedUnlockLogs = uniqueByID(episode.unlockLogs)
+            var normalizedUnlockLogs: [UnlockLog] = []
+            normalizedUnlockLogs.reserveCapacity(deduplicatedUnlockLogs.count)
+
+            for unlockLog in deduplicatedUnlockLogs {
+                if let ownerEpisode = unlockLog.episode {
+                    guard ownerEpisode.id == episode.id else { continue }
+                } else {
+                    unlockLog.episode = episode
+                }
+                normalizedUnlockLogs.append(unlockLog)
+            }
+
+            episode.unlockLogs = normalizedUnlockLogs
             episode.updatedAt = now()
         }
     }

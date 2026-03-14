@@ -983,22 +983,11 @@ private struct BackupSettingsView: View {
 
     private static var isBackupPaywallEnabled: Bool {
         if let rawFlag = ProcessInfo.processInfo.environment["ENABLE_BACKUP_PAYWALL"],
-           let parsedFlag = parseEnvironmentBoolean(rawFlag)
+           let parsedFlag = EnvironmentHelpers.parseBoolean(rawFlag)
         {
             return parsedFlag
         }
         return true
-    }
-
-    private static func parseEnvironmentBoolean(_ raw: String) -> Bool? {
-        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "1", "true", "yes", "on":
-            return true
-        case "0", "false", "no", "off":
-            return false
-        default:
-            return nil
-        }
     }
 
     init(
