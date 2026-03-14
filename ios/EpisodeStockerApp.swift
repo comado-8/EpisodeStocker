@@ -130,20 +130,28 @@ struct EpisodeStockerApp: App {
         #else
         let isSimulatorEnvironment = false
         #endif
+        let debugBulkSeedCount = Self.resolveDebugBulkSeedCount(
+            environment: environment,
+            arguments: ProcessInfo.processInfo.arguments
+        )
         let shouldSeedOnCurrentDevice = Self.shouldSeedSampleData(
             isRunningTests: isRunningTests,
             isSimulator: isSimulatorEnvironment
-        )
+        ) || debugBulkSeedCount != nil
         #if DEBUG
-        #if targetEnvironment(simulator)
-        if isRunningTests {
-            seedProfile = .minimal
+        if let debugBulkSeedCount {
+            seedProfile = .manualBackupBulk(count: debugBulkSeedCount)
         } else {
-            seedProfile = .simulatorComprehensive
+            #if targetEnvironment(simulator)
+            if isRunningTests {
+                seedProfile = .minimal
+            } else {
+                seedProfile = .simulatorComprehensive
+            }
+            #else
+            seedProfile = .minimal
+            #endif
         }
-        #else
-        seedProfile = .minimal
-        #endif
         #else
         seedProfile = .minimal
         #endif
@@ -255,6 +263,41 @@ struct EpisodeStockerApp: App {
 
     static func shouldSeedSampleData(isRunningTests: Bool, isSimulator: Bool) -> Bool {
         isRunningTests || isSimulator
+    }
+
+    private static func resolveDebugBulkSeedCount(
+        environment: [String: String],
+        arguments: [String]
+    ) -> Int? {
+        #if DEBUG
+        if let rawCount = environment["SEED_BULK_EPISODES"],
+           let parsedCount = parsePositiveInteger(rawCount)
+        {
+            return parsedCount
+        }
+        if let pairArgument = arguments.first(where: { $0.hasPrefix("SEED_BULK_EPISODES=") }) {
+            let rawValue = String(pairArgument.dropFirst("SEED_BULK_EPISODES=".count))
+            if let parsedCount = parsePositiveInteger(rawValue) {
+                return parsedCount
+            }
+        }
+        if let index = arguments.firstIndex(of: "-SEED_BULK_EPISODES"),
+           arguments.indices.contains(index + 1),
+           let parsedCount = parsePositiveInteger(arguments[index + 1])
+        {
+            return parsedCount
+        }
+        if arguments.contains("-SEED_MANUAL_BACKUP_FIXTURE") {
+            return 1_000
+        }
+        #endif
+        return nil
+    }
+
+    private static func parsePositiveInteger(_ raw: String) -> Int? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value = Int(trimmed), value > 0 else { return nil }
+        return value
     }
 
     var body: some Scene {
