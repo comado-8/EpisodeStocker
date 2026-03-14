@@ -6,6 +6,7 @@ enum SeedData {
     enum Profile {
         case minimal
         case simulatorComprehensive
+        case manualBackupBulk(count: Int)
     }
 
     static func seedIfNeeded(
@@ -24,6 +25,8 @@ enum SeedData {
             insertMinimalSample(context: context)
         case .simulatorComprehensive:
             insertComprehensiveSimulatorSamples(context: context)
+        case .manualBackupBulk(let count):
+            insertManualBackupBulkSamples(context: context, count: count)
         }
     }
 
@@ -188,6 +191,46 @@ enum SeedData {
                 projects: sample.projects,
                 emotions: sample.emotions,
                 place: sample.place
+            )
+        }
+    }
+
+    private static func insertManualBackupBulkSamples(context: ModelContext, count: Int) {
+        guard count > 0 else { return }
+
+        let now = Date()
+        let calendar = Calendar(identifier: .gregorian)
+        let types = ["会話ネタ", "アイデア", "学び", "トラブル"]
+        let tags = ["#MBK", "#大量試験", "#手動バックアップ", "#性能計測", "#検証"]
+        let persons = (1...20).map { "検証者\($0)" }
+        let projects = (1...12).map { "MBKプロジェクト\($0)" }
+        let emotions = ["落ち着いた", "集中した", "前向き", "緊張した", "嬉しかった"]
+        let places = ["スタジオ", "会議室", "自宅", "カフェ", "オフィス", "移動中"]
+
+        for index in 1...count {
+            let offsetMinutes = -(index * 11)
+            let date = calendar.date(byAdding: .minute, value: offsetMinutes, to: now) ?? now
+            let unlockDate: Date? = if index.isMultiple(of: 3) {
+                calendar.date(byAdding: .day, value: (index % 9) + 1, to: date)
+            } else {
+                nil
+            }
+            let primaryTag = tags[index % tags.count]
+            let secondaryTag = tags[(index + 1) % tags.count]
+            let title = String(format: "MBK-BULK-%04d", index)
+            let body = "手動バックアップ大量データ検証用レコード \(index)"
+
+            _ = context.createEpisode(
+                title: title,
+                body: body,
+                date: date,
+                unlockDate: unlockDate,
+                type: types[index % types.count],
+                tags: [primaryTag, secondaryTag],
+                persons: [persons[index % persons.count]],
+                projects: [projects[index % projects.count]],
+                emotions: [emotions[index % emotions.count]],
+                place: places[index % places.count]
             )
         }
     }

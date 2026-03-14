@@ -37,6 +37,18 @@ final class SeedDataTests: XCTestCase {
         XCTAssertTrue(episodes.contains { $0.unlockDate != nil })
     }
 
+    func testSeedIfNeededInsertsManualBackupBulkSamples() throws {
+        SeedData.seedIfNeeded(context: context, profile: .manualBackupBulk(count: 25))
+
+        let episodes = try context.fetch(FetchDescriptor<Episode>())
+        XCTAssertEqual(episodes.count, 25)
+
+        let titles = Set(episodes.map(\.title))
+        XCTAssertEqual(titles.count, 25)
+        XCTAssertTrue(titles.contains("MBK-BULK-0001"))
+        XCTAssertTrue(episodes.contains { $0.body?.contains("手動バックアップ大量データ検証用") == true })
+    }
+
     func testSeedIfNeededDoesNotInsertDuplicates() throws {
         SeedData.seedIfNeeded(context: context)
         SeedData.seedIfNeeded(context: context)
@@ -51,6 +63,14 @@ final class SeedDataTests: XCTestCase {
 
         let episodes = try context.fetch(FetchDescriptor<Episode>())
         XCTAssertEqual(episodes.count, 10)
+    }
+
+    func testManualBackupBulkSeedDoesNotInsertDuplicates() throws {
+        SeedData.seedIfNeeded(context: context, profile: .manualBackupBulk(count: 20))
+        SeedData.seedIfNeeded(context: context, profile: .manualBackupBulk(count: 20))
+
+        let episodes = try context.fetch(FetchDescriptor<Episode>())
+        XCTAssertEqual(episodes.count, 20)
     }
 
     func testSeedIfNeededSkipsWhenCloudSyncEnabled() throws {
